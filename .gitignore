@@ -13,3 +13,11 @@ local.properties
 **/*.jks
 
 # Generated (we generate into build/, so nothing here by default)
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+
+# MCP Logs
+.github/copilot/mcp.log

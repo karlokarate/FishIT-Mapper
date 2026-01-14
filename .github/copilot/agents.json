@@ -1,0 +1,138 @@
+{
+  "$schema": "https://github.com/github/copilot-agents/blob/main/schema/agents.schema.json",
+  "agents": {
+    "copilot-workspace": {
+      "description": "GitHub Copilot Workspace Agent mit umfassenden Berechtigungen für FishIT-Mapper",
+      "permissions": {
+        "repository": {
+          "contents": "write",
+          "pull_requests": "write",
+          "issues": "write",
+          "metadata": "read",
+          "actions": "write",
+          "checks": "write",
+          "statuses": "write",
+          "deployments": "write"
+        },
+        "organization": {
+          "members": "read"
+        }
+      },
+      "capabilities": [
+        "create_pull_request",
+        "merge_pull_request",
+        "commit_code",
+        "create_branch",
+        "delete_branch",
+        "create_issue",
+        "edit_issue",
+        "close_issue",
+        "trigger_workflow",
+        "approve_workflow",
+        "read_workflow_logs",
+        "create_tag",
+        "create_release",
+        "edit_files",
+        "delete_files",
+        "create_files"
+      ],
+      "restrictions": [
+        {
+          "action": "delete_repository",
+          "allowed": false,
+          "reason": "Repository darf nicht gelöscht werden"
+        },
+        {
+          "action": "transfer_repository",
+          "allowed": false,
+          "reason": "Repository-Transfer nicht erlaubt"
+        },
+        {
+          "action": "change_visibility",
+          "allowed": false,
+          "reason": "Sichtbarkeitsänderungen erfordern manuelle Genehmigung"
+        }
+      ],
+      "settings": {
+        "auto_merge_enabled": true,
+        "auto_merge_strategy": "squash",
+        "branch_protection_bypass": false,
+        "require_reviews": false,
+        "allow_force_push": false
+      }
+    },
+    "copilot-code-review": {
+      "description": "Spezialisierter Agent für Code-Reviews",
+      "permissions": {
+        "repository": {
+          "contents": "read",
+          "pull_requests": "write",
+          "issues": "write",
+          "checks": "write"
+        }
+      },
+      "capabilities": [
+        "review_pull_request",
+        "comment_on_code",
+        "request_changes",
+        "approve_pull_request",
+        "create_issue",
+        "suggest_improvements"
+      ]
+    },
+    "copilot-test-generator": {
+      "description": "Agent für automatische Test-Generierung",
+      "permissions": {
+        "repository": {
+          "contents": "write",
+          "pull_requests": "write"
+        }
+      },
+      "capabilities": [
+        "generate_tests",
+        "create_pull_request",
+        "commit_code"
+      ]
+    },
+    "copilot-documentation": {
+      "description": "Agent für Dokumentations-Updates",
+      "permissions": {
+        "repository": {
+          "contents": "write",
+          "pull_requests": "write"
+        }
+      },
+      "capabilities": [
+        "update_documentation",
+        "generate_docs",
+        "create_pull_request",
+        "commit_code"
+      ]
+    }
+  },
+  "global_settings": {
+    "language": "de",
+    "timezone": "Europe/Berlin",
+    "default_branch": "main",
+    "enable_copilot_suggestions": true,
+    "enable_long_context": true,
+    "max_context_tokens": 128000
+  },
+  "workflows": {
+    "auto_review": {
+      "enabled": true,
+      "trigger": "pull_request",
+      "agent": "copilot-code-review"
+    },
+    "auto_tests": {
+      "enabled": true,
+      "trigger": "code_change",
+      "agent": "copilot-test-generator"
+    },
+    "auto_docs": {
+      "enabled": true,
+      "trigger": "api_change",
+      "agent": "copilot-documentation"
+    }
+  }
+}
