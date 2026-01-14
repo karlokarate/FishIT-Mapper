@@ -1,0 +1,497 @@
+name: OpenAI Codex Agent
+
+# Dieser Workflow reagiert auf @codex Mentions in PR- und Issue-Kommentaren
+# und führt verschiedene Code-Aufgaben mit OpenAI Codex aus
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      task_type:
+        description: 'Art der Aufgabe'
+        required: true
+        type: choice
+        options:
+          - review
+          - fix
+          - explain
+          - test
+        default: 'review'
+      target_ref:
+        description: 'Branch oder PR-Nummer'
+        required: true
+        type: string
+      agent:
+        description: 'Agent auswählen'
+        required: false
+        type: choice
+        options:
+          - codex
+          - copilot
+          - both
+        default: 'codex'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: write
+  statuses: write
+
+jobs:
+  # Job prüft ob @codex erwähnt wurde
+  check-mention:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issue_comment' && contains(github.event.comment.body, '@codex')
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      task_type: ${{ steps.parse.outputs.task_type }}
+    
+    steps:
+      - name: Check if comment mentions @codex
+        id: check
+        run: |
+          if [[ "${{ github.event.comment.body }}" == *"@codex"* ]]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Parse task type from comment
+        id: parse
+        run: |
+          COMMENT="${{ github.event.comment.body }}"
+          TASK_TYPE="review"
+          
+          if [[ "$COMMENT" == *"fix"* ]] || [[ "$COMMENT" == *"beheb"* ]]; then
+            TASK_TYPE="fix"
+          elif [[ "$COMMENT" == *"explain"* ]] || [[ "$COMMENT" == *"erkläre"* ]]; then
+            TASK_TYPE="explain"
+          elif [[ "$COMMENT" == *"test"* ]]; then
+            TASK_TYPE="test"
+          elif [[ "$COMMENT" == *"review"* ]]; then
+            TASK_TYPE="review"
+          fi
+          
+          echo "task_type=$TASK_TYPE" >> $GITHUB_OUTPUT
+          echo "Erkannte Aufgabe: $TASK_TYPE"
+
+  # Job für Code-Review mit Codex
+  codex-review:
+    runs-on: ubuntu-latest
+    needs: check-mention
+    if: |
+      (github.event_name == 'issue_comment' && needs.check-mention.outputs.should_run == 'true' && needs.check-mention.outputs.task_type == 'review') ||
+      (github.event_name == 'workflow_dispatch' && inputs.task_type == 'review' && (inputs.agent == 'codex' || inputs.agent == 'both'))
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Get PR Details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let prNumber;
+            if (context.eventName === 'issue_comment') {
+              prNumber = context.issue.number;
+            } else {
+              prNumber = parseInt(context.payload.inputs.target_ref);
+            }
+            
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('head_sha', pr.data.head.sha);
+            core.setOutput('base_sha', pr.data.base.sha);
+            return pr.data;
+      
+      - name: Get PR Diff
+        id: diff
+        run: |
+          git fetch origin ${{ steps.pr.outputs.head_sha }}
+          git fetch origin ${{ steps.pr.outputs.base_sha }}
+          
+          DIFF=$(git diff ${{ steps.pr.outputs.base_sha }}..${{ steps.pr.outputs.head_sha }})
+          
+          # Speichere Diff in Datei für API-Call
+          echo "$DIFF" > /tmp/pr_diff.txt
+          
+          # Begrenze auf erste 8000 Zeichen für API
+          DIFF_PREVIEW=$(echo "$DIFF" | head -c 8000)
+          echo "diff_preview<<EOF" >> $GITHUB_OUTPUT
+          echo "$DIFF_PREVIEW" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Call OpenAI Codex API for Review
+        id: codex
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          # Erstelle Review-Prompt
+          PROMPT="Du bist ein erfahrener Code-Reviewer. Analysiere die folgenden Code-Änderungen und gib konstruktives Feedback auf Deutsch:
+
+          ## Code-Änderungen:
+          \`\`\`diff
+          ${{ steps.diff.outputs.diff_preview }}
+          \`\`\`
+          
+          Bitte prüfe auf:
+          - Potenzielle Bugs
+          - Code-Qualität und Best Practices
+          - Sicherheitsprobleme
+          - Performance-Aspekte
+          - Kotlin/Android Best Practices
+          
+          Gib dein Feedback strukturiert zurück."
+          
+          # API Call an OpenAI
+          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d "{
+              \"model\": \"gpt-4\",
+              \"messages\": [{
+                \"role\": \"system\",
+                \"content\": \"Du bist ein erfahrener Software-Engineer und Code-Reviewer, spezialisiert auf Kotlin und Android-Entwicklung.\"
+              }, {
+                \"role\": \"user\",
+                \"content\": $(echo "$PROMPT" | jq -Rs .)
+              }],
+              \"temperature\": 0.3,
+              \"max_tokens\": 2000
+            }")
+          
+          # Extrahiere Review-Text
+          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Fehler beim Abrufen des Reviews"')
+          
+          echo "review_text<<EOF" >> $GITHUB_OUTPUT
+          echo "$REVIEW_TEXT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Post Review as Comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const reviewText = `## 🤖 OpenAI Codex Code-Review
+            
+            ${{ steps.codex.outputs.review_text }}
+            
+            ---
+            *Automatisch erstellt durch OpenAI Codex Agent*
+            `;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr.outputs.pr_number }},
+              body: reviewText
+            });
+
+  # Job für automatische Bug-Fixes mit Codex
+  codex-fix:
+    runs-on: ubuntu-latest
+    needs: check-mention
+    if: |
+      (github.event_name == 'issue_comment' && needs.check-mention.outputs.should_run == 'true' && needs.check-mention.outputs.task_type == 'fix') ||
+      (github.event_name == 'workflow_dispatch' && inputs.task_type == 'fix' && (inputs.agent == 'codex' || inputs.agent == 'both'))
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Get PR Details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let prNumber;
+            if (context.eventName === 'issue_comment') {
+              prNumber = context.issue.number;
+            } else {
+              prNumber = parseInt(context.payload.inputs.target_ref);
+            }
+            
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('head_ref', pr.data.head.ref);
+            return pr.data;
+      
+      - name: Checkout PR Branch
+        run: |
+          git fetch origin ${{ steps.pr.outputs.head_ref }}
+          git checkout ${{ steps.pr.outputs.head_ref }}
+      
+      - name: Analyze Issues with Codex
+        id: analyze
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          # Sammle Build-/Test-Fehler
+          ./gradlew build --no-daemon --stacktrace > /tmp/build_output.txt 2>&1 || true
+          
+          BUILD_OUTPUT=$(cat /tmp/build_output.txt | tail -n 100)
+          
+          # Prompt für Codex
+          PROMPT="Analysiere die folgenden Build-/Test-Fehler und schlage konkrete Fixes vor:
+
+          \`\`\`
+          $BUILD_OUTPUT
+          \`\`\`
+          
+          Gib die Fixes im folgenden JSON-Format zurück:
+          {
+            \"fixes\": [
+              {
+                \"file\": \"pfad/zur/datei.kt\",
+                \"description\": \"Beschreibung des Problems\",
+                \"solution\": \"Konkrete Lösung\"
+              }
+            ]
+          }"
+          
+          # API Call
+          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d "{
+              \"model\": \"gpt-4\",
+              \"messages\": [{
+                \"role\": \"system\",
+                \"content\": \"Du bist ein Experte für Kotlin und Android-Entwicklung. Analysiere Fehler und schlage präzise Fixes vor.\"
+              }, {
+                \"role\": \"user\",
+                \"content\": $(echo "$PROMPT" | jq -Rs .)
+              }],
+              \"temperature\": 0.2,
+              \"max_tokens\": 2000
+            }")
+          
+          FIXES=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          echo "fixes<<EOF" >> $GITHUB_OUTPUT
+          echo "$FIXES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Apply Fixes and Commit
+        run: |
+          # Hinweis: In der Praxis müssten hier die Fixes aus der JSON-Response
+          # automatisch auf die Dateien angewendet werden. Dies erfordert
+          # komplexere Logik oder ein dediziertes Tool.
+          
+          # Für diese Implementation erstellen wir einen Kommentar mit den
+          # vorgeschlagenen Fixes, der manuell angewendet werden kann.
+          
+          echo "Fixes wurden analysiert und werden als Kommentar gepostet"
+      
+      - name: Post Fix Suggestions
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fixes = `## 🔧 OpenAI Codex Fix-Vorschläge
+            
+            ${{ steps.analyze.outputs.fixes }}
+            
+            ---
+            *Automatisch erstellt durch OpenAI Codex Agent*
+            
+            **Hinweis:** Bitte prüfe die vorgeschlagenen Fixes und wende sie manuell an, falls sie korrekt sind.
+            `;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr.outputs.pr_number }},
+              body: fixes
+            });
+
+  # Job für Code-Erklärungen mit Codex
+  codex-explain:
+    runs-on: ubuntu-latest
+    needs: check-mention
+    if: |
+      (github.event_name == 'issue_comment' && needs.check-mention.outputs.should_run == 'true' && needs.check-mention.outputs.task_type == 'explain') ||
+      (github.event_name == 'workflow_dispatch' && inputs.task_type == 'explain' && (inputs.agent == 'codex' || inputs.agent == 'both'))
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Get PR Context
+        id: context
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let prNumber;
+            if (context.eventName === 'issue_comment') {
+              prNumber = context.issue.number;
+            } else {
+              prNumber = parseInt(context.payload.inputs.target_ref);
+            }
+            
+            const files = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            core.setOutput('pr_number', prNumber);
+            return files.data;
+      
+      - name: Generate Explanation with Codex
+        id: explain
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          PROMPT="Erkläre die Änderungen in diesem Pull Request auf Deutsch. Gehe auf folgende Aspekte ein:
+          - Was wurde geändert?
+          - Warum sind diese Änderungen wichtig?
+          - Welche Auswirkungen haben sie?
+          - Gibt es potenzielle Risiken?
+          
+          Erkläre es so, dass es auch jemand ohne tiefe technische Kenntnisse verstehen kann."
+          
+          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d "{
+              \"model\": \"gpt-4\",
+              \"messages\": [{
+                \"role\": \"system\",
+                \"content\": \"Du bist ein technischer Kommunikator, der komplexe Code-Änderungen verständlich erklären kann.\"
+              }, {
+                \"role\": \"user\",
+                \"content\": $(echo "$PROMPT" | jq -Rs .)
+              }],
+              \"temperature\": 0.5,
+              \"max_tokens\": 1500
+            }")
+          
+          EXPLANATION=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          echo "explanation<<EOF" >> $GITHUB_OUTPUT
+          echo "$EXPLANATION" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Post Explanation
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const explanation = `## 📚 OpenAI Codex Code-Erklärung
+            
+            ${{ steps.explain.outputs.explanation }}
+            
+            ---
+            *Automatisch erstellt durch OpenAI Codex Agent*
+            `;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.context.outputs.pr_number }},
+              body: explanation
+            });
+
+  # Job für Test-Generierung mit Codex
+  codex-test:
+    runs-on: ubuntu-latest
+    needs: check-mention
+    if: |
+      (github.event_name == 'issue_comment' && needs.check-mention.outputs.should_run == 'true' && needs.check-mention.outputs.task_type == 'test') ||
+      (github.event_name == 'workflow_dispatch' && inputs.task_type == 'test' && (inputs.agent == 'codex' || inputs.agent == 'both'))
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Analyze Code for Test Generation
+        id: analyze
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          # Finde Kotlin-Dateien ohne Tests
+          FILES_WITHOUT_TESTS=$(find shared androidApp -name "*.kt" -type f | head -5)
+          
+          PROMPT="Analysiere die folgenden Kotlin-Dateien und generiere Unit-Tests mit JUnit/Kotest:
+          
+          Erstelle Tests für:
+          - Happy Path Scenarios
+          - Edge Cases
+          - Error Handling
+          
+          Nutze Kotlin Best Practices und idiomatischen Code."
+          
+          RESPONSE=$(curl -s https://api.openai.com/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -d "{
+              \"model\": \"gpt-4\",
+              \"messages\": [{
+                \"role\": \"system\",
+                \"content\": \"Du bist ein Experte für Kotlin Test-Entwicklung mit JUnit und Kotest.\"
+              }, {
+                \"role\": \"user\",
+                \"content\": $(echo "$PROMPT" | jq -Rs .)
+              }],
+              \"temperature\": 0.3,
+              \"max_tokens\": 2000
+            }")
+          
+          TESTS=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          echo "tests<<EOF" >> $GITHUB_OUTPUT
+          echo "$TESTS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Post Test Suggestions
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let prNumber;
+            if (context.eventName === 'issue_comment') {
+              prNumber = context.issue.number;
+            } else {
+              prNumber = parseInt(context.payload.inputs.target_ref);
+            }
+            
+            const tests = `## 🧪 OpenAI Codex Test-Vorschläge
+            
+            ${{ steps.analyze.outputs.tests }}
+            
+            ---
+            *Automatisch erstellt durch OpenAI Codex Agent*
+            `;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: tests
+            });

@@ -108,6 +108,83 @@
         "create_pull_request",
         "commit_code"
       ]
+    },
+    "codex-agent": {
+      "description": "OpenAI Codex Agent mit umfassenden Berechtigungen für intelligente Code-Analysen und Fixes",
+      "permissions": {
+        "repository": {
+          "contents": "write",
+          "pull_requests": "write",
+          "issues": "write",
+          "metadata": "read",
+          "actions": "write",
+          "checks": "write",
+          "statuses": "write",
+          "deployments": "write"
+        },
+        "organization": {
+          "members": "read"
+        }
+      },
+      "capabilities": [
+        "create_pull_request",
+        "merge_pull_request",
+        "commit_code",
+        "create_branch",
+        "delete_branch",
+        "create_issue",
+        "edit_issue",
+        "close_issue",
+        "trigger_workflow",
+        "approve_workflow",
+        "read_workflow_logs",
+        "create_tag",
+        "create_release",
+        "edit_files",
+        "delete_files",
+        "create_files",
+        "execute_build",
+        "run_tests",
+        "analyze_code",
+        "fix_bugs",
+        "generate_tests",
+        "explain_code"
+      ],
+      "restrictions": [
+        {
+          "action": "delete_repository",
+          "allowed": false,
+          "reason": "Repository darf nicht gelöscht werden"
+        },
+        {
+          "action": "transfer_repository",
+          "allowed": false,
+          "reason": "Repository-Transfer nicht erlaubt"
+        },
+        {
+          "action": "change_visibility",
+          "allowed": false,
+          "reason": "Sichtbarkeitsänderungen erfordern manuelle Genehmigung"
+        }
+      ],
+      "settings": {
+        "auto_merge_enabled": false,
+        "auto_merge_strategy": "squash",
+        "branch_protection_bypass": false,
+        "require_reviews": true,
+        "allow_force_push": false,
+        "api_provider": "openai",
+        "model": "gpt-4",
+        "temperature": 0.3,
+        "max_tokens": 2000
+      },
+      "integration": {
+        "type": "external_api",
+        "provider": "openai",
+        "endpoint": "https://api.openai.com/v1",
+        "authentication": "secret",
+        "secret_name": "OPENAI_API_KEY"
+      }
     }
   },
   "global_settings": {
