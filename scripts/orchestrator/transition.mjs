@@ -63,7 +63,7 @@ async function githubAPI(endpoint, method = 'GET', body = null) {
   const options = {
     method,
     headers: {
-      'Authorization': `token ${GITHUB_TOKEN}`,
+      'Authorization': `Bearer ${GITHUB_TOKEN}`,
       'Accept': 'application/vnd.github.v3+json',
       'User-Agent': 'FishIT-Mapper-Orchestrator'
     }
@@ -106,18 +106,18 @@ function getCurrentState(labels) {
 async function updateLabels(issueNumber, oldState, newState) {
   const oldLabel = STATE_LABELS[oldState];
   const newLabel = STATE_LABELS[newState];
-  
+
   console.log(`📝 Updating labels: ${oldLabel || 'none'} → ${newLabel}`);
-  
+
   // Remove old state label if exists
-  if (oldLabel && oldState !== null) {
+  if (oldLabel) {
     try {
       await githubAPI(`/repos/${owner}/${repo}/issues/${issueNumber}/labels/${encodeURIComponent(oldLabel)}`, 'DELETE');
     } catch (err) {
       console.log(`   Note: Could not remove label ${oldLabel} (may not exist)`);
     }
   }
-  
+
   // Add new state label
   if (newLabel) {
     await githubAPI(`/repos/${owner}/${repo}/issues/${issueNumber}/labels`, 'POST', {
@@ -169,10 +169,22 @@ async function readCheckpoint() {
   
   for (const line of lines) {
     if (line.startsWith('**Status:**')) checkpoint.status = line.split('**Status:**')[1].trim();
-    if (line.startsWith('**Issue:**')) checkpoint.issue = line.split('**Issue:**')[1].trim().replace('#', '');
-    if (line.startsWith('**PR:**')) checkpoint.pr = line.split('**PR:**')[1].trim().replace('#', '');
-    if (line.startsWith('**Branch:**')) checkpoint.branch = line.split('**Branch:**')[1].trim();
-    if (line.startsWith('**Current Task:**')) checkpoint.currentTask = line.split('**Current Task:**')[1].trim();
+    if (line.startsWith('**Issue:**')) {
+      const issueVal = line.split('**Issue:**')[1].trim().replace('#', '');
+      checkpoint.issue = (issueVal === 'N/A') ? null : issueVal;
+    }
+    if (line.startsWith('**PR:**')) {
+      const prVal = line.split('**PR:**')[1].trim().replace('#', '');
+      checkpoint.pr = (prVal === 'N/A') ? null : prVal;
+    }
+    if (line.startsWith('**Branch:**')) {
+      const branchVal = line.split('**Branch:**')[1].trim();
+      checkpoint.branch = (branchVal === 'N/A') ? null : branchVal;
+    }
+    if (line.startsWith('**Current Task:**')) {
+      const taskVal = line.split('**Current Task:**')[1].trim();
+      checkpoint.currentTask = (taskVal === 'N/A') ? null : taskVal;
+    }
     if (line.startsWith('**Iteration:**')) {
       const iter = line.split('**Iteration:**')[1].trim().split('/')[0];
       checkpoint.iteration = parseInt(iter) || 0;
@@ -265,15 +277,24 @@ async function findPRForBranch(branchName) {
 // Check if checks are passing
 async function areChecksPassing(sha) {
   const checks = await githubAPI(`/repos/${owner}/${repo}/commits/${sha}/check-runs`);
-  
+
   if (!checks || !checks.check_runs || checks.check_runs.length === 0) {
     // No checks configured = assume passing
     return true;
   }
-  
+
+  // Return false if any check is still in progress or queued
+  const hasIncompleteChecks = checks.check_runs.some(check =>
+    check.status === 'in_progress' || check.status === 'queued'
+  );
+
+  if (hasIncompleteChecks) {
+    return false;
+  }
+
   // All checks must be success or neutral
-  return checks.check_runs.every(check => 
-    check.status === 'completed' && 
+  return checks.check_runs.every(check =>
+    check.status === 'completed' &&
     (check.conclusion === 'success' || check.conclusion === 'neutral')
   );
 }
@@ -591,8 +612,11 @@ async function transitionPassedToMerged(pr) {
   const queue = await readTodoQueue();
   if (queue.tasks.length > 0) {
     const issue = await githubAPI(`/repos/${owner}/${repo}/issues/${issueNumber}`);
-    
-    const followupBody = `# Follow-up: ${issue.title}
+
+    if (!issue) {
+      console.log('⚠️  Could not fetch original issue. Skipping follow-up creation.');
+    } else {
+      const followupBody = `# Follow-up: ${issue.title}
 
 Fortsetzung von #${issueNumber}
 
@@ -604,14 +628,15 @@ Original Issue: #${issueNumber}
 
 ---
 *Automatisch erstellt durch Orchestrator nach erfolgreichem Merge von #${pr.number}*`;
-    
-    const newIssue = await githubAPI(`/repos/${owner}/${repo}/issues`, 'POST', {
-      title: `Follow-up: ${issue.title}`,
-      body: followupBody,
-      labels: [ORCHESTRATOR_ENABLED, ORCHESTRATOR_RUN, STATE_LABELS.QUEUED]
-    });
-    
-    console.log(`✅ Follow-up issue created: #${newIssue.number}`);
+
+      const newIssue = await githubAPI(`/repos/${owner}/${repo}/issues`, 'POST', {
+        title: `Follow-up: ${issue.title}`,
+        body: followupBody,
+        labels: [ORCHESTRATOR_ENABLED, ORCHESTRATOR_RUN, STATE_LABELS.QUEUED]
+      });
+
+      console.log(`✅ Follow-up issue created: #${newIssue.number}`);
+    }
   }
   
   // Update checkpoint to idle
@@ -686,7 +711,8 @@ async function performTransition() {
   } else {
     // Auto-discover: find issue with orchestrator:run + state:queued
     console.log('🔍 Auto-discovering work item...');
-    const issues = await githubAPI(`/repos/${owner}/${repo}/issues?labels=${ORCHESTRATOR_RUN},${STATE_LABELS.QUEUED}&state=open`);
+    const encodedLabels = `${encodeURIComponent(ORCHESTRATOR_RUN)},${encodeURIComponent(STATE_LABELS.QUEUED)}`;
+    const issues = await githubAPI(`/repos/${owner}/${repo}/issues?labels=${encodedLabels}&state=open`);
     
     if (issues && issues.length > 0) {
       workItem = issues[0];
