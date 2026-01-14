@@ -2,14 +2,14 @@
 # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
 # Standardmäßig automatische Reviews für alle Dateien
-* @copilot
+* @copilot @codex
 
 # GitHub Workflows und Actions
 /.github/ @copilot @codex
 
 # Kotlin Code
-*.kt @copilot
-*.kts @copilot
+*.kt @copilot @codex
+*.kts @Copilot @codex
 
 # Build Configuration
 build.gradle.kts @copilot
@@ -21,8 +21,8 @@ gradle.properties @copilot
 /shared/contract/ @copilot
 
 # Dokumentation
-*.md @copilot
-/docs/ @copilot
+*.md @copilot @codex
+/docs/ @copilot @codex
 
 # Android spezifische Dateien
 /androidApp/ @copilot
