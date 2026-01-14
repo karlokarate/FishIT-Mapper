@@ -789,18 +789,19 @@ async function performTransition() {
               });
               console.log('✅ PR converted from draft to ready for review');
               
-              // Refresh PR data after update
+              // Refresh PR data after update (preferred path)
               try {
-                const updatedPR = await githubAPI(`/repos/${owner}/${repo}/pulls/${pr.number}`);
-                transitioned = await transitionRunningToNeedsReview(workItem, updatedPR);
+                const refreshedPR = await githubAPI(`/repos/${owner}/${repo}/pulls/${pr.number}`);
+                transitioned = await transitionRunningToNeedsReview(workItem, refreshedPR);
               } catch (refreshErr) {
                 console.error('⚠️  Failed to refresh PR data after draft conversion:', refreshErr.message);
-                console.log('ℹ️  Attempting transition with existing PR data...');
+                console.log('ℹ️  Attempting transition with fallback PR data...');
                 // Fallback: Use original PR data but update draft flag
-                // This is acceptable because the API call succeeded but the refresh failed
-                // The PR is now ready for review on GitHub, we just don't have updated data
-                const updatedPR = { ...pr, draft: false };
-                transitioned = await transitionRunningToNeedsReview(workItem, updatedPR);
+                // This is acceptable because the API call succeeded but the refresh failed.
+                // The PR is now ready for review on GitHub, we just don't have updated data.
+                // This fallback maintains workflow integrity and allows the state transition to proceed.
+                const fallbackPR = { ...pr, draft: false };
+                transitioned = await transitionRunningToNeedsReview(workItem, fallbackPR);
               }
             } catch (err) {
               console.error('❌ Failed to convert PR from draft:', err.message);
