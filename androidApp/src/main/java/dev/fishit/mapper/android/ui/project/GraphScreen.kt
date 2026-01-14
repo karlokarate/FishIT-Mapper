@@ -47,10 +47,12 @@ fun GraphScreen(graph: MapGraph) {
         matchesQuery && matchesNodeKind
     }
 
-    // Filter edges
+    // Filter edges - only show edges between visible nodes
+    val visibleNodeIds = nodes.map { it.id }.toSet()
     val edges = graph.edges.filter {
         val matchesEdgeKind = selectedEdgeKind == null || it.kind == selectedEdgeKind
-        matchesEdgeKind
+        val bothNodesVisible = it.from in visibleNodeIds && it.to in visibleNodeIds
+        matchesEdgeKind && bothNodesVisible
     }
 
     val nodesById = graph.nodes.associateBy { it.id }

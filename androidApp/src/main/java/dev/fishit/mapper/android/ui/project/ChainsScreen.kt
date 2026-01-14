@@ -106,25 +106,22 @@ private fun ChainCard(chain: RecordChain) {
                     fontWeight = FontWeight.SemiBold
                 )
 
-                chain.points.forEach { point ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 8.dp, top = 4.dp)
-                    ) {
-                        Text(
-                            text = "• ${point.label}",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    if (point.url != null) {
-                        Text(
-                            text = "  ${point.url}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 16.dp)
-                        )
+                Column(modifier = Modifier.padding(start = 8.dp, top = 4.dp)) {
+                    chain.points.forEach { point ->
+                        Column(modifier = Modifier.padding(top = 4.dp)) {
+                            Text(
+                                text = "• ${point.label}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            if (point.url != null) {
+                                Text(
+                                    text = "  ${point.url}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }

@@ -166,6 +166,8 @@ fun BrowserScreen(
                                 ConsoleMessage.MessageLevel.LOG -> ConsoleLevel.Log
                                 ConsoleMessage.MessageLevel.WARNING -> ConsoleLevel.Warn
                                 ConsoleMessage.MessageLevel.ERROR -> ConsoleLevel.Error
+                                // Note: ConsoleLevel enum only has Log, Info, Warn, Error
+                                // DEBUG maps to Info as there's no Debug level in the contract
                                 ConsoleMessage.MessageLevel.DEBUG -> ConsoleLevel.Info
                                 else -> ConsoleLevel.Info
                             }
