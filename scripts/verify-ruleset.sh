@@ -3,7 +3,8 @@
 # Copilot Ruleset Verification Script
 # Prüft ob das Ruleset korrekt konfiguriert ist
 
-set -e
+# Don't exit on errors - we want to show all results
+set +e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
