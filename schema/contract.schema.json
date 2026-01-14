@@ -1,0 +1,45 @@
+{
+  "contractVersion": "0.1.0",
+  "packageName": "dev.fishit.mapper.contract",
+  "appName": "FishIT-Mapper",
+  "nodeKinds": [
+    "Page",
+    "ApiEndpoint",
+    "Asset",
+    "Document",
+    "Form",
+    "Error",
+    "Unknown"
+  ],
+  "edgeKinds": [
+    "Link",
+    "Redirect",
+    "Fetch",
+    "Xhr",
+    "FormSubmit",
+    "AssetLoad",
+    "Embed",
+    "Unknown"
+  ],
+  "resourceKinds": [
+    "Document",
+    "Stylesheet",
+    "Script",
+    "Image",
+    "Font",
+    "Media",
+    "Fetch",
+    "Xhr",
+    "Other"
+  ],
+  "consoleLevels": [
+    "Log",
+    "Info",
+    "Warn",
+    "Error"
+  ],
+  "export": {
+    "bundleFormatVersion": "0.1.0",
+    "classDiscriminator": "type"
+  }
+}

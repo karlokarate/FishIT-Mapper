@@ -1,0 +1,23 @@
+.gradle/
+**/build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# Android
+**/captures/
+**/.externalNativeBuild/
+**/.cxx/
+**/*.keystore
+**/*.jks
+
+# Generated (we generate into build/, so nothing here by default)
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+
+# MCP Logs
+.github/copilot/mcp.log

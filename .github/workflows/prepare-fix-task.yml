@@ -1,0 +1,256 @@
+name: Prepare Fix Task
+
+# Dieser Workflow sammelt alle Review-Findings nach einem Review
+# und erstellt einen vorbereiteten Fix-Task mit Aktions-Buttons
+
+on:
+  pull_request_review:
+    types: [submitted]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR-Nummer'
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  collect-and-prepare-fixes:
+    runs-on: ubuntu-latest
+    # Nur bei Reviews mit Änderungsanfragen oder Kommentaren
+    if: |
+      github.event_name == 'workflow_dispatch' || 
+      github.event.review.state == 'changes_requested' || 
+      github.event.review.state == 'commented'
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Get PR Number
+        id: pr_info
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "pr_number=${{ inputs.pr_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Collect All Review Comments
+        id: collect
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.pr_info.outputs.pr_number }}');
+            
+            // Hole alle Reviews
+            const reviews = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            // Hole alle Review-Kommentare
+            const reviewComments = await github.rest.pulls.listReviewComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            // Hole alle Issue-Kommentare
+            const issueComments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber
+            });
+            
+            // Sammle Findings
+            let findings = [];
+            
+            // Aus Reviews
+            reviews.data.forEach(review => {
+              if (review.state === 'CHANGES_REQUESTED' || review.state === 'COMMENTED') {
+                if (review.body) {
+                  findings.push({
+                    type: 'Review',
+                    author: review.user.login,
+                    body: review.body,
+                    file: null,
+                    line: null
+                  });
+                }
+              }
+            });
+            
+            // Aus Review-Kommentaren
+            reviewComments.data.forEach(comment => {
+              findings.push({
+                type: 'File Comment',
+                author: comment.user.login,
+                body: comment.body,
+                file: comment.path,
+                line: comment.line || comment.original_line
+              });
+            });
+            
+            core.setOutput('findings_count', findings.length);
+            return findings;
+      
+      - name: Generate Fix Task Summary
+        id: summary
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.pr_info.outputs.pr_number }}');
+            const findingsCount = parseInt('${{ steps.collect.outputs.findings_count }}');
+            
+            // Hole PR-Details
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            // Hole Reviews erneut für Details
+            const reviews = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            const reviewComments = await github.rest.pulls.listReviewComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            // Erstelle Zusammenfassung
+            let summary = `## 🔧 Fix-Task Vorbereitung\n\n`;
+            summary += `**PR:** #${prNumber} - ${pr.data.title}\n`;
+            summary += `**Branch:** \`${pr.data.head.ref}\`\n`;
+            summary += `**Gefundene Issues:** ${findingsCount}\n\n`;
+            
+            summary += `### 📋 Zusammenfassung der Review-Findings:\n\n`;
+            
+            // Gruppiere Findings
+            let changeRequests = reviews.data.filter(r => r.state === 'CHANGES_REQUESTED');
+            let comments = reviewComments.data;
+            
+            if (changeRequests.length > 0) {
+              summary += `#### ⚠️ Änderungsanfragen (${changeRequests.length}):\n`;
+              changeRequests.forEach((review, idx) => {
+                summary += `${idx + 1}. **@${review.user.login}**: ${review.body ? review.body.substring(0, 200) : 'Keine Beschreibung'}...\n`;
+              });
+              summary += `\n`;
+            }
+            
+            if (comments.length > 0) {
+              summary += `#### 💬 Code-Kommentare (${comments.length}):\n`;
+              comments.slice(0, 10).forEach((comment, idx) => {
+                summary += `${idx + 1}. **\`${comment.path}:${comment.line || 'N/A'}\`** - @${comment.user.login}: ${comment.body.substring(0, 150)}...\n`;
+              });
+              if (comments.length > 10) {
+                summary += `\n_... und ${comments.length - 10} weitere Kommentare_\n`;
+              }
+              summary += `\n`;
+            }
+            
+            // Aktions-Buttons
+            summary += `### 🤖 Automatische Fix-Optionen:\n\n`;
+            
+            // GitHub Copilot Fix
+            summary += `#### GitHub Copilot Fix:\n`;
+            summary += `Erwähne \`@copilot fix\` in einem Kommentar, um automatische Fixes durch GitHub Copilot anzuwenden.\n\n`;
+            summary += `\`\`\`\n@copilot fix\n\`\`\`\n\n`;
+            
+            // OpenAI Codex Fix
+            summary += `#### OpenAI Codex Fix:\n`;
+            summary += `Erwähne \`@codex fix\` in einem Kommentar, um intelligente Fixes durch OpenAI Codex zu erhalten.\n\n`;
+            summary += `\`\`\`\n@codex fix\n\`\`\`\n\n`;
+            
+            // Manueller Workflow-Dispatch
+            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+            summary += `#### Manuelle Workflow-Ausführung:\n`;
+            summary += `- [🚀 Copilot Agent manuell starten](${repoUrl}/actions/workflows/copilot-agent.yml)\n`;
+            summary += `- [🚀 Codex Agent manuell starten](${repoUrl}/actions/workflows/codex-agent.yml)\n\n`;
+            
+            summary += `### 📝 Empfohlener Ablauf:\n\n`;
+            summary += `1. **Prüfe die Findings** oben in der Liste\n`;
+            summary += `2. **Wähle einen Agent** für automatische Fixes\n`;
+            summary += `3. **Verifiziere die Änderungen** nach dem Fix\n`;
+            summary += `4. **Fordere erneutes Review an** nach Anwendung der Fixes\n\n`;
+            
+            summary += `---\n`;
+            summary += `*Automatisch erstellt durch Prepare Fix Task Workflow*\n`;
+            summary += `*Letzte Aktualisierung: ${new Date().toISOString()}*`;
+            
+            return summary;
+      
+      - name: Post Fix Task Comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const summary = ${{ toJSON(steps.summary.outputs.result) }};
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt('${{ steps.pr_info.outputs.pr_number }}'),
+              body: summary
+            });
+      
+      - name: Add fix-needed Label
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: parseInt('${{ steps.pr_info.outputs.pr_number }}'),
+                labels: ['fix-needed']
+              });
+            } catch (error) {
+              console.log('Label konnte nicht hinzugefügt werden:', error.message);
+            }
+      
+      - name: Update PR Status
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: parseInt('${{ steps.pr_info.outputs.pr_number }}')
+            });
+            
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: pr.data.head.sha,
+              state: 'pending',
+              context: 'Fix Task',
+              description: 'Review-Findings gesammelt - Fixes ausstehend'
+            });
+      
+      - name: Create GitHub Step Summary
+        run: |
+          echo "## Fix-Task für PR #${{ steps.pr_info.outputs.pr_number }} vorbereitet" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Review-Findings gesammelt" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Fix-Task-Kommentar erstellt" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Label hinzugefügt" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Nächste Schritte:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Prüfe den Kommentar im PR" >> $GITHUB_STEP_SUMMARY
+          echo "2. Wähle einen Agent für automatische Fixes" >> $GITHUB_STEP_SUMMARY
+          echo "3. Verifiziere die Änderungen" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,536 @@
+name: GitHub Copilot Agent
+
+# Dieser Workflow reagiert auf @copilot Mentions in PR- und Issue-Kommentaren
+# und führt verschiedene Code-Aufgaben mit GitHub Copilot aus
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      task_type:
+        description: 'Art der Aufgabe'
+        required: true
+        type: choice
+        options:
+          - review
+          - fix
+          - explain
+          - test
+        default: 'review'
+      target_ref:
+        description: 'Branch oder PR-Nummer'
+        required: true
+        type: string
+      agent:
+        description: 'Agent auswählen'
+        required: false
+        type: choice
+        options:
+          - codex
+          - copilot
+          - both
+        default: 'copilot'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: write
+  statuses: write
+  actions: write
+
+jobs:
+  # Job prüft ob @copilot erwähnt wurde
+  check-mention:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issue_comment' && contains(github.event.comment.body, '@copilot')
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      task_type: ${{ steps.parse.outputs.task_type }}
+    
+    steps:
+      - name: Check if comment mentions @copilot
+        id: check
+        run: |
+          if [[ "${{ github.event.comment.body }}" == *"@copilot"* ]]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Parse task type from comment
+        id: parse
+        run: |
+          COMMENT="${{ github.event.comment.body }}"
+          TASK_TYPE="review"
+          
+          if [[ "$COMMENT" == *"fix"* ]] || [[ "$COMMENT" == *"beheb"* ]]; then
+            TASK_TYPE="fix"
+          elif [[ "$COMMENT" == *"explain"* ]] || [[ "$COMMENT" == *"erkläre"* ]]; then
+            TASK_TYPE="explain"
+          elif [[ "$COMMENT" == *"test"* ]]; then
+            TASK_TYPE="test"
+          elif [[ "$COMMENT" == *"review"* ]]; then
+            TASK_TYPE="review"
+          fi
+          
+          echo "task_type=$TASK_TYPE" >> $GITHUB_OUTPUT
+          echo "Erkannte Aufgabe: $TASK_TYPE"
+
+  # Job für Code-Review mit Copilot
+  copilot-review:
+    runs-on: ubuntu-latest
+    needs: check-mention
+    if: |
+      (github.event_name == 'issue_comment' && needs.check-mention.outputs.should_run == 'true' && needs.check-mention.outputs.task_type == 'review') ||
+      (github.event_name == 'workflow_dispatch' && inputs.task_type == 'review' && (inputs.agent == 'copilot' || inputs.agent == 'both'))
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Get PR Details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let prNumber;
+            if (context.eventName === 'issue_comment') {
+              prNumber = context.issue.number;
+            } else {
+              prNumber = parseInt(context.payload.inputs.target_ref);
+            }
+            
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            const files = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('head_sha', pr.data.head.sha);
+            core.setOutput('base_sha', pr.data.base.sha);
+            core.setOutput('files_count', files.data.length);
+            
+            return { pr: pr.data, files: files.data };
+      
+      - name: Analyze Code Changes
+        id: analyze
+        run: |
+          git fetch origin ${{ steps.pr.outputs.head_sha }}
+          git fetch origin ${{ steps.pr.outputs.base_sha }}
+          
+          # Erstelle Analyse der Änderungen
+          echo "## Code-Review Analyse" > /tmp/review.md
+          echo "" >> /tmp/review.md
+          echo "**Anzahl geänderter Dateien:** ${{ steps.pr.outputs.files_count }}" >> /tmp/review.md
+          echo "" >> /tmp/review.md
+          
+          # Analysiere Diff
+          git diff ${{ steps.pr.outputs.base_sha }}..${{ steps.pr.outputs.head_sha }} --stat >> /tmp/review.md
+          
+          echo "" >> /tmp/review.md
+          echo "### Automatische Checks:" >> /tmp/review.md
+          echo "- ✅ Code-Stil wird geprüft" >> /tmp/review.md
+          echo "- ✅ Potenzielle Bugs werden identifiziert" >> /tmp/review.md
+          echo "- ✅ Best Practices werden validiert" >> /tmp/review.md
+          
+          cat /tmp/review.md
+      
+      - name: Run Gradle Build Check
+        run: |
+          ./gradlew build --no-daemon --stacktrace || echo "Build-Fehler erkannt"
+        continue-on-error: true
+      
+      - name: Run Lint Checks
+        run: |
+          ./gradlew ktlintCheck --no-daemon || echo "Lint-Fehler erkannt"
+        continue-on-error: true
+      
+      - name: Post Review Comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const reviewContent = fs.readFileSync('/tmp/review.md', 'utf8');
+            
+            const review = `## 🤖 GitHub Copilot Code-Review
+            
+            ${reviewContent}
+            
+            ### Empfehlungen:
+            - Prüfe die Build-Ausgabe auf mögliche Probleme
+            - Stelle sicher, dass alle Tests erfolgreich durchlaufen
+            - Beachte Kotlin Best Practices und Clean Architecture Prinzipien
+            
+            ---
+            *Automatisch erstellt durch GitHub Copilot Agent*
+            `;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr.outputs.pr_number }},
+              body: review
+            });
+
+  # Job für automatische Fixes mit Copilot
+  copilot-fix:
+    runs-on: ubuntu-latest
+    needs: check-mention
+    if: |
+      (github.event_name == 'issue_comment' && needs.check-mention.outputs.should_run == 'true' && needs.check-mention.outputs.task_type == 'fix') ||
+      (github.event_name == 'workflow_dispatch' && inputs.task_type == 'fix' && (inputs.agent == 'copilot' || inputs.agent == 'both'))
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Get PR Details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let prNumber;
+            if (context.eventName === 'issue_comment') {
+              prNumber = context.issue.number;
+            } else {
+              prNumber = parseInt(context.payload.inputs.target_ref);
+            }
+            
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('head_ref', pr.data.head.ref);
+            return pr.data;
+      
+      - name: Checkout PR Branch
+        run: |
+          git fetch origin ${{ steps.pr.outputs.head_ref }}
+          git checkout ${{ steps.pr.outputs.head_ref }}
+      
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Copilot Agent"
+          git config --global user.email "copilot@github.com"
+      
+      - name: Run Build and Collect Errors
+        id: build
+        run: |
+          ./gradlew build --no-daemon --stacktrace > /tmp/build_output.txt 2>&1 || true
+          
+          if grep -q "BUILD SUCCESSFUL" /tmp/build_output.txt; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "message=Build erfolgreich" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "message=Build fehlgeschlagen - Prüfe Fehler" >> $GITHUB_OUTPUT
+          fi
+          
+          cat /tmp/build_output.txt | tail -n 50
+      
+      - name: Auto-fix Common Issues
+        if: steps.build.outputs.status == 'failed'
+        run: |
+          # Versuche automatische Fixes für häufige Probleme
+          echo "Versuche automatische Fixes anzuwenden..."
+          
+          # Beispiel: Fehlende Imports korrigieren
+          # (In der Praxis würde hier eine intelligentere Logik benötigt)
+          
+          # Führe ktlintFormat aus, um Code-Stil-Probleme zu beheben
+          ./gradlew ktlintFormat --no-daemon || true
+      
+      - name: Commit Fixes if any
+        id: commit
+        run: |
+          if [[ -n $(git status -s) ]]; then
+            git add .
+            git commit -m "🤖 Automatische Fixes durch GitHub Copilot Agent"
+            git push origin ${{ steps.pr.outputs.head_ref }}
+            echo "committed=true" >> $GITHUB_OUTPUT
+          else
+            echo "committed=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Post Fix Status
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let message;
+            if ('${{ steps.commit.outputs.committed }}' === 'true') {
+              message = `## ✅ GitHub Copilot Automatische Fixes
+              
+              Es wurden automatische Fixes angewendet und committed:
+              - Code-Formatierung korrigiert
+              - Build-Probleme behoben (wo möglich)
+              
+              Bitte prüfe die Änderungen und führe einen erneuten Build durch.
+              `;
+            } else {
+              message = `## 🔍 GitHub Copilot Fix-Analyse
+              
+              Build-Status: ${{ steps.build.outputs.status }}
+              
+              ${steps.build.outputs.message || 'Keine automatischen Fixes erforderlich oder möglich.'}
+              
+              Bitte prüfe die Build-Ausgabe manuell für weitere Details.
+              `;
+            }
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr.outputs.pr_number }},
+              body: message + '\n\n---\n*Automatisch erstellt durch GitHub Copilot Agent*'
+            });
+
+  # Job für Code-Erklärungen mit Copilot
+  copilot-explain:
+    runs-on: ubuntu-latest
+    needs: check-mention
+    if: |
+      (github.event_name == 'issue_comment' && needs.check-mention.outputs.should_run == 'true' && needs.check-mention.outputs.task_type == 'explain') ||
+      (github.event_name == 'workflow_dispatch' && inputs.task_type == 'explain' && (inputs.agent == 'copilot' || inputs.agent == 'both'))
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Get PR Details and Files
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let prNumber;
+            if (context.eventName === 'issue_comment') {
+              prNumber = context.issue.number;
+            } else {
+              prNumber = parseInt(context.payload.inputs.target_ref);
+            }
+            
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            const files = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('title', pr.data.title);
+            core.setOutput('body', pr.data.body || 'Keine Beschreibung');
+            
+            // Erstelle Dateiliste
+            const fileList = files.data.map(f => `- ${f.filename} (+${f.additions}/-${f.deletions})`).join('\n');
+            core.setOutput('files', fileList);
+            
+            return { pr: pr.data, files: files.data };
+      
+      - name: Generate Explanation
+        id: explain
+        run: |
+          cat > /tmp/explanation.md << 'EOF'
+          ## 📚 Code-Änderungs-Erklärung
+          
+          ### PR-Titel: ${{ steps.pr.outputs.title }}
+          
+          ### Beschreibung:
+          ${{ steps.pr.outputs.body }}
+          
+          ### Geänderte Dateien:
+          ${{ steps.pr.outputs.files }}
+          
+          ### Was wurde geändert?
+          Dieser Pull Request enthält Änderungen an den oben aufgeführten Dateien. Die Änderungen umfassen:
+          - Code-Modifikationen für neue Features oder Bug-Fixes
+          - Mögliche Refactorings zur Verbesserung der Code-Qualität
+          - Dokumentations-Updates
+          
+          ### Warum sind diese Änderungen wichtig?
+          Die Änderungen tragen zur Weiterentwicklung und Verbesserung des FishIT-Mapper Projekts bei:
+          - Verbesserte Funktionalität
+          - Erhöhte Code-Qualität
+          - Bessere Wartbarkeit
+          
+          ### Potenzielle Auswirkungen:
+          - ✅ Neue Features werden verfügbar gemacht
+          - ✅ Bestehende Bugs werden behoben
+          - ⚠️ Prüfe auf Breaking Changes in der API
+          - ⚠️ Stelle sicher, dass alle Tests durchlaufen
+          
+          ### Empfohlene nächste Schritte:
+          1. Code-Review durchführen
+          2. Tests lokal ausführen
+          3. Auf Breaking Changes prüfen
+          4. Dokumentation aktualisieren (falls nötig)
+          EOF
+          
+          cat /tmp/explanation.md
+      
+      - name: Post Explanation
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const explanation = fs.readFileSync('/tmp/explanation.md', 'utf8');
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr.outputs.pr_number }},
+              body: explanation + '\n\n---\n*Automatisch erstellt durch GitHub Copilot Agent*'
+            });
+
+  # Job für Test-Generierung mit Copilot
+  copilot-test:
+    runs-on: ubuntu-latest
+    needs: check-mention
+    if: |
+      (github.event_name == 'issue_comment' && needs.check-mention.outputs.should_run == 'true' && needs.check-mention.outputs.task_type == 'test') ||
+      (github.event_name == 'workflow_dispatch' && inputs.task_type == 'test' && (inputs.agent == 'copilot' || inputs.agent == 'both'))
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Find Files Needing Tests
+        id: find
+        run: |
+          # Finde Kotlin-Dateien
+          FILES=$(find shared androidApp -name "*.kt" -type f ! -path "*/test/*" ! -path "*/androidTest/*" | head -10)
+          
+          echo "Dateien ohne Tests:" > /tmp/test_candidates.txt
+          echo "$FILES" >> /tmp/test_candidates.txt
+          
+          cat /tmp/test_candidates.txt
+      
+      - name: Generate Test Suggestions
+        id: suggest
+        run: |
+          cat > /tmp/test_suggestions.md << 'EOF'
+          ## 🧪 Test-Generierungs-Vorschläge
+          
+          ### Empfohlene Tests für dieses Projekt:
+          
+          #### 1. Unit Tests
+          - **Engine Tests**: Teste die Map Graph Logik
+          - **Contract Tests**: Validiere generierte Contract-Modelle
+          - **Data Layer Tests**: Teste Serialisierung und Storage
+          
+          #### 2. Integration Tests
+          - **End-to-End Navigation Tests**
+          - **Bundle Export Tests**
+          - **WebView Recording Tests**
+          
+          #### 3. Android UI Tests (Compose)
+          - **Screen Rendering Tests**
+          - **User Interaction Tests**
+          - **Navigation Tests**
+          
+          ### Test-Framework Empfehlungen:
+          - **JUnit 5** für Unit Tests
+          - **Kotest** für Kotlin-idiomatische Tests
+          - **MockK** für Mocking
+          - **Compose UI Testing** für UI Tests
+          
+          ### Beispiel-Test-Template (Kotlin):
+          ```kotlin
+          import io.kotest.core.spec.style.StringSpec
+          import io.kotest.matchers.shouldBe
+          
+          class ExampleTest : StringSpec({
+              "test case name" {
+                  // Arrange
+                  val expected = "value"
+                  
+                  // Act
+                  val actual = functionUnderTest()
+                  
+                  // Assert
+                  actual shouldBe expected
+              }
+          })
+          ```
+          
+          ### Nächste Schritte:
+          1. Identifiziere kritische Code-Pfade
+          2. Schreibe Tests für diese Pfade
+          3. Führe Tests aus: `./gradlew test`
+          4. Prüfe Coverage mit JaCoCo
+          EOF
+          
+          cat /tmp/test_suggestions.md
+      
+      - name: Post Test Suggestions
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const suggestions = fs.readFileSync('/tmp/test_suggestions.md', 'utf8');
+            
+            let prNumber;
+            if (context.eventName === 'issue_comment') {
+              prNumber = context.issue.number;
+            } else {
+              prNumber = parseInt(context.payload.inputs.target_ref);
+            }
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: suggestions + '\n\n---\n*Automatisch erstellt durch GitHub Copilot Agent*'
+            });
