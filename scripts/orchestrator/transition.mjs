@@ -614,9 +614,10 @@ async function transitionPassedToMerged(pr) {
     const issue = await githubAPI(`/repos/${owner}/${repo}/issues/${issueNumber}`);
 
     if (!issue) {
-      console.log('⚠️  Could not fetch original issue. Skipping follow-up creation.');
+      console.log('⚠️  Could not fetch original issue for follow-up creation.');
     } else {
-      const followupBody = `# Follow-up: ${issue.title}
+      try {
+        const followupBody = `# Follow-up: ${issue.title}
 
 Fortsetzung von #${issueNumber}
 
@@ -629,22 +630,26 @@ Original Issue: #${issueNumber}
 ---
 *Automatisch erstellt durch Orchestrator nach erfolgreichem Merge von #${pr.number}*`;
 
-      const newIssue = await githubAPI(`/repos/${owner}/${repo}/issues`, 'POST', {
-        title: `Follow-up: ${issue.title}`,
-        body: followupBody,
-        labels: [ORCHESTRATOR_ENABLED, ORCHESTRATOR_RUN, STATE_LABELS.QUEUED]
-      });
+        const newIssue = await githubAPI(`/repos/${owner}/${repo}/issues`, 'POST', {
+          title: `Follow-up: ${issue.title}`,
+          body: followupBody,
+          labels: [ORCHESTRATOR_ENABLED, ORCHESTRATOR_RUN, STATE_LABELS.QUEUED]
+        });
 
-      console.log(`✅ Follow-up issue created: #${newIssue.number}`);
+        console.log(`✅ Follow-up issue created: #${newIssue.number}`);
+      } catch (err) {
+        console.error('⚠️  Failed to create follow-up issue:', err.message);
+        // Don't fail the merge transition if follow-up creation fails
+      }
     }
   }
   
   // Update checkpoint to idle
   checkpoint.status = 'Idle';
-  checkpoint.issue = 'N/A';
-  checkpoint.pr = 'N/A';
-  checkpoint.branch = 'N/A';
-  checkpoint.currentTask = 'N/A';
+  checkpoint.issue = null;
+  checkpoint.pr = null;
+  checkpoint.branch = null;
+  checkpoint.currentTask = null;
   checkpoint.iteration = 0;
   checkpoint.history.push(`- ${new Date().toISOString()} - Transition: PASSED → MERGED`);
   

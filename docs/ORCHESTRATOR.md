@@ -397,7 +397,7 @@ Orchestrator-Workflow benötigt:
 ### Limits
 ⚠️ Max. 5 Fix-Iterationen pro Task
 ⚠️ Max. 2 Check-Failures mit gleicher Root Cause
-⚠️ Workflow läuft max. alle 30 Minuten (Schedule, konfigurierbar in `.github/workflows/orchestrator.yml`)
+⚠️ Workflow läuft max. alle 30 Minuten (Schedule - änderbar in Zeile 24-25 von `.github/workflows/orchestrator.yml`)
 ⚠️ Keine parallele Verarbeitung mehrerer Issues (sequentiell)
 
 ## Workflow-Trigger

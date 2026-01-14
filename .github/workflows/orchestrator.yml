@@ -35,6 +35,8 @@ permissions:
 jobs:
   orchestrate:
     runs-on: ubuntu-latest
+    outputs:
+      committed: ${{ steps.commit.outputs.committed }}
 
     steps:
       - name: Checkout Repository
