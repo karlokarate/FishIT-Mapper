@@ -780,7 +780,32 @@ async function performTransition() {
       if (checkpoint.branch && checkpoint.branch !== NA_VALUE) {
         const pr = await findPRForBranch(checkpoint.branch);
         if (pr) {
-          transitioned = await transitionRunningToNeedsReview(workItem, pr);
+          // Check if PR is in draft mode and convert to ready
+          if (pr.draft) {
+            console.log('🔄 PR is in draft mode. Converting to ready for review...');
+            try {
+              // Use PATCH response directly - it contains the updated PR object
+              const updatedPR = await githubAPI(`/repos/${owner}/${repo}/pulls/${pr.number}`, 'PATCH', {
+                draft: false
+              });
+              
+              // Validate that conversion was successful
+              if (updatedPR && !updatedPR.draft) {
+                console.log('✅ PR converted from draft to ready for review');
+                transitioned = await transitionRunningToNeedsReview(workItem, updatedPR);
+              } else {
+                console.error('❌ Draft conversion failed: PR still in draft state');
+                console.log('⚠️  Staying in RUNNING state. Will retry on next run.');
+                transitioned = false;
+              }
+            } catch (err) {
+              console.error('❌ Failed to convert PR from draft:', err);
+              console.log('⚠️  Staying in RUNNING state. Will retry on next run.');
+              transitioned = false;
+            }
+          } else {
+            transitioned = await transitionRunningToNeedsReview(workItem, pr);
+          }
         } else {
           console.log('ℹ️  Waiting for PR to be created. Staying in RUNNING state.');
         }
