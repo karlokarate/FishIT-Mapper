@@ -3,11 +3,11 @@ name: GitHub Actions Orchestrator
 # The orchestrator runs on multiple triggers to ensure timely state transitions
 on:
   issues:
-    types: [labeled, reopened, edited]
+    types: [labeled, reopened, edited, opened]
   pull_request_review:
     types: [submitted]
   pull_request:
-    types: [labeled, synchronize]
+    types: [labeled, synchronize, opened]
   check_suite:
     types: [completed]
   workflow_dispatch:
@@ -20,8 +20,12 @@ on:
         description: 'Specific PR number to process'
         required: false
         type: number
+      setup_labels:
+        description: 'Only setup labels without processing'
+        required: false
+        type: boolean
+        default: false
   schedule:
-    # Run every hour (adjust as needed for your repository's activity level)
     - cron: '0 * * * *'
 
 permissions:
@@ -33,8 +37,69 @@ permissions:
   statuses: read
 
 jobs:
+  setup-labels:
+    runs-on: ubuntu-latest
+    outputs:
+      labels_created: ${{ steps.create_labels.outputs.created }}
+
+    steps:
+      - name: Setup Orchestrator Labels
+        id: create_labels
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const labels = [
+              { name: 'orchestrator:enabled', color: '0e8a16', description: 'Aktiviert den Copilot Orchestrator' },
+              { name: 'orchestrator:run', color: '1d76db', description: 'Startet die automatische Verarbeitung' },
+              { name: 'state:queued', color: 'd4c5f9', description: 'Wartet auf Verarbeitung' },
+              { name: 'state:running', color: 'fbca04', description: 'Task wird bearbeitet' },
+              { name: 'state:needs-review', color: '0075ca', description: 'Wartet auf Review' },
+              { name: 'state:fixing', color: 'd93f0b', description: 'Review Findings werden behoben' },
+              { name: 'state:passed', color: '0e8a16', description: 'Review approved' },
+              { name: 'state:merged', color: '6f42c1', description: 'PR gemerged' },
+              { name: 'state:blocked', color: 'b60205', description: 'Workflow blockiert' },
+              { name: 'status:completed', color: '0e8a16', description: 'Alle Tasks abgeschlossen' }
+            ];
+
+            let createdCount = 0;
+            let existingCount = 0;
+
+            console.log('🏷️  Setting up Orchestrator Labels...');
+
+            for (const label of labels) {
+              try {
+                await github.rest.issues.getLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label.name
+                });
+                console.log(`✓ Label "${label.name}" already exists`);
+                existingCount++;
+              } catch (error) {
+                if (error.status === 404) {
+                  await github.rest.issues.createLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    name: label.name,
+                    color: label.color,
+                    description: label.description
+                  });
+                  console.log(`✅ Created label "${label.name}"`);
+                  createdCount++;
+                } else {
+                  console.log(`⚠️ Error checking label "${label.name}": ${error.message}`);
+                }
+              }
+            }
+
+            console.log(`\n📊 Summary: ${createdCount} labels created, ${existingCount} already existed`);
+            core.setOutput('created', createdCount > 0 ? 'true' : 'false');
+
   orchestrate:
     runs-on: ubuntu-latest
+    needs: setup-labels
+    if: github.event.inputs.setup_labels != 'true'
     outputs:
       committed: ${{ steps.commit.outputs.committed }}
 
@@ -56,18 +121,14 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Check for orchestrator:enabled label on any issue/PR
-            // or check for codex/ORCHESTRATOR_ENABLED file
             const fs = require('fs');
 
-            // Check file flag first
             if (fs.existsSync('codex/ORCHESTRATOR_ENABLED')) {
               console.log('✅ Orchestrator enabled via file flag');
               core.setOutput('enabled', 'true');
               return true;
             }
 
-            // Check for orchestrator:enabled label on any open issue or PR
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -96,7 +157,6 @@ jobs:
       - name: Determine Target
         id: target
         run: |
-          # Determine which issue or PR to process
           if [ -n "${{ github.event.inputs.issue_number }}" ]; then
             echo "target_type=issue" >> $GITHUB_OUTPUT
             echo "target_number=${{ github.event.inputs.issue_number }}" >> $GITHUB_OUTPUT
@@ -110,10 +170,70 @@ jobs:
             echo "target_type=pr" >> $GITHUB_OUTPUT
             echo "target_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
           else
-            # Auto-discover mode
             echo "target_type=auto" >> $GITHUB_OUTPUT
             echo "target_number=" >> $GITHUB_OUTPUT
           fi
+
+      - name: Auto-Label Target for Orchestrator
+        id: auto_label
+        if: steps.check_enabled.outputs.enabled == 'true' && steps.target.outputs.target_number != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const targetType = '${{ steps.target.outputs.target_type }}';
+            const targetNumber = parseInt('${{ steps.target.outputs.target_number }}');
+
+            if (!targetNumber) {
+              console.log('ℹ️  No specific target, skipping auto-labeling');
+              return;
+            }
+
+            console.log(`🎯 Auto-labeling ${targetType} #${targetNumber}...`);
+
+            try {
+              const { data: issue } = await github.rest.issues.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: targetNumber
+              });
+
+              const currentLabels = issue.labels.map(l => l.name);
+              console.log(`Current labels: ${currentLabels.join(', ') || 'none'}`);
+
+              const hasOrchestratorEnabled = currentLabels.includes('orchestrator:enabled');
+              const hasOrchestratorRun = currentLabels.includes('orchestrator:run');
+              const hasStateLabel = currentLabels.some(l => l.startsWith('state:'));
+
+              const labelsToAdd = [];
+
+              if (!hasOrchestratorEnabled) {
+                labelsToAdd.push('orchestrator:enabled');
+              }
+              if (!hasOrchestratorRun) {
+                labelsToAdd.push('orchestrator:run');
+              }
+              if (!hasStateLabel) {
+                labelsToAdd.push('state:queued');
+              }
+
+              if (labelsToAdd.length > 0) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: targetNumber,
+                  labels: labelsToAdd
+                });
+                console.log(`✅ Added labels: ${labelsToAdd.join(', ')}`);
+                core.setOutput('labels_added', labelsToAdd.join(','));
+              } else {
+                console.log('ℹ️  Target already has all required orchestrator labels');
+                core.setOutput('labels_added', '');
+              }
+            } catch (error) {
+              console.log(`⚠️ Error auto-labeling: ${error.message}`);
+              core.setOutput('labels_added', '');
+            }
 
       - name: Run Orchestrator Transition
         id: transition
@@ -123,7 +243,6 @@ jobs:
         run: |
           echo "🚀 Running orchestrator transition script..."
 
-          # Build command
           CMD="node scripts/orchestrator/transition.mjs"
 
           if [ "${{ steps.target.outputs.target_type }}" == "issue" ]; then
@@ -132,7 +251,6 @@ jobs:
             CMD="$CMD --pr ${{ steps.target.outputs.target_number }}"
           fi
 
-          # Run transition script
           $CMD
 
           echo "✅ Transition script completed"
@@ -143,7 +261,6 @@ jobs:
           git config --global user.name "GitHub Actions Orchestrator"
           git config --global user.email "orchestrator@github.com"
 
-          # Check for changes to checkpoint files
           if [[ -n $(git status -s codex/) ]]; then
             git add codex/
             git commit -m "🤖 Orchestrator: Update checkpoint [skip ci]"
@@ -164,14 +281,14 @@ jobs:
           echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
           echo "**Target Type:** ${{ steps.target.outputs.target_type }}" >> $GITHUB_STEP_SUMMARY
           echo "**Target Number:** ${{ steps.target.outputs.target_number || 'auto-discover' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Labels Added:** ${{ steps.auto_label.outputs.labels_added || 'none' }}" >> $GITHUB_STEP_SUMMARY
           echo "**Checkpoint Updated:** ${{ steps.commit.outputs.committed || 'false' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Latest Checkpoint:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          head -20 codex/CHECKPOINT.md >> $GITHUB_STEP_SUMMARY
+          head -20 codex/CHECKPOINT.md >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "No checkpoint file found" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
-  # Minimal build verification job
   verify-build:
     runs-on: ubuntu-latest
     needs: orchestrate
