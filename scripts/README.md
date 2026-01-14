@@ -4,6 +4,13 @@ Diese Scripts ermöglichen es, FishIT-Mapper vollständig im ChatGPT Codex Brows
 
 ## 📋 Übersicht
 
+### `quick-start.sh` (Empfohlen für Einsteiger)
+Interaktiver Guide der dich durch den Setup-Prozess führt:
+- 🎯 Erkennt automatisch den aktuellen Status
+- 🎯 Bietet passende Optionen basierend auf der Umgebung
+- 🎯 Führt Validierung und Setup interaktiv aus
+- 🎯 Zeigt verfügbare Befehle an
+
 ### `codex-setup.sh`
 Vollständiges Setup-Script für die erste Einrichtung:
 - ✅ Prüft Java Version (JDK 17+ erforderlich)
@@ -20,7 +27,39 @@ Schnelles Maintenance-Script für regelmäßige Wartung:
 - ✅ Führt Compile-Check durch
 - ⚠️ Kein vollständiger APK Build (schneller)
 
+### `validate-env.sh`
+Umgebungs-Validierung (kein Setup, nur Check):
+- ✅ Prüft Java Installation und Version
+- ✅ Prüft Gradle Wrapper
+- ✅ Prüft Android SDK Komponenten
+- ✅ Prüft System-Tools und Ressourcen
+- ✅ Gibt Empfehlungen für nächste Schritte
+
 ## 🚀 Verwendung
+
+### Schnellstart (Empfohlen)
+
+```bash
+# Interaktiver Guide - am einfachsten!
+./scripts/quick-start.sh
+```
+
+Der interaktive Guide erkennt automatisch deinen aktuellen Status und bietet die passenden Optionen an.
+
+### Umgebung prüfen (empfohlen vor dem ersten Setup)
+
+```bash
+# Prüft ob alle Voraussetzungen erfüllt sind
+./scripts/validate-env.sh
+```
+
+Dies gibt einen detaillierten Bericht über:
+- Java Version und JAVA_HOME
+- Gradle Installation
+- Android SDK Status
+- Verfügbare System-Tools
+- Disk Space und Memory
+- Projekt-Struktur
 
 ### Erste Einrichtung
 
@@ -196,6 +235,9 @@ Um diese dauerhaft zu setzen, füge sie zu `~/.bashrc` oder `~/.profile` hinzu.
 Nach dem Setup können folgende Befehle zum Testen ausgeführt werden:
 
 ```bash
+# Umgebung validieren
+./scripts/validate-env.sh
+
 # Gradle Version anzeigen
 ./gradlew --version
 
