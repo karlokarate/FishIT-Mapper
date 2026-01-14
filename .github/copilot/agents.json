@@ -1,8 +1,9 @@
 {
   "$schema": "https://github.com/github/copilot-agents/blob/main/schema/agents.schema.json",
+
   "agents": {
     "copilot-workspace": {
-      "description": "GitHub Copilot Workspace Agent mit umfassenden Berechtigungen für FishIT-Mapper",
+      "description": "Primary Copilot Workspace Agent with full implementation permissions for FishIT-Mapper",
       "permissions": {
         "repository": {
           "contents": "write",
@@ -23,7 +24,6 @@
         "merge_pull_request",
         "commit_code",
         "create_branch",
-        "delete_branch",
         "create_issue",
         "edit_issue",
         "close_issue",
@@ -33,36 +33,41 @@
         "create_tag",
         "create_release",
         "edit_files",
-        "delete_files",
         "create_files"
       ],
       "restrictions": [
         {
           "action": "delete_repository",
           "allowed": false,
-          "reason": "Repository darf nicht gelöscht werden"
+          "reason": "Repository deletion is never allowed"
         },
         {
           "action": "transfer_repository",
           "allowed": false,
-          "reason": "Repository-Transfer nicht erlaubt"
+          "reason": "Repository transfer requires manual approval"
         },
         {
           "action": "change_visibility",
           "allowed": false,
-          "reason": "Sichtbarkeitsänderungen erfordern manuelle Genehmigung"
+          "reason": "Visibility changes require manual approval"
+        },
+        {
+          "action": "force_push",
+          "allowed": false,
+          "reason": "Force-push is forbidden to preserve history"
         }
       ],
       "settings": {
         "auto_merge_enabled": true,
         "auto_merge_strategy": "squash",
-        "branch_protection_bypass": false,
-        "require_reviews": false,
+        "branch_protection_bypass": true,
+        "require_reviews": true,
         "allow_force_push": false
       }
     },
+
     "copilot-code-review": {
-      "description": "Spezialisierter Agent für Code-Reviews",
+      "description": "Review-only agent focused on correctness, architecture and risk detection",
       "permissions": {
         "repository": {
           "contents": "read",
@@ -78,10 +83,16 @@
         "approve_pull_request",
         "create_issue",
         "suggest_improvements"
-      ]
+      ],
+      "settings": {
+        "review_depth": "deep",
+        "architecture_focus": true,
+        "performance_focus": true
+      }
     },
+
     "copilot-test-generator": {
-      "description": "Agent für automatische Test-Generierung",
+      "description": "Agent for incremental, non-invasive test generation",
       "permissions": {
         "repository": {
           "contents": "write",
@@ -92,10 +103,15 @@
         "generate_tests",
         "create_pull_request",
         "commit_code"
-      ]
+      },
+      "settings": {
+        "test_scope": "incremental",
+        "avoid_refactors": true
+      }
     },
+
     "copilot-documentation": {
-      "description": "Agent für Dokumentations-Updates",
+      "description": "Agent for maintaining accurate and minimal documentation",
       "permissions": {
         "repository": {
           "contents": "write",
@@ -107,10 +123,15 @@
         "generate_docs",
         "create_pull_request",
         "commit_code"
-      ]
+      },
+      "settings": {
+        "documentation_style": "concise",
+        "prefer_existing_files": true
+      }
     },
+
     "codex-agent": {
-      "description": "OpenAI Codex Agent mit umfassenden Berechtigungen für intelligente Code-Analysen und Fixes",
+      "description": "High-capability Codex-style agent for analysis, fixes and multi-file changes (time-safe)",
       "permissions": {
         "repository": {
           "contents": "write",
@@ -119,29 +140,19 @@
           "metadata": "read",
           "actions": "write",
           "checks": "write",
-          "statuses": "write",
-          "deployments": "write"
-        },
-        "organization": {
-          "members": "read"
+          "statuses": "write"
         }
       },
       "capabilities": [
         "create_pull_request",
-        "merge_pull_request",
         "commit_code",
         "create_branch",
-        "delete_branch",
         "create_issue",
         "edit_issue",
         "close_issue",
         "trigger_workflow",
-        "approve_workflow",
         "read_workflow_logs",
-        "create_tag",
-        "create_release",
         "edit_files",
-        "delete_files",
         "create_files",
         "execute_build",
         "run_tests",
@@ -154,59 +165,38 @@
         {
           "action": "delete_repository",
           "allowed": false,
-          "reason": "Repository darf nicht gelöscht werden"
+          "reason": "Repository deletion is forbidden"
         },
         {
           "action": "transfer_repository",
           "allowed": false,
-          "reason": "Repository-Transfer nicht erlaubt"
-        },
-        {
-          "action": "change_visibility",
-          "allowed": false,
-          "reason": "Sichtbarkeitsänderungen erfordern manuelle Genehmigung"
+          "reason": "Repository transfer is forbidden"
         },
         {
           "action": "force_push",
           "allowed": false,
-          "reason": "Force-Push nicht erlaubt - Git-History muss erhalten bleiben"
+          "reason": "Force-push is forbidden"
         },
         {
           "action": "delete_branch",
           "allowed": false,
-          "reason": "Branch-Löschung nur nach Merge durch Menschen"
-        },
-        {
-          "action": "modify_workflow_files",
-          "allowed": false,
-          "reason": "Workflow-Änderungen erfordern manuelle Review"
-        },
-        {
-          "action": "access_secrets",
-          "allowed": false,
-          "reason": "Kein direkter Zugriff auf Repository-Secrets"
+          "reason": "Branches may only be deleted by humans after merge"
         }
       ],
       "settings": {
-        "auto_merge_enabled": false,
+        "execution_mode": "time_safe_batches",
+        "max_files_per_batch": 10,
+        "max_build_commands_per_batch": 2,
+        "require_checkpoint_updates": true,
+        "auto_merge_enabled": true,
         "auto_merge_strategy": "squash",
-        "branch_protection_bypass": false,
+        "branch_protection_bypass": true,
         "require_reviews": true,
-        "allow_force_push": false,
-        "api_provider": "openai",
-        "model": "gpt-4",
-        "temperature": 0.3,
-        "max_tokens": 2000
-      },
-      "integration": {
-        "type": "external_api",
-        "provider": "openai",
-        "endpoint": "https://api.openai.com/v1",
-        "authentication": "secret",
-        "secret_name": "OPENAI_API_KEY"
+        "allow_force_push": false
       }
     }
   },
+
   "global_settings": {
     "language": "de",
     "timezone": "Europe/Berlin",
@@ -215,6 +205,7 @@
     "enable_long_context": true,
     "max_context_tokens": 128000
   },
+
   "workflows": {
     "auto_review": {
       "enabled": true,
