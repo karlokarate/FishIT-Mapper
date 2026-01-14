@@ -2,9 +2,13 @@
 
 Diese Datei verwaltet die Task-Warteschlange für den GitHub Actions Orchestrator.
 
-## Aktuell: Kein aktiver Task
+## Issue #9: Vervollständigung offener Features
 
-_Noch keine Tasks in der Queue._
+### Priorität 1: Quick Wins (1-2 Tage)
+
+- [ ] 1.1 WebChromeClient für Console-Logs hinzufügen
+- [ ] 1.2 Chains-Tab im UI erstellen
+- [ ] 1.3 Filter-Dropdown für NodeKind/EdgeKind
 
 ---
 
