@@ -1,0 +1,566 @@
+{
+  "$schema": "https://github.com/github/copilot-rulesets/blob/main/schema/ruleset.schema.json",
+  "version": "1.0",
+  "name": "FishIT-Mapper Automated Issue Workflow",
+  "description": "Automatisierte Issue-Bearbeitung mit Copilot: Issue → Tasklist → Automatische Ausführung → Review → Fixes → Merge → Follow-ups",
+  
+  "rules": [
+    {
+      "id": "auto-issue-tasklist-generation",
+      "name": "Automatische Tasklist-Generierung bei neuem Issue",
+      "description": "Reagiert auf neue Issues und erstellt automatisch eine abzuarbeitende Tasklist",
+      "trigger": {
+        "events": ["issues.opened", "issues.labeled"],
+        "conditions": {
+          "labels": {
+            "includes": ["orchestrator:enabled", "orchestrator:run"]
+          }
+        }
+      },
+      "actions": [
+        {
+          "type": "comment",
+          "template": "🤖 **Copilot Orchestrator gestartet**\n\n@Copilot Bitte analysiere dieses Issue und erstelle eine strukturierte Tasklist mit folgenden Kriterien:\n\n1. Zerlege die Anforderungen in kleine, unabhängige Tasks (max. 2h Arbeit pro Task)\n2. Priorisiere die Tasks nach Abhängigkeiten\n3. Erstelle eine Markdown-Checklist im Format:\n   - [ ] Task 1: Beschreibung\n   - [ ] Task 2: Beschreibung\n   ...\n4. Aktualisiere `codex/TODO_QUEUE.md` mit der vollständigen Tasklist\n5. Aktualisiere `codex/CHECKPOINT.md` mit Issue-Kontext\n6. Füge Label `state:queued` hinzu\n\nStarte automatisch mit dem ersten Task nach Erstellung der Tasklist."
+        },
+        {
+          "type": "invoke_agent",
+          "agent": "copilot-workspace",
+          "instruction": "Analysiere das Issue, erstelle eine Tasklist in codex/TODO_QUEUE.md, initialisiere codex/CHECKPOINT.md und starte den ersten Task automatisch."
+        }
+      ],
+      "priority": "high"
+    },
+    
+    {
+      "id": "auto-start-first-task",
+      "name": "Erster Task automatisch starten",
+      "description": "Startet automatisch den ersten Task aus der TODO_QUEUE",
+      "trigger": {
+        "events": ["issues.labeled"],
+        "conditions": {
+          "labels": {
+            "includes": ["state:queued"],
+            "excludes": ["state:running", "state:blocked"]
+          }
+        }
+      },
+      "actions": [
+        {
+          "type": "create_branch",
+          "branch_name": "orchestrator/issue-{issue.number}-{issue.title.slugified}",
+          "base": "main"
+        },
+        {
+          "type": "comment",
+          "template": "🚀 **Task gestartet**\n\n@Copilot Bitte führe NUR den folgenden Task aus der TODO_QUEUE aus:\n\n{first_unchecked_task_from_TODO_QUEUE}\n\n**Wichtig:**\n- Implementiere nur diesen einen Task\n- Aktualisiere codex/CHECKPOINT.md mit Fortschritt\n- Erstelle einen PR wenn fertig\n- Setze Label auf `state:running`"
+        },
+        {
+          "type": "invoke_agent",
+          "agent": "copilot-workspace",
+          "instruction": "Führe den ersten Task aus codex/TODO_QUEUE.md aus, erstelle einen PR und setze das Label auf state:running."
+        },
+        {
+          "type": "update_labels",
+          "remove": ["state:queued"],
+          "add": ["state:running"]
+        }
+      ],
+      "priority": "high"
+    },
+    
+    {
+      "id": "auto-ready-for-review",
+      "name": "Automatisch auf 'ready for review' setzen",
+      "description": "Setzt PR automatisch auf ready for review wenn Agent fertig ist",
+      "trigger": {
+        "events": ["pull_request.opened", "pull_request.synchronize", "issue_comment.created"],
+        "conditions": {
+          "labels": {
+            "includes": ["state:running"]
+          },
+          "comment_patterns": [
+            "task completed",
+            "task abgeschlossen",
+            "implementation done",
+            "implementierung fertig",
+            "ready for review",
+            "bereit für review"
+          ],
+          "checks": {
+            "status": "success"
+          }
+        }
+      },
+      "actions": [
+        {
+          "type": "comment",
+          "template": "✅ **Task abgeschlossen - Ready for Review**\n\n@Copilot und @copilot-code-review Bitte führt ein vollständiges Code-Review durch:\n\n**Review-Fokus:**\n- ✅ Issue-Anforderungen erfüllt?\n- ✅ Code-Qualität und Best Practices\n- ✅ Tests vorhanden und passend?\n- ✅ Dokumentation aktualisiert?\n- ✅ Keine Sicherheitsprobleme?\n- ✅ Keine Breaking Changes?\n\n**Nach dem Review:**\n- Bei Approval → automatischer Merge\n- Bei Changes Requested → Agent wird automatisch Fixes implementieren"
+        },
+        {
+          "type": "request_review",
+          "reviewers": ["copilot-code-review", "Copilot"]
+        },
+        {
+          "type": "invoke_agent",
+          "agent": "copilot-code-review",
+          "instruction": "Führe ein tiefgehendes Code-Review durch mit Fokus auf Korrektheit, Architektur, Sicherheit und Issue-Anforderungen."
+        },
+        {
+          "type": "update_labels",
+          "remove": ["state:running"],
+          "add": ["state:needs-review"]
+        }
+      ],
+      "priority": "high"
+    },
+    
+    {
+      "id": "auto-fix-review-findings",
+      "name": "Automatisches Fixen von Review Findings",
+      "description": "Agent behebt automatisch alle Review Findings von Copilot und Codex",
+      "trigger": {
+        "events": ["pull_request_review.submitted"],
+        "conditions": {
+          "review_state": "changes_requested",
+          "labels": {
+            "includes": ["state:needs-review"]
+          }
+        }
+      },
+      "actions": [
+        {
+          "type": "comment",
+          "template": "🔧 **Automatische Behebung von Review Findings**\n\n@Copilot Bitte behebe ALLE folgenden Review-Kommentare:\n\n{review_comments}\n\n**Anweisungen:**\n1. Implementiere alle geforderten Änderungen präzise\n2. Aktualisiere Tests falls nötig\n3. Aktualisiere codex/CHECKPOINT.md (Iteration++)\n4. Committe und pushe die Änderungen\n5. Kommentiere nach Abschluss mit 'Fixes applied'\n\n**Aktuelle Iteration:** {current_iteration}/5"
+        },
+        {
+          "type": "invoke_agent",
+          "agent": "codex-agent",
+          "instruction": "Behebe alle Review-Findings systematisch. Arbeite in kleinen Batches. Aktualisiere CHECKPOINT.md nach jeder Änderung."
+        },
+        {
+          "type": "update_labels",
+          "remove": ["state:needs-review"],
+          "add": ["state:fixing"]
+        }
+      ],
+      "priority": "high"
+    },
+    
+    {
+      "id": "auto-re-review-after-fixes",
+      "name": "Automatisches Re-Review nach Fixes",
+      "description": "Triggert automatisch ein neues Review nach implementierten Fixes",
+      "trigger": {
+        "events": ["pull_request.synchronize", "issue_comment.created"],
+        "conditions": {
+          "labels": {
+            "includes": ["state:fixing"]
+          },
+          "comment_patterns": [
+            "fixes applied",
+            "änderungen implementiert",
+            "review findings behoben",
+            "alle findings behoben"
+          ],
+          "checks": {
+            "status": "success"
+          }
+        }
+      },
+      "actions": [
+        {
+          "type": "invoke_agent",
+          "agent": "copilot-code-review",
+          "instruction": "Überprüfe ob alle Review Findings korrekt behoben wurden. Wenn ja: Approve. Wenn nein: Request Changes mit spezifischen Kommentaren."
+        },
+        {
+          "type": "comment",
+          "template": "🔄 **Re-Review angefordert** (Iteration {current_iteration}/5)\n\n@copilot-code-review Bitte überprüfe ob alle Findings behoben wurden."
+        },
+        {
+          "type": "update_labels",
+          "remove": ["state:fixing"],
+          "add": ["state:needs-review"]
+        }
+      ],
+      "priority": "high"
+    },
+    
+    {
+      "id": "auto-iteration-limit-check",
+      "name": "Iterations-Limit prüfen",
+      "description": "Prüft ob das Maximum von 5 Iterationen erreicht wurde",
+      "trigger": {
+        "events": ["pull_request_review.submitted"],
+        "conditions": {
+          "checkpoint_iteration": {
+            "greater_than": 5
+          }
+        }
+      },
+      "actions": [
+        {
+          "type": "comment",
+          "template": "⚠️ **Iterations-Limit erreicht**\n\nMaximale Anzahl von Review-Iterationen (5) wurde erreicht.\n\n**Nächste Schritte:**\n1. Manuelle Review erforderlich\n2. Oder: Reset der Iteration in codex/CHECKPOINT.md\n3. Oder: Issue für manuelle Bearbeitung markieren\n\nSetze Label auf `state:blocked` für manuelle Intervention."
+        },
+        {
+          "type": "update_labels",
+          "remove": ["state:fixing", "state:needs-review"],
+          "add": ["state:blocked"]
+        }
+      ],
+      "priority": "critical"
+    },
+    
+    {
+      "id": "auto-merge-on-approval",
+      "name": "Automatischer Merge bei Approval",
+      "description": "Merged PR automatisch wenn alle Reviews approved sind und Checks grün",
+      "trigger": {
+        "events": ["pull_request_review.submitted"],
+        "conditions": {
+          "review_state": "approved",
+          "labels": {
+            "includes": ["state:needs-review"],
+            "excludes": ["state:blocked"]
+          },
+          "checks": {
+            "status": "success"
+          },
+          "required_approvals": 1
+        }
+      },
+      "actions": [
+        {
+          "type": "comment",
+          "template": "🎉 **Alle Reviews approved und Checks erfolgreich!**\n\nAutomatischer Merge wird durchgeführt...\n\n**Merge-Strategie:** Squash Merge\n**Iteration:** {current_iteration}/5"
+        },
+        {
+          "type": "update_labels",
+          "remove": ["state:needs-review"],
+          "add": ["state:passed"]
+        },
+        {
+          "type": "merge",
+          "method": "squash",
+          "commit_title": "{pr.title}",
+          "commit_message": "Closes #{issue.number}\n\n{pr.body}\n\nIteration: {current_iteration}/5"
+        },
+        {
+          "type": "update_labels",
+          "add": ["state:merged"]
+        }
+      ],
+      "priority": "high"
+    },
+    
+    {
+      "id": "auto-update-issue-after-merge",
+      "name": "Issue-Status nach Merge aktualisieren",
+      "description": "Aktualisiert Issue-Body und markiert Task als erledigt nach Merge",
+      "trigger": {
+        "events": ["pull_request.closed"],
+        "conditions": {
+          "pr_merged": true,
+          "labels": {
+            "includes": ["state:merged"]
+          }
+        }
+      },
+      "actions": [
+        {
+          "type": "invoke_agent",
+          "agent": "copilot-workspace",
+          "instruction": "Aktualisiere codex/TODO_QUEUE.md: Markiere den abgeschlossenen Task als erledigt (- [x]). Aktualisiere codex/CHECKPOINT.md mit Merge-Info."
+        },
+        {
+          "type": "comment_on_issue",
+          "template": "✅ **Task erfolgreich abgeschlossen und gemerged!**\n\nPR #{pr.number} wurde erfolgreich gemerged.\n\n**Zusammenfassung:**\n- Iteration: {current_iteration}/5\n- Merge Commit: {merge_commit_sha}\n- Review-Runden: {review_count}\n\nNächster Task wird automatisch gestartet..."
+        }
+      ],
+      "priority": "high"
+    },
+    
+    {
+      "id": "auto-start-next-task",
+      "name": "Nächsten Task automatisch starten",
+      "description": "Startet automatisch den nächsten Task nach erfolgreichem Merge",
+      "trigger": {
+        "events": ["pull_request.closed", "issue_comment.created"],
+        "conditions": {
+          "pr_merged": true,
+          "has_unchecked_tasks_in_TODO_QUEUE": true,
+          "labels": {
+            "excludes": ["state:blocked"]
+          }
+        }
+      },
+      "actions": [
+        {
+          "type": "create_branch",
+          "branch_name": "orchestrator/issue-{issue.number}-task-{next_task_number}",
+          "base": "main"
+        },
+        {
+          "type": "comment_on_issue",
+          "template": "🚀 **Nächster Task gestartet**\n\n@Copilot Bitte führe nun den nächsten Task aus:\n\n{next_unchecked_task_from_TODO_QUEUE}\n\n**Workflow:**\n1. Implementiere nur diesen Task\n2. Aktualisiere codex/CHECKPOINT.md (Reset Iteration auf 1)\n3. Erstelle neuen PR\n4. Warte auf automatisches Review"
+        },
+        {
+          "type": "invoke_agent",
+          "agent": "copilot-workspace",
+          "instruction": "Führe den nächsten Task aus codex/TODO_QUEUE.md aus. Erstelle einen neuen PR. Reset CHECKPOINT.md Iteration auf 1."
+        },
+        {
+          "type": "update_labels",
+          "remove": ["state:merged"],
+          "add": ["state:running"]
+        }
+      ],
+      "priority": "high"
+    },
+    
+    {
+      "id": "auto-close-issue-when-complete",
+      "name": "Issue schließen wenn alle Tasks fertig",
+      "description": "Schließt Issue automatisch wenn alle Tasks aus TODO_QUEUE abgeschlossen sind",
+      "trigger": {
+        "events": ["pull_request.closed", "issue_comment.created"],
+        "conditions": {
+          "pr_merged": true,
+          "all_tasks_checked_in_TODO_QUEUE": true,
+          "labels": {
+            "includes": ["orchestrator:run"]
+          }
+        }
+      },
+      "actions": [
+        {
+          "type": "comment_on_issue",
+          "template": "🎊 **Alle Tasks erfolgreich abgeschlossen!**\n\nAlle Tasks aus der TODO_QUEUE wurden erfolgreich implementiert und gemerged.\n\n**Statistiken:**\n- Anzahl Tasks: {total_task_count}\n- PRs erstellt: {pr_count}\n- Durchschnittliche Iterationen: {avg_iterations}\n- Gesamtdauer: {total_duration}\n\n@Copilot Erstelle nun eine Zusammenfassung und aktualisiere die Repository-Dokumentation."
+        },
+        {
+          "type": "invoke_agent",
+          "agent": "copilot-documentation",
+          "instruction": "Erstelle eine umfassende Zusammenfassung aller durchgeführten Änderungen und aktualisiere relevante Dokumentation (README.md, ARCHITECTURE.md, etc.) basierend auf den implementierten Features."
+        },
+        {
+          "type": "close_issue",
+          "reason": "completed"
+        },
+        {
+          "type": "update_labels",
+          "remove": ["orchestrator:run", "state:merged"],
+          "add": ["status:completed"]
+        }
+      ],
+      "priority": "high"
+    },
+    
+    {
+      "id": "auto-documentation-update",
+      "name": "Automatisches Dokumentations-Update nach Issue-Abschluss",
+      "description": "Aktualisiert automatisch die gesamte Repo-Dokumentation nach Abschluss eines Issues",
+      "trigger": {
+        "events": ["issues.closed"],
+        "conditions": {
+          "labels": {
+            "includes": ["status:completed", "orchestrator:enabled"]
+          }
+        }
+      },
+      "actions": [
+        {
+          "type": "create_branch",
+          "branch_name": "docs/auto-update-after-issue-{issue.number}",
+          "base": "main"
+        },
+        {
+          "type": "invoke_agent",
+          "agent": "copilot-documentation",
+          "instruction": "Analysiere alle Änderungen aus Issue #{issue.number} und aktualisiere folgende Dokumentation:\n\n1. README.md - Falls neue Features hinzugefügt wurden\n2. ARCHITECTURE.md - Falls architektonische Änderungen vorgenommen wurden\n3. docs/ROADMAP.md - Markiere abgeschlossene Milestones\n4. Erstelle ggf. neue Dokumentations-Seiten für neue Features\n5. Aktualisiere Code-Kommentare in KDoc-Format wo nötig\n\nErstelle einen PR mit allen Dokumentations-Updates."
+        },
+        {
+          "type": "comment_on_issue",
+          "template": "📚 **Dokumentation wird aktualisiert**\n\nEin separater PR für Dokumentations-Updates wurde erstellt.\n\n**Issue-Zusammenfassung:**\n{issue_summary}\n\n**Implementierte Features:**\n{completed_tasks_summary}\n\nDieses Issue ist nun abgeschlossen. Vielen Dank!"
+        }
+      ],
+      "priority": "medium"
+    },
+    
+    {
+      "id": "auto-create-follow-up-issue",
+      "name": "Follow-up Issue erstellen bei Bedarf",
+      "description": "Erstellt automatisch ein Follow-up Issue wenn Tasks in TODO_QUEUE verbleiben",
+      "trigger": {
+        "events": ["issues.closed"],
+        "conditions": {
+          "labels": {
+            "includes": ["orchestrator:enabled"]
+          },
+          "has_future_tasks_in_TODO_QUEUE": true
+        }
+      },
+      "actions": [
+        {
+          "type": "create_issue",
+          "title": "Follow-up: {original_issue.title}",
+          "body": "# Follow-up von Issue #{original_issue.number}\n\nDieses Issue enthält die verbleibenden Tasks aus dem ursprünglichen Issue.\n\n## Original Issue\n{original_issue.url}\n\n## Verbleibende Tasks\n{future_tasks_from_TODO_QUEUE}\n\n## Kontext\n{original_issue.context}\n\n---\n*Automatisch erstellt vom Copilot Orchestrator*",
+          "labels": ["orchestrator:enabled", "orchestrator:run", "state:queued", "type:follow-up"]
+        },
+        {
+          "type": "comment_on_issue",
+          "template": "➡️ **Follow-up Issue erstellt**\n\nEs wurden verbleibende Tasks gefunden. Ein neues Issue wurde erstellt: #{new_issue.number}\n\nDer Orchestrator wird automatisch mit der Bearbeitung fortfahren."
+        }
+      ],
+      "priority": "medium"
+    },
+    
+    {
+      "id": "auto-error-recovery",
+      "name": "Automatische Fehlerbehandlung und Recovery",
+      "description": "Behandelt Fehler im Workflow und versucht automatische Recovery",
+      "trigger": {
+        "events": ["check_suite.completed", "workflow_run.completed"],
+        "conditions": {
+          "checks": {
+            "status": "failure"
+          },
+          "labels": {
+            "includes": ["state:running", "state:fixing"],
+            "excludes": ["state:blocked"]
+          }
+        }
+      },
+      "actions": [
+        {
+          "type": "comment",
+          "template": "⚠️ **Build/Test Fehler erkannt**\n\n@Copilot Bitte analysiere die Fehler und behebe sie:\n\n{check_failure_logs}\n\n**Anweisungen:**\n1. Analysiere die Fehler-Logs\n2. Identifiziere die Root Cause\n3. Implementiere Fixes\n4. Stelle sicher dass alle Tests grün sind\n5. Aktualisiere CHECKPOINT.md\n\n**Fehlerversuch:** {failure_count}/2"
+        },
+        {
+          "type": "invoke_agent",
+          "agent": "codex-agent",
+          "instruction": "Analysiere Check-Failures und implementiere Fixes. Wenn Fehler nicht automatisch behebbar, setze state:blocked."
+        },
+        {
+          "type": "conditional_action",
+          "condition": "failure_count >= 2",
+          "then": [
+            {
+              "type": "update_labels",
+              "add": ["state:blocked"]
+            },
+            {
+              "type": "comment",
+              "template": "🛑 **Automatische Blockierung**\n\nNach 2 fehlgeschlagenen Versuchen wurde der Workflow blockiert.\n\nManuelle Intervention erforderlich."
+            }
+          ]
+        }
+      ],
+      "priority": "critical"
+    }
+  ],
+  
+  "settings": {
+    "enabled": true,
+    "auto_assign_copilot": true,
+    "max_iterations": 5,
+    "max_check_failures": 2,
+    "checkpoint_file": "codex/CHECKPOINT.md",
+    "todo_queue_file": "codex/TODO_QUEUE.md",
+    "orchestrator_enabled_label": "orchestrator:enabled",
+    "orchestrator_run_label": "orchestrator:run",
+    "merge_strategy": "squash",
+    "auto_merge_enabled": true,
+    "require_reviews": true,
+    "review_count": 1,
+    "language": "de",
+    "timezone": "Europe/Berlin"
+  },
+  
+  "integrations": {
+    "github_actions": {
+      "orchestrator_workflow": ".github/workflows/orchestrator.yml",
+      "use_existing_workflows": true,
+      "trigger_on_label_change": true,
+      "trigger_on_comment": true
+    },
+    "agents": {
+      "primary": "copilot-workspace",
+      "reviewer": "copilot-code-review",
+      "fixer": "codex-agent",
+      "documentation": "copilot-documentation"
+    }
+  },
+  
+  "labels": {
+    "required": [
+      {
+        "name": "orchestrator:enabled",
+        "color": "0e8a16",
+        "description": "Aktiviert den Copilot Orchestrator für dieses Item"
+      },
+      {
+        "name": "orchestrator:run",
+        "color": "1d76db",
+        "description": "Startet die automatische Verarbeitung"
+      }
+    ],
+    "state_labels": [
+      {
+        "name": "state:queued",
+        "color": "d4c5f9",
+        "description": "Wartet auf Verarbeitung"
+      },
+      {
+        "name": "state:running",
+        "color": "fbca04",
+        "description": "Task wird aktuell bearbeitet"
+      },
+      {
+        "name": "state:needs-review",
+        "color": "0075ca",
+        "description": "Wartet auf Code Review"
+      },
+      {
+        "name": "state:fixing",
+        "color": "d93f0b",
+        "description": "Review Findings werden behoben"
+      },
+      {
+        "name": "state:passed",
+        "color": "0e8a16",
+        "description": "Review approved, bereit zum Merge"
+      },
+      {
+        "name": "state:merged",
+        "color": "6f42c1",
+        "description": "PR wurde gemerged"
+      },
+      {
+        "name": "state:blocked",
+        "color": "b60205",
+        "description": "Workflow blockiert, manuelle Intervention nötig"
+      },
+      {
+        "name": "status:completed",
+        "color": "0e8a16",
+        "description": "Alle Tasks abgeschlossen"
+      }
+    ]
+  },
+  
+  "notifications": {
+    "on_error": {
+      "mention": ["@karlokarate"],
+      "create_issue": false
+    },
+    "on_blocked": {
+      "mention": ["@karlokarate"],
+      "create_issue": true
+    },
+    "on_completion": {
+      "mention": ["@karlokarate"],
+      "create_issue": false
+    }
+  }
+}
