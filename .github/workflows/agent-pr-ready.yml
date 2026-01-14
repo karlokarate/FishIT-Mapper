@@ -196,12 +196,17 @@ jobs:
           script: |
             try {
               // Entferne "review:requested" Label
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: parseInt('${{ steps.pr_number.outputs.pr_number }}'),
-                name: 'review:requested'
-              }).catch(() => {});
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: parseInt('${{ steps.pr_number.outputs.pr_number }}'),
+                  name: 'review:requested'
+                });
+                console.log('Label "review:requested" entfernt');
+              } catch (error) {
+                console.log('Label "review:requested" nicht gefunden oder konnte nicht entfernt werden:', error.message);
+              }
               
               // Füge "ready-for-review" Label hinzu
               await github.rest.issues.addLabels({
@@ -210,6 +215,8 @@ jobs:
                 issue_number: parseInt('${{ steps.pr_number.outputs.pr_number }}'),
                 labels: ['ready-for-review']
               });
+              console.log('Label "ready-for-review" hinzugefügt');
             } catch (error) {
-              console.log('Label-Update fehlgeschlagen:', error.message);
+              console.error('Fehler beim Label-Update:', error.message);
+              // Workflow nicht fehlschlagen lassen, nur Fehler loggen
             }

@@ -197,7 +197,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const summary = ${{ steps.summary.outputs.result }};
+            const summary = ${{ toJSON(steps.summary.outputs.result) }};
             
             await github.rest.issues.createComment({
               owner: context.repo.owner,

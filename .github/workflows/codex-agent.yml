@@ -171,8 +171,13 @@ jobs:
               \"max_tokens\": 2000
             }")
           
-          # Extrahiere Review-Text
-          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Fehler beim Abrufen des Reviews"')
+          # Validiere API Response und extrahiere Review-Text
+          if echo "$RESPONSE" | jq -e '.choices[0].message.content' > /dev/null 2>&1; then
+            REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          else
+            ERROR_MSG=$(echo "$RESPONSE" | jq -r '.error.message // "Unbekannter Fehler"')
+            REVIEW_TEXT="⚠️ Fehler beim Abrufen des Reviews von OpenAI API: $ERROR_MSG"
+          fi
           
           echo "review_text<<EOF" >> $GITHUB_OUTPUT
           echo "$REVIEW_TEXT" >> $GITHUB_OUTPUT
@@ -256,7 +261,12 @@ jobs:
           # Sammle Build-/Test-Fehler
           ./gradlew build --no-daemon --stacktrace > /tmp/build_output.txt 2>&1 || true
           
-          BUILD_OUTPUT=$(cat /tmp/build_output.txt | tail -n 100)
+          # Sanitize build output - entferne potenzielle Secrets
+          BUILD_OUTPUT=$(cat /tmp/build_output.txt | tail -n 100 | \
+            sed 's/password[=:][^ ]*/password=***/gi' | \
+            sed 's/token[=:][^ ]*/token=***/gi' | \
+            sed 's/key[=:][^ ]*/key=***/gi' | \
+            sed 's|https://[^/]*:[^@]*@|https://***:***@|g')
           
           # Prompt für Codex
           PROMPT="Analysiere die folgenden Build-/Test-Fehler und schlage konkrete Fixes vor:
@@ -293,21 +303,16 @@ jobs:
               \"max_tokens\": 2000
             }")
           
-          FIXES=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          # Validiere API Response und extrahiere Fixes
+          if echo "$RESPONSE" | jq -e '.choices[0].message.content' > /dev/null 2>&1; then
+            FIXES=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          else
+            FIXES="Fehler beim Abrufen der Fixes von OpenAI API. Response: $(echo "$RESPONSE" | jq -r '.error.message // "Unbekannter Fehler"')"
+          fi
+          
           echo "fixes<<EOF" >> $GITHUB_OUTPUT
           echo "$FIXES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-      
-      - name: Apply Fixes and Commit
-        run: |
-          # Hinweis: In der Praxis müssten hier die Fixes aus der JSON-Response
-          # automatisch auf die Dateien angewendet werden. Dies erfordert
-          # komplexere Logik oder ein dediziertes Tool.
-          
-          # Für diese Implementation erstellen wir einen Kommentar mit den
-          # vorgeschlagenen Fixes, der manuell angewendet werden kann.
-          
-          echo "Fixes wurden analysiert und werden als Kommentar gepostet"
       
       - name: Post Fix Suggestions
         uses: actions/github-script@v7
@@ -321,7 +326,8 @@ jobs:
             ---
             *Automatisch erstellt durch OpenAI Codex Agent*
             
-            **Hinweis:** Bitte prüfe die vorgeschlagenen Fixes und wende sie manuell an, falls sie korrekt sind.
+            **Hinweis:** Diese Vorschläge wurden automatisch generiert. Bitte prüfe sie sorgfältig, bevor du sie anwendest.
+            **Keine automatischen Commits** wurden durchgeführt - alle Änderungen müssen manuell überprüft und angewendet werden.
             `;
             
             await github.rest.issues.createComment({

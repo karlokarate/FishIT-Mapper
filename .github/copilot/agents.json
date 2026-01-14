@@ -165,6 +165,26 @@
           "action": "change_visibility",
           "allowed": false,
           "reason": "Sichtbarkeitsänderungen erfordern manuelle Genehmigung"
+        },
+        {
+          "action": "force_push",
+          "allowed": false,
+          "reason": "Force-Push nicht erlaubt - Git-History muss erhalten bleiben"
+        },
+        {
+          "action": "delete_branch",
+          "allowed": false,
+          "reason": "Branch-Löschung nur nach Merge durch Menschen"
+        },
+        {
+          "action": "modify_workflow_files",
+          "allowed": false,
+          "reason": "Workflow-Änderungen erfordern manuelle Review"
+        },
+        {
+          "action": "access_secrets",
+          "allowed": false,
+          "reason": "Kein direkter Zugriff auf Repository-Secrets"
         }
       ],
       "settings": {
