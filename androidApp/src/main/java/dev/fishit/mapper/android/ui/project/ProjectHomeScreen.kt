@@ -31,7 +31,8 @@ import dev.fishit.mapper.contract.ProjectId
 private enum class ProjectTab(val label: String) {
     Browser("Browser"),
     Graph("Graph"),
-    Sessions("Sessions")
+    Sessions("Sessions"),
+    Chains("Chains")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,6 +93,12 @@ fun ProjectHomeScreen(
                     label = { Text(ProjectTab.Sessions.label) },
                     icon = { Text("🧾") }
                 )
+                NavigationBarItem(
+                    selected = tab == ProjectTab.Chains,
+                    onClick = { tab = ProjectTab.Chains },
+                    label = { Text(ProjectTab.Chains.label) },
+                    icon = { Text("🔗") }
+                )
             }
         }
     ) { padding ->
@@ -124,6 +131,8 @@ fun ProjectHomeScreen(
                         sessions = state.sessions,
                         onOpenSession = { onOpenSession(it) }
                     )
+
+                    ProjectTab.Chains -> ChainsScreen(chainsFile = state.chains)
                 }
             }
         }

@@ -3,6 +3,8 @@ package dev.fishit.mapper.android.ui.project
 import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -28,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.fishit.mapper.contract.ConsoleLevel
+import dev.fishit.mapper.contract.ConsoleMessageEvent
 import dev.fishit.mapper.contract.NavigationEvent
 import dev.fishit.mapper.contract.ProjectMeta
 import dev.fishit.mapper.contract.RecorderEvent
@@ -150,6 +154,33 @@ fun BrowserScreen(
 
                             mainHandler.post { onRecorderEventState(event) }
                             return super.shouldInterceptRequest(view, request)
+                        }
+                    }
+
+                    webChromeClient = object : WebChromeClient() {
+                        override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                            if (!recordingState) return super.onConsoleMessage(consoleMessage)
+                            val msg = consoleMessage ?: return super.onConsoleMessage(consoleMessage)
+
+                            val level = when (msg.messageLevel()) {
+                                ConsoleMessage.MessageLevel.LOG -> ConsoleLevel.Log
+                                ConsoleMessage.MessageLevel.WARNING -> ConsoleLevel.Warn
+                                ConsoleMessage.MessageLevel.ERROR -> ConsoleLevel.Error
+                                // Note: ConsoleLevel enum only has Log, Info, Warn, Error
+                                // DEBUG maps to Info as there's no Debug level in the contract
+                                ConsoleMessage.MessageLevel.DEBUG -> ConsoleLevel.Info
+                                else -> ConsoleLevel.Info
+                            }
+
+                            val event = ConsoleMessageEvent(
+                                id = IdGenerator.newEventId(),
+                                at = Clock.System.now(),
+                                level = level,
+                                message = msg.message()
+                            )
+
+                            mainHandler.post { onRecorderEventState(event) }
+                            return true
                         }
                     }
 
