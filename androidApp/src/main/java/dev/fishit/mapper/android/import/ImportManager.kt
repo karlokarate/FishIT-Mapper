@@ -130,15 +130,23 @@ class ImportManager(
     
     /**
      * Extract a ZIP file to a target directory.
+     * Validates paths to prevent zip slip attacks.
      */
     private fun extractZip(zipUri: Uri, targetDir: File) {
         targetDir.mkdirs()
+        val canonicalTargetPath = targetDir.canonicalPath
         
         context.contentResolver.openInputStream(zipUri)?.use { input ->
             ZipInputStream(input).use { zis ->
                 var entry = zis.nextEntry
                 while (entry != null) {
                     val file = File(targetDir, entry.name)
+                    
+                    // Prevent zip slip vulnerability by validating the canonical path
+                    val canonicalFilePath = file.canonicalPath
+                    if (!canonicalFilePath.startsWith(canonicalTargetPath + File.separator)) {
+                        throw SecurityException("Zip entry is outside of target directory: ${entry.name}")
+                    }
                     
                     if (entry.isDirectory) {
                         file.mkdirs()

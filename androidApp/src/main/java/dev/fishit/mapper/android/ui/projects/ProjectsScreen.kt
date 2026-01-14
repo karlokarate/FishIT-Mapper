@@ -130,7 +130,7 @@ fun ProjectsScreen(
             }
             
             // Show success message
-            if (state.importSuccess != null) {
+            state.importSuccess?.let { successMessage ->
                 Snackbar(
                     action = {
                         TextButton(onClick = { vm.clearMessages() }) {
@@ -139,7 +139,7 @@ fun ProjectsScreen(
                     },
                     modifier = Modifier.padding(bottom = 12.dp)
                 ) {
-                    Text(state.importSuccess!!)
+                    Text(successMessage)
                 }
             }
 
