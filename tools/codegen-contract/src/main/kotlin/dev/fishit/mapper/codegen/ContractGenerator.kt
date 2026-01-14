@@ -53,26 +53,6 @@
                 .build()
         }
 
-        private fun dataClassBuilder(name: String, kdoc: String? = null): TypeSpec.Builder {
-            val builder = TypeSpec.classBuilder(name)
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-            if (kdoc != null) builder.addKdoc(kdoc)
-            return builder
-        }
-
-        private fun TypeSpec.Builder.addDataClassProperty(
-            name: String,
-            type: TypeName,
-            defaultValue: CodeBlock? = null,
-            modifiers: List<KModifier> = emptyList()
-        ): TypeSpec.Builder {
-            val propBuilder = PropertySpec.builder(name, type)
-                .initializer(name)
-            modifiers.forEach { propBuilder.addModifiers(it) }
-            return this.addProperty(propBuilder.build())
-        }
-
         fun generateAll(outDir: File) {
             val files = listOf(
                 generateContractInfo(),
