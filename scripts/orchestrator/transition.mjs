@@ -784,25 +784,22 @@ async function performTransition() {
           if (pr.draft) {
             console.log('🔄 PR is in draft mode. Converting to ready for review...');
             try {
-              await githubAPI(`/repos/${owner}/${repo}/pulls/${pr.number}`, 'PATCH', {
+              // Use PATCH response directly - it contains the updated PR object
+              const updatedPR = await githubAPI(`/repos/${owner}/${repo}/pulls/${pr.number}`, 'PATCH', {
                 draft: false
               });
-              console.log('✅ PR converted from draft to ready for review');
               
-              // Refresh PR data after update (preferred path)
-              try {
-                const refreshedPR = await githubAPI(`/repos/${owner}/${repo}/pulls/${pr.number}`);
-                transitioned = await transitionRunningToNeedsReview(workItem, refreshedPR);
-              } catch (refreshErr) {
-                console.error('⚠️ Failed to refresh PR data after draft conversion:', refreshErr.message);
-                console.log('ℹ️ Attempting transition with fallback PR data...');
-                // Fallback: Update draft flag locally since API call succeeded but refresh failed.
-                // This maintains workflow integrity and allows the state transition to proceed.
-                const fallbackPR = { ...pr, draft: false };
-                transitioned = await transitionRunningToNeedsReview(workItem, fallbackPR);
+              // Validate that conversion was successful
+              if (updatedPR && !updatedPR.draft) {
+                console.log('✅ PR converted from draft to ready for review');
+                transitioned = await transitionRunningToNeedsReview(workItem, updatedPR);
+              } else {
+                console.error('❌ Draft conversion failed: PR still in draft state');
+                console.log('⚠️  Staying in RUNNING state. Will retry on next run.');
+                transitioned = false;
               }
             } catch (err) {
-              console.error('❌ Failed to convert PR from draft:', err.message);
+              console.error('❌ Failed to convert PR from draft:', err);
               console.log('⚠️  Staying in RUNNING state. Will retry on next run.');
               transitioned = false;
             }
