@@ -31,7 +31,7 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPOSITORY = options.repo || process.env.GITHUB_REPOSITORY;
 
 // Constants
-const NA_VALUE = NA_VALUE;
+const NA_VALUE = 'N/A';
 const MAX_ITERATIONS = 5;
 const MAX_CHECK_FAILURES = 2;
 
