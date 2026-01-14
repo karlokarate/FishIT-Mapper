@@ -790,11 +790,20 @@ async function performTransition() {
               console.log('✅ PR converted from draft to ready for review');
               
               // Refresh PR data after update
-              const updatedPR = await githubAPI(`/repos/${owner}/${repo}/pulls/${pr.number}`);
-              transitioned = await transitionRunningToNeedsReview(workItem, updatedPR);
+              try {
+                const updatedPR = await githubAPI(`/repos/${owner}/${repo}/pulls/${pr.number}`);
+                transitioned = await transitionRunningToNeedsReview(workItem, updatedPR);
+              } catch (refreshErr) {
+                console.error('⚠️  Failed to refresh PR data after draft conversion:', refreshErr.message);
+                console.log('ℹ️  Attempting transition with existing PR data...');
+                // Use original PR data but update draft flag
+                const updatedPR = { ...pr, draft: false };
+                transitioned = await transitionRunningToNeedsReview(workItem, updatedPR);
+              }
             } catch (err) {
               console.error('❌ Failed to convert PR from draft:', err.message);
               console.log('⚠️  Staying in RUNNING state. Will retry on next run.');
+              transitioned = false;
             }
           } else {
             transitioned = await transitionRunningToNeedsReview(workItem, pr);
