@@ -1,0 +1,260 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/mcp.schema.json",
+  "version": "1.0",
+  "name": "FishIT-Mapper MCP Configuration",
+  "description": "MCP Server Konfiguration für optimale Long Context und erweiterte Copilot-Features",
+  
+  "servers": {
+    "github": {
+      "type": "github",
+      "enabled": true,
+      "settings": {
+        "repository": "karlokarate/FishIT-Mapper",
+        "enable_long_context": true,
+        "max_context_length": 128000,
+        "context_strategy": "intelligent_chunking",
+        "include_history": true,
+        "history_depth": 100
+      },
+      "features": {
+        "code_search": true,
+        "semantic_search": true,
+        "symbol_search": true,
+        "reference_finding": true,
+        "dependency_analysis": true,
+        "call_hierarchy": true,
+        "type_hierarchy": true,
+        "cross_file_analysis": true
+      }
+    },
+    
+    "filesystem": {
+      "type": "filesystem",
+      "enabled": true,
+      "settings": {
+        "root": ".",
+        "watch_patterns": [
+          "**/*.kt",
+          "**/*.java",
+          "**/*.json",
+          "**/*.gradle.kts",
+          "**/*.md"
+        ],
+        "ignore_patterns": [
+          "**/build/**",
+          "**/.gradle/**",
+          "**/.idea/**",
+          "**/*.iml",
+          "**/node_modules/**"
+        ],
+        "enable_indexing": true,
+        "index_update_strategy": "incremental"
+      },
+      "features": {
+        "file_watching": true,
+        "incremental_updates": true,
+        "fuzzy_search": true,
+        "content_search": true
+      }
+    },
+    
+    "gradle": {
+      "type": "build_system",
+      "enabled": true,
+      "settings": {
+        "build_file": "build.gradle.kts",
+        "gradle_wrapper": "./gradlew",
+        "auto_sync": true,
+        "parse_dependencies": true,
+        "track_build_outputs": true
+      },
+      "features": {
+        "dependency_graph": true,
+        "build_analysis": true,
+        "module_relationships": true,
+        "test_results_integration": true
+      }
+    },
+    
+    "kotlin": {
+      "type": "language_server",
+      "enabled": true,
+      "settings": {
+        "language": "kotlin",
+        "kotlin_version": "1.9.22",
+        "enable_analysis": true,
+        "enable_refactoring": true,
+        "enable_code_completion": true
+      },
+      "features": {
+        "semantic_analysis": true,
+        "type_inference": true,
+        "cross_module_analysis": true,
+        "kotlin_multiplatform": true,
+        "android_support": true
+      }
+    },
+    
+    "android": {
+      "type": "platform",
+      "enabled": true,
+      "settings": {
+        "sdk_path": "${ANDROID_SDK_ROOT}",
+        "min_sdk": 24,
+        "target_sdk": 34,
+        "enable_compose_analysis": true
+      },
+      "features": {
+        "compose_preview": true,
+        "resource_analysis": true,
+        "manifest_validation": true,
+        "layout_inspection": true
+      }
+    }
+  },
+  
+  "context_management": {
+    "strategy": "hybrid",
+    "long_context": {
+      "enabled": true,
+      "max_tokens": 128000,
+      "chunking_strategy": "semantic_aware",
+      "overlap_tokens": 512,
+      "priority_files": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "schema/contract.schema.json",
+        "build.gradle.kts",
+        "settings.gradle.kts"
+      ]
+    },
+    "short_context": {
+      "enabled": true,
+      "max_tokens": 4096,
+      "strategy": "most_relevant",
+      "include_definitions": true,
+      "include_usages": true
+    },
+    "caching": {
+      "enabled": true,
+      "cache_duration": 3600,
+      "cache_invalidation": "on_file_change",
+      "distributed_cache": false
+    }
+  },
+  
+  "features": {
+    "code_intelligence": {
+      "enabled": true,
+      "capabilities": [
+        "go_to_definition",
+        "find_references",
+        "find_implementations",
+        "type_hierarchy",
+        "call_hierarchy",
+        "symbol_search",
+        "workspace_symbols"
+      ]
+    },
+    
+    "refactoring": {
+      "enabled": true,
+      "capabilities": [
+        "rename",
+        "extract_method",
+        "extract_variable",
+        "inline_variable",
+        "move_file",
+        "change_signature",
+        "safe_delete"
+      ],
+      "preview_changes": true,
+      "create_pull_request": true
+    },
+    
+    "code_generation": {
+      "enabled": true,
+      "capabilities": [
+        "generate_tests",
+        "generate_documentation",
+        "generate_implementations",
+        "generate_builders",
+        "generate_equals_hashcode"
+      ],
+      "kotlin_specific": [
+        "generate_data_class",
+        "generate_sealed_class",
+        "generate_companion_object"
+      ]
+    },
+    
+    "analysis": {
+      "enabled": true,
+      "capabilities": [
+        "code_complexity",
+        "code_coverage",
+        "dependency_cycles",
+        "unused_code",
+        "security_vulnerabilities",
+        "performance_issues"
+      ],
+      "continuous": true,
+      "report_threshold": "warning"
+    }
+  },
+  
+  "optimization": {
+    "performance": {
+      "parallel_processing": true,
+      "max_workers": 4,
+      "async_operations": true,
+      "batch_requests": true,
+      "request_timeout": 30000
+    },
+    "memory": {
+      "max_cache_size": "2gb",
+      "cache_cleanup_interval": 3600,
+      "index_compression": true
+    },
+    "network": {
+      "connection_pooling": true,
+      "max_connections": 10,
+      "retry_strategy": "exponential_backoff",
+      "max_retries": 3
+    }
+  },
+  
+  "logging": {
+    "level": "info",
+    "log_file": ".github/copilot/mcp.log",
+    "log_rotation": "daily",
+    "max_log_size": "100mb",
+    "categories": {
+      "server": "info",
+      "context": "info",
+      "features": "info",
+      "performance": "debug"
+    }
+  },
+  
+  "security": {
+    "enable_sandbox": true,
+    "allowed_operations": [
+      "read_files",
+      "write_files",
+      "execute_build",
+      "run_tests",
+      "analyze_code"
+    ],
+    "blocked_operations": [
+      "delete_repository",
+      "modify_git_history",
+      "access_secrets"
+    ],
+    "rate_limiting": {
+      "enabled": true,
+      "requests_per_minute": 100,
+      "burst_size": 20
+    }
+  }
+}

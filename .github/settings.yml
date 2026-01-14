@@ -1,0 +1,192 @@
+# Repository Settings Konfiguration
+# Für die probot/settings GitHub App
+# https://github.com/probot/settings
+
+repository:
+  # Repository-Beschreibung
+  name: FishIT-Mapper
+  description: Android-first mapping app that records website navigation + resource requests and builds reusable Map Graphs
+  homepage: https://github.com/karlokarate/FishIT-Mapper
+  topics: android, kotlin, kotlin-multiplatform, mapping, webview, compose
+  
+  # Visibility (nicht änderbar durch Copilot)
+  # private: false
+  
+  # Features
+  has_issues: true
+  has_projects: true
+  has_wiki: true
+  has_downloads: true
+  
+  # Default Branch
+  default_branch: main
+  
+  # Allow Squash Merge
+  allow_squash_merge: true
+  squash_merge_commit_title: PR_TITLE
+  squash_merge_commit_message: COMMIT_MESSAGES
+  
+  # Allow Merge Commit
+  allow_merge_commit: true
+  merge_commit_title: PR_TITLE
+  merge_commit_message: PR_BODY
+  
+  # Allow Rebase Merge
+  allow_rebase_merge: true
+  
+  # Delete Branch on Merge
+  delete_branch_on_merge: true
+  
+  # Automatically delete head branches
+  allow_auto_merge: true
+  
+  # Enable automated security fixes
+  enable_automated_security_fixes: true
+  enable_vulnerability_alerts: true
+
+# Labels für Issues und PRs
+labels:
+  # Copilot-bezogene Labels
+  - name: "copilot:generated"
+    color: "0E8A16"
+    description: "Code wurde von GitHub Copilot generiert"
+    
+  - name: "copilot:reviewed"
+    color: "1D76DB"
+    description: "Von Copilot überprüft"
+    
+  # Standard Labels
+  - name: bug
+    color: d73a4a
+    description: "Etwas funktioniert nicht"
+    
+  - name: documentation
+    color: 0075ca
+    description: "Verbesserungen oder Ergänzungen der Dokumentation"
+    
+  - name: enhancement
+    color: a2eeef
+    description: "Neue Funktion oder Anfrage"
+    
+  - name: good first issue
+    color: 7057ff
+    description: "Gut für Ersteinsteiger"
+    
+  - name: help wanted
+    color: 008672
+    description: "Zusätzliche Aufmerksamkeit wird benötigt"
+    
+  - name: priority:high
+    color: d93f0b
+    description: "Hohe Priorität"
+    
+  - name: priority:low
+    color: e4e669
+    description: "Niedrige Priorität"
+    
+  - name: priority:medium
+    color: fbca04
+    description: "Mittlere Priorität"
+    
+  # Komponenten-Labels
+  - name: "component:android"
+    color: 3DDC84
+    description: "Android App Komponente"
+    
+  - name: "component:shared"
+    color: F18E33
+    description: "Shared/Common Kotlin Code"
+    
+  - name: "component:contract"
+    color: 7F52FF
+    description: "Contract Schema und Generierung"
+    
+  - name: "component:engine"
+    color: B60205
+    description: "Mapping Engine"
+    
+  # Typ-Labels
+  - name: "type:feature"
+    color: 84b6eb
+    description: "Neue Funktionalität"
+    
+  - name: "type:bugfix"
+    color: ee0701
+    description: "Bug-Fix"
+    
+  - name: "type:refactor"
+    color: fbca04
+    description: "Code-Refactoring"
+    
+  - name: "type:test"
+    color: c5def5
+    description: "Test-bezogen"
+    
+  - name: "type:docs"
+    color: 0e8a16
+    description: "Dokumentation"
+
+# Branch Protection Rules
+branches:
+  - name: main
+    protection:
+      # Required Reviews
+      required_pull_request_reviews:
+        required_approving_review_count: 0
+        dismiss_stale_reviews: true
+        require_code_owner_reviews: false
+        # Copilot darf Reviews bypassen für automatisierte PRs
+        bypass_pull_request_allowances:
+          apps: []
+          users: []
+          teams: []
+      
+      # Status Checks
+      required_status_checks:
+        strict: false
+        contexts: []
+      
+      # Restrictions
+      enforce_admins: false
+      
+      # Additional Settings
+      required_linear_history: false
+      allow_force_pushes: false
+      allow_deletions: false
+      
+      # Conversation Resolution
+      required_conversation_resolution: false
+      
+      # Lock Branch
+      lock_branch: false
+
+# Collaborators (falls benötigt)
+# collaborators:
+#   - username: github-actions[bot]
+#     permission: write
+
+# Autolinks für Issues und Commits
+autolinks:
+  - key_prefix: "FISHIT-"
+    url_template: "https://github.com/karlokarate/FishIT-Mapper/issues/<num>"
+    is_alphanumeric: false
+
+# Environments (für Deployments)
+environments:
+  - name: development
+    wait_timer: 0
+    reviewers: []
+    deployment_branch_policy:
+      protected_branches: false
+      custom_branch_policies: true
+      custom_branches:
+        - develop
+        - feature/*
+        - copilot/*
+  
+  - name: production
+    wait_timer: 0
+    reviewers: []
+    deployment_branch_policy:
+      protected_branches: true
+      custom_branch_policies: false
