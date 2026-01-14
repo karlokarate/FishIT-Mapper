@@ -1,0 +1,213 @@
+name: GitHub Actions Orchestrator
+
+# The orchestrator runs on multiple triggers to ensure timely state transitions
+on:
+  issues:
+    types: [labeled, reopened, edited]
+  pull_request_review:
+    types: [submitted]
+  pull_request:
+    types: [labeled, synchronize]
+  check_suite:
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Specific issue number to process'
+        required: false
+        type: number
+      pr_number:
+        description: 'Specific PR number to process'
+        required: false
+        type: number
+  schedule:
+    # Run every hour (adjust as needed for your repository's activity level)
+    - cron: '0 * * * *'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+  checks: read
+  statuses: read
+
+jobs:
+  orchestrate:
+    runs-on: ubuntu-latest
+    outputs:
+      committed: ${{ steps.commit.outputs.committed }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check Orchestrator Enabled
+        id: check_enabled
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Check for orchestrator:enabled label on any issue/PR
+            // or check for codex/ORCHESTRATOR_ENABLED file
+            const fs = require('fs');
+
+            // Check file flag first
+            if (fs.existsSync('codex/ORCHESTRATOR_ENABLED')) {
+              console.log('✅ Orchestrator enabled via file flag');
+              core.setOutput('enabled', 'true');
+              return true;
+            }
+
+            // Check for orchestrator:enabled label on any open issue or PR
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'orchestrator:enabled',
+              per_page: 1
+            });
+
+            if (issues.data.length > 0) {
+              console.log('✅ Orchestrator enabled via label on issue/PR');
+              core.setOutput('enabled', 'true');
+              return true;
+            }
+
+            console.log('ℹ️  Orchestrator not enabled');
+            core.setOutput('enabled', 'false');
+            return false;
+
+      - name: Skip if not enabled
+        if: steps.check_enabled.outputs.enabled != 'true'
+        run: |
+          echo "Orchestrator is not enabled. Skipping."
+          echo "To enable: add 'orchestrator:enabled' label to an issue or PR"
+          exit 0
+
+      - name: Determine Target
+        id: target
+        run: |
+          # Determine which issue or PR to process
+          if [ -n "${{ github.event.inputs.issue_number }}" ]; then
+            echo "target_type=issue" >> $GITHUB_OUTPUT
+            echo "target_number=${{ github.event.inputs.issue_number }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ github.event.inputs.pr_number }}" ]; then
+            echo "target_type=pr" >> $GITHUB_OUTPUT
+            echo "target_number=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "issues" ]; then
+            echo "target_type=issue" >> $GITHUB_OUTPUT
+            echo "target_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "pull_request" ] || [ "${{ github.event_name }}" == "pull_request_review" ]; then
+            echo "target_type=pr" >> $GITHUB_OUTPUT
+            echo "target_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            # Auto-discover mode
+            echo "target_type=auto" >> $GITHUB_OUTPUT
+            echo "target_number=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Orchestrator Transition
+        id: transition
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "🚀 Running orchestrator transition script..."
+
+          # Build command
+          CMD="node scripts/orchestrator/transition.mjs"
+
+          if [ "${{ steps.target.outputs.target_type }}" == "issue" ]; then
+            CMD="$CMD --issue ${{ steps.target.outputs.target_number }}"
+          elif [ "${{ steps.target.outputs.target_type }}" == "pr" ]; then
+            CMD="$CMD --pr ${{ steps.target.outputs.target_number }}"
+          fi
+
+          # Run transition script
+          $CMD
+
+          echo "✅ Transition script completed"
+
+      - name: Commit Checkpoint Updates
+        id: commit
+        run: |
+          git config --global user.name "GitHub Actions Orchestrator"
+          git config --global user.email "orchestrator@github.com"
+
+          # Check for changes to checkpoint files
+          if [[ -n $(git status -s codex/) ]]; then
+            git add codex/
+            git commit -m "🤖 Orchestrator: Update checkpoint [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+            echo "committed=true" >> $GITHUB_OUTPUT
+            echo "✅ Checkpoint files committed and pushed"
+          else
+            echo "committed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️  No checkpoint changes to commit"
+          fi
+
+      - name: Create Summary
+        if: always()
+        run: |
+          echo "## 🤖 Orchestrator Run Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Type:** ${{ steps.target.outputs.target_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Number:** ${{ steps.target.outputs.target_number || 'auto-discover' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Checkpoint Updated:** ${{ steps.commit.outputs.committed || 'false' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Latest Checkpoint:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          head -20 codex/CHECKPOINT.md >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  # Minimal build verification job
+  verify-build:
+    runs-on: ubuntu-latest
+    needs: orchestrate
+    if: needs.orchestrate.outputs.committed == 'true'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Generate Contract
+        run: |
+          echo "Generating FishIT contract..."
+          ./gradlew :shared:contract:generateFishitContract --no-daemon
+
+      - name: Compile Debug Kotlin
+        run: |
+          echo "Compiling Android app (debug)..."
+          ./gradlew :androidApp:compileDebugKotlin --no-daemon
+
+      - name: Report Build Status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const buildStatus = '${{ job.status }}' === 'success' ? 'success' : 'failure';
+            const description = buildStatus === 'success'
+              ? 'Build verification passed'
+              : 'Build verification failed';
+
+            console.log(`Build status: ${buildStatus}`);
+            console.log(`Description: ${description}`);
