@@ -7,6 +7,8 @@ Core design principle: the domain contract is **generated** via **KotlinPoet** f
 
 ## Quickstart
 
+### Option 1: Android Studio (Lokal)
+
 1. Open this project in Android Studio.
 2. Sync Gradle.
 3. Run the `androidApp` configuration.
@@ -16,6 +18,20 @@ The contract is generated automatically on build. You can also run:
 ```bash
 ./gradlew :shared:contract:generateFishitContract
 ```
+
+### Option 2: ChatGPT Codex Browser
+
+Für die Nutzung im ChatGPT Codex Browser:
+
+```bash
+# Vollständiges Setup (einmalig)
+./scripts/codex-setup.sh
+
+# Maintenance bei Änderungen
+./scripts/maintenance.sh
+```
+
+Siehe [scripts/README.md](scripts/README.md) für Details und Troubleshooting.
 
 ## Modules
 
