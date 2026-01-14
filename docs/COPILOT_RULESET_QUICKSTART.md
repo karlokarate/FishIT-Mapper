@@ -1,23 +1,17 @@
-# Copilot Ruleset Quick Start Guide
+# Copilot Workflow Automation Quick Start Guide
 
 ## 🚀 In 5 Minuten zum automatisierten Workflow
 
-### Schritt 1: Ruleset importieren (einmalig)
+### Schritt 1: Workflow ist bereits eingerichtet ✅
 
-**Option A: GitHub Web UI**
-```
-1. Gehe zu: Settings → Copilot → Rulesets
-2. Klicke: "Import ruleset"
-3. Datei auswählen: .github/copilot/ruleset.json
-4. Klicke: "Import"
-```
+Die Automation ist bereits konfiguriert:
+- ✅ `.github/copilot/workflow-automation.json` - Dokumentiert die Workflow-Logik
+- ✅ `.github/workflows/orchestrator.yml` - GitHub Actions Orchestrator
+- ✅ `.github/copilot/agents.json` - Copilot Agents Konfiguration
 
-**Option B: GitHub CLI**
-```bash
-gh api repos/karlokarate/FishIT-Mapper/copilot/rulesets \
-  -X POST \
-  --input .github/copilot/ruleset.json
-```
+**Keine Installation notwendig!** Der Workflow läuft automatisch sobald du ein Issue mit den richtigen Labels erstellst.
+
+**HINWEIS:** GitHub Repository Rulesets (für Branch Protection) sind ein separates Feature und werden über Settings > Branches > Rulesets konfiguriert. Die `workflow-automation.json` ist eine Dokumentation, kein GitHub Ruleset.
 
 ### Schritt 2: Issue erstellen
 

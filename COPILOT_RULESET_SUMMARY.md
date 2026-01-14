@@ -7,10 +7,11 @@ Das GitHub Copilot Ruleset wurde erfolgreich implementiert und ermöglicht einen
 ## 📦 Implementierte Dateien
 
 ### Hauptdateien
-1. **`.github/copilot/ruleset.json`** (21.5 KB)
-   - 13 automatisierte Regeln
+1. **`.github/copilot/workflow-automation.json`** (21.5 KB)
+   - Dokumentation der 13 automatisierten Regeln
    - Vollständiger Workflow-Lifecycle
    - Integration mit bestehendem Orchestrator
+   - **HINWEIS:** Dies ist eine Dokumentationsdatei, kein offizielles GitHub Ruleset. GitHub Repository Rulesets werden über Settings > Branches > Rulesets konfiguriert.
 
 ### Dokumentation
 2. **`docs/COPILOT_RULESET.md`** (14 KB)
@@ -208,9 +209,9 @@ Dokumentation aktualisiert
 
 ### Quick Start (5 Minuten)
 ```bash
-# 1. Ruleset importieren
-gh api repos/karlokarate/FishIT-Mapper/copilot/rulesets \
-  -X POST --input .github/copilot/ruleset.json
+# 1. Die Workflow-Konfiguration ist bereits vorhanden
+# Siehe: .github/copilot/workflow-automation.json (Dokumentation)
+# Der Orchestrator läuft über .github/workflows/orchestrator.yml
 
 # 2. Issue erstellen
 gh issue create \
@@ -238,13 +239,13 @@ gh run list --workflow=orchestrator.yml
 
 ### JSON Syntax
 ```bash
-✅ ruleset.json: Valid JSON
+✅ workflow-automation.json: Valid JSON
 ✅ agents.json: Valid JSON
 ```
 
 ### Datei-Struktur
 ```
-✅ .github/copilot/ruleset.json
+✅ .github/copilot/workflow-automation.json
 ✅ .github/copilot/agents.json
 ✅ .github/ISSUE_TEMPLATE/automated-workflow.md
 ✅ .github/workflows/orchestrator.yml

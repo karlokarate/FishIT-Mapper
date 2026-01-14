@@ -3,7 +3,10 @@
 # Copilot Ruleset Verification Script
 # Prüft ob das Ruleset korrekt konfiguriert ist
 
-set -e
+# Don't exit on errors - we want to show all results
+# This allows the script to report all validation issues rather than stopping at first failure,
+# giving users a complete picture of what needs to be fixed.
+set +e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -86,8 +89,8 @@ warn_if_missing() {
 # 1. Check Ruleset File
 echo "1. Ruleset Datei"
 echo "----------------"
-check_file ".github/copilot/ruleset.json" "Ruleset"
-check_json_syntax ".github/copilot/ruleset.json" "Ruleset JSON Syntax"
+check_file ".github/copilot/workflow-automation.json" "Workflow Automation Config"
+check_json_syntax ".github/copilot/workflow-automation.json" "Workflow Automation JSON Syntax"
 echo ""
 
 # 2. Check Agents Configuration
@@ -126,7 +129,7 @@ echo ""
 echo "6. Ruleset Struktur"
 echo "-------------------"
 
-if [ -f ".github/copilot/ruleset.json" ]; then
+if [ -f ".github/copilot/workflow-automation.json" ]; then
     # Check for required rules
     REQUIRED_RULES=(
         "auto-issue-tasklist-generation"
@@ -138,7 +141,7 @@ if [ -f ".github/copilot/ruleset.json" ]; then
     )
     
     for rule in "${REQUIRED_RULES[@]}"; do
-        if grep -q "\"id\": \"$rule\"" ".github/copilot/ruleset.json"; then
+        if grep -q "\"id\": \"$rule\"" ".github/copilot/workflow-automation.json"; then
             echo -e "${GREEN}✅${NC} Regel gefunden: $rule"
             ((SUCCESS++))
         else
@@ -147,7 +150,7 @@ if [ -f ".github/copilot/ruleset.json" ]; then
         fi
     done
 else
-    echo -e "${RED}❌${NC} Ruleset Datei nicht gefunden"
+    echo -e "${RED}❌${NC} Workflow Automation Datei nicht gefunden"
     ((ERRORS++))
 fi
 echo ""
@@ -156,7 +159,7 @@ echo ""
 echo "7. Ruleset Einstellungen"
 echo "------------------------"
 
-if [ -f ".github/copilot/ruleset.json" ]; then
+if [ -f ".github/copilot/workflow-automation.json" ]; then
     REQUIRED_SETTINGS=(
         "max_iterations"
         "max_check_failures"
@@ -165,7 +168,7 @@ if [ -f ".github/copilot/ruleset.json" ]; then
     )
     
     for setting in "${REQUIRED_SETTINGS[@]}"; do
-        if grep -q "\"$setting\"" ".github/copilot/ruleset.json"; then
+        if grep -q "\"$setting\"" ".github/copilot/workflow-automation.json"; then
             echo -e "${GREEN}✅${NC} Einstellung gefunden: $setting"
             ((SUCCESS++))
         else
@@ -248,8 +251,8 @@ if [ $ERRORS -eq 0 ]; then
         echo -e "${GREEN}🎉 Perfekt! Ruleset ist vollständig konfiguriert!${NC}"
         echo ""
         echo "Nächste Schritte:"
-        echo "1. Ruleset in GitHub importieren:"
-        echo "   gh api repos/karlokarate/FishIT-Mapper/copilot/rulesets -X POST --input .github/copilot/ruleset.json"
+        echo "1. Die Datei .github/copilot/workflow-automation.json dokumentiert die gewünschte Automation"
+        echo "   HINWEIS: GitHub Repository Rulesets werden über Settings > Branches > Rulesets konfiguriert, nicht über JSON-Dateien"
         echo ""
         echo "2. Test-Issue erstellen:"
         echo "   gh issue create --title '[TEST] Copilot Workflow' --label 'orchestrator:enabled,orchestrator:run'"

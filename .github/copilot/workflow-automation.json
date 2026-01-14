@@ -1,6 +1,7 @@
 {
-  "$schema": "https://github.com/github/copilot-rulesets/blob/main/schema/ruleset.schema.json",
+  "_comment": "Dies ist KEINE offizielle GitHub Ruleset-Konfiguration, sondern eine Dokumentation der gewünschten Workflow-Automation. GitHub Repository Rulesets werden über Settings > Branches > Rulesets konfiguriert, nicht über JSON-Dateien.",
   "version": "1.0",
+  "type": "workflow-automation-config",
   "name": "FishIT-Mapper Automated Issue Workflow",
   "description": "Automatisierte Issue-Bearbeitung mit Copilot: Issue → Tasklist → Automatische Ausführung → Review → Fixes → Merge → Follow-ups",
   

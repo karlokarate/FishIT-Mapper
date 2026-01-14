@@ -42,12 +42,29 @@ Siehe [scripts/README.md](scripts/README.md) für Details und Troubleshooting.
 
 ## Automated Issue Workflow (Copilot Ruleset + Orchestrator)
 
-This repository includes a **fully automated workflow** for issue management using GitHub Copilot Rulesets and GitHub Actions Orchestrator.
+This repository includes:
+- **GitHub Repository Ruleset** (`.github/copilot-ruleset.json`) - Importable ruleset for branch protection and Copilot code reviews
+- **Workflow Automation** - Fully automated issue management via GitHub Actions Orchestrator
 
-### 🚀 Quick Start (5 Minuten)
+### 🔒 GitHub Ruleset (Branch Protection + Copilot Reviews)
 
-1. **Import Ruleset** (einmalig):
-   - Settings → Copilot → Import `.github/copilot/ruleset.json`
+**Import the ruleset** (einmalig):
+```bash
+# Via GitHub CLI
+gh api repos/karlokarate/FishIT-Mapper/rulesets \
+  -X POST \
+  --input .github/copilot-ruleset.json
+```
+
+Or via UI: **Settings → Rules → Rulesets → Import a ruleset** → wähle `.github/copilot-ruleset.json`
+
+Dokumentation: [`docs/COPILOT_RULESET_IMPORT.md`](docs/COPILOT_RULESET_IMPORT.md)
+
+### 🚀 Workflow Automation (5 Minuten)
+
+1. **Workflow-Konfiguration** ist bereits vorhanden:
+   - `.github/copilot/workflow-automation.json` dokumentiert die Automation
+   - Orchestrator läuft über GitHub Actions (`.github/workflows/orchestrator.yml`)
 
 2. **Create an issue** with clear requirements
 
