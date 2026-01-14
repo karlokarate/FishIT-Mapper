@@ -40,36 +40,44 @@ Siehe [scripts/README.md](scripts/README.md) für Details und Troubleshooting.
 - `:shared:engine` — in-memory mapping engine + bundle builder helpers
 - `:androidApp` — Compose UI + WebView recorder + local file storage + share/export
 
-## GitHub Actions Orchestrator
+## Automated Issue Workflow (Copilot Ruleset + Orchestrator)
 
-This repository includes a **GitHub Actions Orchestrator** for automated, time-safe issue and PR management.
+This repository includes a **fully automated workflow** for issue management using GitHub Copilot Rulesets and GitHub Actions Orchestrator.
 
-### Quick Start
+### 🚀 Quick Start (5 Minuten)
 
-1. **Create an issue** with tasks listed in the body
-2. **Add labels**: `orchestrator:enabled` and `orchestrator:run`
-3. The orchestrator will automatically:
-   - Create a working branch
-   - Guide agents through each task
-   - Request reviews
-   - Handle fix iterations
-   - Merge when approved
-   - Create follow-up issues for remaining tasks
+1. **Import Ruleset** (einmalig):
+   - Settings → Copilot → Import `.github/copilot/ruleset.json`
+
+2. **Create an issue** with clear requirements
+
+3. **Add labels**: `orchestrator:enabled` and `orchestrator:run`
+
+4. **Sit back** ☕ — Der Workflow läuft vollautomatisch:
+   - ✅ Tasklist wird automatisch generiert
+   - ✅ Erster Task startet automatisch
+   - ✅ PR wird erstellt und reviewed
+   - ✅ Review Findings werden automatisch behoben (max 5x)
+   - ✅ Automatischer Merge bei Approval
+   - ✅ Nächster Task startet automatisch
+   - ✅ Issue wird geschlossen wenn alle Tasks fertig
+   - ✅ Dokumentation wird automatisch aktualisiert
 
 ### Features
 
+✅ **Fully Automated**: Vom Issue bis zum Merge ohne manuelle Eingriffe  
+✅ **AI-Powered**: Copilot Agents für Implementierung, Review und Fixes  
 ✅ **Time-safe**: Splits work into batches, persists progress  
 ✅ **GitHub-native**: No external services required  
-✅ **State machine**: Deterministic transitions (Queued → Running → Needs-review → Passed → Merged)  
+✅ **State machine**: Deterministic transitions with automatic recovery  
 ✅ **Free**: Runs on GitHub Actions free tier  
 
 ### Documentation
 
-See [docs/ORCHESTRATOR.md](docs/ORCHESTRATOR.md) for:
-- Complete state machine documentation
-- Label conventions
-- Troubleshooting guide
-- Integration with existing workflows
+- **Quick Start**: [docs/COPILOT_RULESET_QUICKSTART.md](docs/COPILOT_RULESET_QUICKSTART.md) — In 5 Minuten startklar
+- **Ruleset Details**: [docs/COPILOT_RULESET.md](docs/COPILOT_RULESET.md) — Vollständige Dokumentation
+- **Orchestrator**: [docs/ORCHESTRATOR.md](docs/ORCHESTRATOR.md) — GitHub Actions Integration
+- **Agent Setup**: [AGENT_SETUP.md](AGENT_SETUP.md) — Copilot Agent Konfiguration
 
 ### Manual Trigger
 
