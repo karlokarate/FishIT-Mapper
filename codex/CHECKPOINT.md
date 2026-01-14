@@ -1,17 +1,17 @@
 # Orchestrator Checkpoint
 
-**Status:** Idle - Kein aktiver Task
-**Issue:** N/A
+**Status:** Running
+**Issue:** #9
 **PR:** N/A
-**Branch:** N/A
-**Current Task:** N/A
-**Iteration:** 0/5
-**Last Check:** Never
+**Branch:** orchestrator/issue-9-vervollst-ndigung-offener-features
+**Current Task:** Task 1 - Kurzbeschreibung
+**Iteration:** 1/5
+**Last Check:** 2026-01-14T12:56:10.376Z
 **Last Check Status:** N/A
 **Previous Check Failures:** 0
 
 ## History
-_No history yet. The orchestrator will update this file when work begins._
+- 2026-01-14T12:56:10.376Z - Transition: QUEUED → RUNNING
 
 ---
 
@@ -20,16 +20,3 @@ _No history yet. The orchestrator will update this file when work begins._
 Diese Datei wird vom GitHub Actions Orchestrator automatisch verwaltet.
 
 **Nicht manuell bearbeiten**, außer zum Zurücksetzen des Zustands.
-
-Bei aktiver Arbeit enthält diese Datei:
-- Aktuelles Issue und PR
-- Welcher Task gerade bearbeitet wird
-- Anzahl der Fix-Iterationen
-- Status der letzten Checks
-- Vollständige History aller Transitionen
-
-Der Orchestrator verwendet diese Datei um:
-1. Nach einem Workflow-Timeout fortzusetzen
-2. Iterations-Limits zu überwachen (max. 5)
-3. Check-Failure-Patterns zu erkennen
-4. Den aktuellen Zustand zu bestimmen
