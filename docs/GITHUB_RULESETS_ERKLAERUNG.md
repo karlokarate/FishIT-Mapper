@@ -92,8 +92,8 @@ gh api repos/OWNER/REPO/rulesets \
 
 ## Zusammenfassung
 
-| Feature | GitHub Rulesets | Workflow Automation (dieses Repo) |
-|---------|----------------|-----------------------------------|
+| Feature | GitHub Repository Rulesets | Workflow Automation (dieses Repo) |
+|---------|----------------------------|-----------------------------------|
 | **Zweck** | Branch/Tag Protection | Issue-zu-PR Automation |
 | **Konfiguration** | Settings UI oder API | `.github/copilot/workflow-automation.json` (Doku) |
 | **Implementierung** | GitHub intern | GitHub Actions (`.github/workflows/orchestrator.yml`) |

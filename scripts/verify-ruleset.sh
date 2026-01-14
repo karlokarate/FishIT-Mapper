@@ -4,6 +4,8 @@
 # Prüft ob das Ruleset korrekt konfiguriert ist
 
 # Don't exit on errors - we want to show all results
+# This allows the script to report all validation issues rather than stopping at first failure,
+# giving users a complete picture of what needs to be fixed.
 set +e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
