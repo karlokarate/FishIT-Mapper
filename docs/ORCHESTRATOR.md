@@ -277,6 +277,40 @@ Verwaltet die Task-Warteschlange:
 - [ ] Add integration tests
 ```
 
+## Vollautomatisierung (NEU!)
+
+### Automatische Erkennung von Agent-Completion
+
+Der Orchestrator erkennt automatisch, wenn der Copilot Agent seine Arbeit beendet hat:
+
+1. **Agent-Commit Detection**: Commits von `copilot[bot]`, `github-actions[bot]` oder mit 🤖 Emoji
+2. **Check Verification**: Wartet bis alle CI-Checks erfolgreich sind
+3. **Auto-Ready**: Setzt Draft PRs automatisch auf "Ready for Review"
+
+### Automatischer Fix bei Review-Findings
+
+Wenn ein Reviewer "Changes Requested" gibt:
+
+1. **Findings Sammeln**: Alle Review-Kommentare werden gesammelt
+2. **Fix-Command Posten**: `@copilot fix` wird automatisch gepostet
+3. **Agent arbeitet**: Copilot Agent behebt die Findings
+4. **Re-Review**: Nach Fixes wird automatisch erneut Review angefordert
+
+### Workflow-Dateien
+
+- **`orchestrator-complete.yml`** - Hauptworkflow für vollständige Automatisierung
+- **`copilot-agent-handler.yml`** - Reagiert auf @copilot Befehle
+- **`orchestrator.yml`** - Legacy-Workflow (weiterhin funktional)
+
+### Trigger-Events
+
+Der Complete Orchestrator wird ausgelöst bei:
+- **Push auf orchestrator/**, **copilot/**, **feature/** Branches
+- **PR Events**: opened, synchronize, ready_for_review
+- **Review Events**: submitted
+- **Check Suite**: completed
+- **Schedule**: Alle 5 Minuten für verpasste Events
+
 ## Nutzung
 
 ### 1. Orchestrator aktivieren
@@ -293,23 +327,49 @@ Füge Labels hinzu:
 - `orchestrator:enabled`
 - `orchestrator:run`
 
-Der Orchestrator startet automatisch beim nächsten Trigger (maximal 30 Minuten).
+Der Orchestrator startet automatisch beim nächsten Trigger.
 
 ### 2. Manueller Trigger
 
 Über GitHub Actions UI:
-1. Gehe zu Actions → Orchestrator
+1. Gehe zu Actions → Complete Orchestrator
 2. Klicke "Run workflow"
-3. Workflow verarbeitet aktive Issues
+3. Optionale Aktionen:
+   - `auto-detect` - Automatische Erkennung
+   - `mark-ready` - PR auf Ready setzen (benötigt PR-Nummer)
+   - `trigger-fix` - Fix-Task starten (benötigt PR-Nummer)
+   - `merge` - PR mergen
 
-### 3. Nach Timeout fortsetzen
+### 3. Transition Script direkt nutzen
+
+```bash
+# Auto-Transition
+node scripts/orchestrator/transition.mjs
+
+# Spezifisches Issue
+node scripts/orchestrator/transition.mjs --issue 42
+
+# Spezifischer PR
+node scripts/orchestrator/transition.mjs --pr 43
+
+# PR als Ready markieren
+node scripts/orchestrator/transition.mjs --pr 43 --action mark-ready
+
+# Fix triggern
+node scripts/orchestrator/transition.mjs --pr 43 --action trigger-fix
+
+# Alle Draft PRs prüfen
+node scripts/orchestrator/transition.mjs --action check-draft-prs
+```
+
+### 4. Nach Timeout fortsetzen
 
 Der Orchestrator ist **time-safe**:
 - Jede Transition wird in `codex/CHECKPOINT.md` persistiert
 - Bei Workflow-Timeouts oder -Fehlern läuft der nächste Run einfach weiter
 - Keine Duplikate durch idempotente Operationen
 
-### 4. Blockierung auflösen
+### 5. Blockierung auflösen
 
 Wenn `state:blocked`:
 1. Prüfe Issue-Kommentare für Grund
@@ -323,11 +383,13 @@ Wenn `state:blocked`:
 ### Reused Workflows
 Der Orchestrator **ergänzt** bestehende Workflows, ersetzt sie nicht:
 
-- `copilot-agent.yml` - Wird für Agent-Instruktionen verwendet
+- `copilot-agent-handler.yml` - **NEU:** Reagiert auf @copilot Befehle
+- `orchestrator-complete.yml` - **NEU:** Vollautomatischer Workflow
+- `copilot-agent.yml` - Legacy Agent-Unterstützung
 - `codex-agent.yml` - Alternative Agent-Unterstützung
 - `auto-review-request.yml` - Review-Anfragen
 - `prepare-fix-task.yml` - Fix-Task-Vorbereitung
-- `agent-pr-ready.yml` - PR-Status-Updates
+- `agent-pr-ready.yml` - Legacy PR-Status-Updates
 
 ### Build Verification
 Der Orchestrator führt minimale Builds durch:
@@ -371,6 +433,20 @@ Orchestrator-Workflow benötigt:
 - Prüfe Check-Status
 - Manuell PR erstellen falls nötig
 
+### Draft PR wird nicht auf Ready gesetzt
+**Ursache:** Agent-Commits nicht erkannt oder Checks nicht erfolgreich
+**Lösung:**
+- Prüfe ob Commits von Agent stammen (copilot[bot], github-actions[bot])
+- Prüfe ob alle CI-Checks grün sind
+- Manuell triggern: Actions → Complete Orchestrator → mark-ready
+
+### Fix wird nicht automatisch gestartet
+**Ursache:** Keine Review-Findings gefunden
+**Lösung:**
+- Stelle sicher, dass Review "Changes Requested" ist
+- Prüfe ob Review-Kommentare existieren
+- Manuell triggern: Actions → Complete Orchestrator → trigger-fix
+
 ### Zu viele Iterationen
 **Ursache:** Review-Cycle > 5 Iterationen
 **Lösung:**
@@ -393,22 +469,23 @@ Orchestrator-Workflow benötigt:
 ✅ **Idempotent**: Mehrfaches Ausführen ist sicher
 ✅ **Deterministic**: Gleiches Input → gleiches Output
 ✅ **Kostenlos**: Nur GitHub Actions (Free Tier)
+✅ **Vollautomatisch**: Draft PR → Ready → Review → Fix → Merge
 
 ### Limits
 ⚠️ Max. 5 Fix-Iterationen pro Task (konfigurierbar in `transition.mjs`: `MAX_ITERATIONS`)
 ⚠️ Max. 2 Check-Failures mit gleicher Root Cause (konfigurierbar in `transition.mjs`: `MAX_CHECK_FAILURES`)
-⚠️ Workflow läuft stündlich (Schedule - änderbar in Zeile 24 von `.github/workflows/orchestrator.yml`)
+⚠️ Workflow läuft alle 5 Minuten (Schedule - änderbar in `orchestrator-complete.yml`)
 ⚠️ Keine parallele Verarbeitung mehrerer Issues (sequentiell)
 
 ## Workflow-Trigger
 
-Der Orchestrator wird getriggert bei:
-- **Issues:** labeled, reopened, edited
+Der Complete Orchestrator wird getriggert bei:
+- **Push:** orchestrator/**, copilot/**, feature/** Branches
+- **Pull Requests:** opened, synchronize, ready_for_review, reopened
 - **Pull Request Reviews:** submitted
-- **Pull Requests:** labeled, synchronize
 - **Check Suite:** completed
-- **Schedule:** Alle 30 Minuten
-- **Workflow Dispatch:** Manuell
+- **Schedule:** Alle 5 Minuten
+- **Workflow Dispatch:** Manuell mit Optionen
 
 ## Best Practices
 
@@ -417,22 +494,28 @@ Der Orchestrator wird getriggert bei:
 3. **Review zeitnah**: Schnelle Reviews vermeiden lange Wartezeiten
 4. **Monitor Checkpoints**: Prüfe `codex/CHECKPOINT.md` bei Problemen
 5. **Nicht force-pushen**: Branch-History wird für Rollbacks benötigt
+6. **orchestrator:enabled Label**: Immer setzen für automatische Workflows
 
-## Beispiel-Workflow
+## Beispiel-Workflow (Vollautomatisch)
 
 ```
 Tag 1, 09:00 - Issue #42 erstellt mit Tasks, Labels gesetzt
-Tag 1, 09:30 - Orchestrator: QUEUED → RUNNING
-Tag 1, 10:00 - Agent erstellt PR
-Tag 1, 10:30 - Orchestrator: RUNNING → NEEDS-REVIEW
+Tag 1, 09:05 - Orchestrator: QUEUED → RUNNING, Task-Instruktion gepostet
+Tag 1, 09:30 - Copilot Agent erstellt Draft PR mit Commits
+Tag 1, 09:35 - Complete Orchestrator: Agent-Commits erkannt, Checks laufen
+Tag 1, 09:45 - Checks erfolgreich → PR automatisch auf "Ready for Review" gesetzt
+Tag 1, 09:45 - Orchestrator: RUNNING → NEEDS-REVIEW
 Tag 1, 14:00 - Review submitted: changes_requested
-Tag 1, 14:30 - Orchestrator: NEEDS-REVIEW → FIXING
-Tag 1, 15:00 - Agent pusht Fixes
-Tag 1, 15:30 - Orchestrator: FIXING → NEEDS-REVIEW (Iteration 2)
+Tag 1, 14:01 - Complete Orchestrator: Findings gesammelt, @copilot fix gepostet
+Tag 1, 14:01 - Orchestrator: NEEDS-REVIEW → FIXING
+Tag 1, 14:30 - Copilot Agent pusht Fixes
+Tag 1, 14:35 - Complete Orchestrator: Fixes erkannt, Checks laufen
+Tag 1, 14:45 - Checks erfolgreich → Orchestrator: FIXING → NEEDS-REVIEW (Iteration 2)
 Tag 1, 16:00 - Review submitted: approved
-Tag 1, 16:30 - Orchestrator: NEEDS-REVIEW → PASSED
-Tag 1, 17:00 - Orchestrator: PASSED → MERGED
-Tag 1, 17:00 - Follow-up Issue #43 erstellt, bereit für nächsten Cycle
+Tag 1, 16:01 - Complete Orchestrator: Approval erkannt
+Tag 1, 16:01 - Orchestrator: NEEDS-REVIEW → PASSED
+Tag 1, 16:02 - Orchestrator: PASSED → MERGED (Squash Merge)
+Tag 1, 16:02 - Issue #42 geschlossen, Follow-up Issue #43 erstellt
 ```
 
-Total: ~8 Stunden für einen kompletten Cycle mit Review-Iteration.
+**Total: ~7 Stunden mit Review-Iteration, vollständig automatisch!**

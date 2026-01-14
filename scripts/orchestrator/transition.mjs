@@ -1,15 +1,22 @@
 #!/usr/bin/env node
 
 /**
- * GitHub Actions Orchestrator - State Transition Script
+ * GitHub Actions Orchestrator - State Transition Script (Enhanced)
  * 
  * Manages state transitions for the orchestrator state machine.
  * Designed to be idempotent and safe to re-run.
+ * 
+ * NEW FEATURES:
+ * - Auto-detection of Copilot agent completion
+ * - Draft PR → Ready for Review transition
+ * - Auto-trigger fix after review
+ * - Enhanced logging and state tracking
  * 
  * Usage:
  *   node transition.mjs --issue <number>
  *   node transition.mjs --pr <number>
  *   node transition.mjs --repo <owner/name>
+ *   node transition.mjs --action <mark-ready|trigger-fix|auto>
  * 
  * Environment:
  *   GITHUB_TOKEN - Required for API access
@@ -47,6 +54,9 @@ if (!GITHUB_REPOSITORY) {
 
 const [owner, repo] = GITHUB_REPOSITORY.split('/');
 
+// Action parameter for specific actions
+const ACTION = options.action || 'auto';
+
 // State labels
 const STATE_LABELS = {
   QUEUED: 'state:queued',
@@ -61,6 +71,9 @@ const STATE_LABELS = {
 
 const ORCHESTRATOR_ENABLED = 'orchestrator:enabled';
 const ORCHESTRATOR_RUN = 'orchestrator:run';
+
+// Agent author identifiers
+const AGENT_AUTHORS = ['copilot[bot]', 'github-actions[bot]', 'copilot', 'Copilot'];
 
 // GitHub API helper
 async function githubAPI(endpoint, method = 'GET', body = null) {
@@ -303,6 +316,113 @@ async function areChecksPassing(sha) {
     (check.conclusion === 'success' || check.conclusion === 'neutral')
   );
 }
+
+// ============================================================================
+// NEW: Agent Detection Functions
+// ============================================================================
+
+// Check if recent commits are from an agent (Copilot, GitHub Actions)
+async function detectAgentCommits(prNumber) {
+  const commits = await githubAPI(`/repos/${owner}/${repo}/pulls/${prNumber}/commits`);
+  
+  if (!commits || commits.length === 0) {
+    return { hasAgentCommits: false, agentCommitCount: 0, latestAgent: null };
+  }
+  
+  const agentCommits = commits.filter(c => {
+    const author = c.author?.login || c.commit?.author?.name || '';
+    return AGENT_AUTHORS.some(a => author.toLowerCase().includes(a.toLowerCase())) ||
+           c.commit?.message?.includes('🤖') ||
+           c.commit?.message?.includes('[copilot]') ||
+           c.commit?.message?.includes('[agent]');
+  });
+  
+  return {
+    hasAgentCommits: agentCommits.length > 0,
+    agentCommitCount: agentCommits.length,
+    latestAgent: agentCommits.length > 0 ? agentCommits[agentCommits.length - 1] : null,
+    totalCommits: commits.length
+  };
+}
+
+// Check if a PR is a draft
+async function isPRDraft(prNumber) {
+  const pr = await githubAPI(`/repos/${owner}/${repo}/pulls/${prNumber}`);
+  return pr ? pr.draft : null;
+}
+
+// Mark PR as ready for review (remove draft status)
+async function markPRReady(prNumber) {
+  console.log(`📋 Marking PR #${prNumber} as ready for review...`);
+  
+  // Use GraphQL API to update draft status (REST API doesn't support this directly)
+  const query = `
+    mutation($pullRequestId: ID!) {
+      markPullRequestReadyForReview(input: {pullRequestId: $pullRequestId}) {
+        pullRequest {
+          isDraft
+        }
+      }
+    }
+  `;
+  
+  // Get PR node ID first
+  const pr = await githubAPI(`/repos/${owner}/${repo}/pulls/${prNumber}`);
+  if (!pr) {
+    console.log('❌ PR not found');
+    return false;
+  }
+  
+  // Use REST API to update (simpler approach)
+  const result = await githubAPI(`/repos/${owner}/${repo}/pulls/${prNumber}`, 'PATCH', {
+    draft: false
+  });
+  
+  if (result) {
+    console.log('✅ PR marked as ready for review');
+    return true;
+  }
+  
+  return false;
+}
+
+// Trigger fix action by posting @copilot fix comment
+async function triggerAgentFix(prNumber, findings) {
+  console.log(`🔧 Triggering agent fix for PR #${prNumber}...`);
+  
+  const findingsList = findings.map((f, i) => `${i + 1}. ${f}`).join('\n');
+  
+  const comment = `## 🔧 Orchestrator: Automatischer Fix-Task
+
+Der Orchestrator hat die Review-Findings gesammelt und startet den automatischen Fix-Prozess.
+
+### 📋 Review-Findings:
+
+${findingsList}
+
+---
+
+@copilot fix
+
+Bitte behebe die oben genannten Review-Findings:
+${findings.join('\n')}
+
+Wichtig:
+- Behebe NUR die genannten Issues
+- Halte Änderungen minimal
+- Committe und pushe die Änderungen
+
+---
+*🤖 Orchestrator - Auto-Fix Trigger*`;
+  
+  await postComment(prNumber, comment);
+  console.log('✅ Fix trigger posted');
+  return true;
+}
+
+// ============================================================================
+// END: Agent Detection Functions
+// ============================================================================
 
 // Get latest review
 async function getLatestReview(prNumber) {
@@ -750,6 +870,108 @@ async function performTransition() {
     }
   }
   
+  // ============================================================================
+  // NEW: Handle specific actions
+  // ============================================================================
+  
+  if (ACTION === 'mark-ready' && options.pr) {
+    console.log(`\n🎯 Action: Mark PR #${options.pr} as Ready for Review`);
+    const prNumber = parseInt(options.pr);
+    
+    const isDraft = await isPRDraft(prNumber);
+    if (isDraft) {
+      const agentInfo = await detectAgentCommits(prNumber);
+      console.log(`   Agent commits: ${agentInfo.agentCommitCount}/${agentInfo.totalCommits}`);
+      
+      const pr = await githubAPI(`/repos/${owner}/${repo}/pulls/${prNumber}`);
+      const checksPassing = await areChecksPassing(pr.head.sha);
+      
+      if (agentInfo.hasAgentCommits && checksPassing) {
+        await markPRReady(prNumber);
+        await updateLabels(prNumber, 'RUNNING', 'NEEDS_REVIEW');
+        await postComment(prNumber, `## ✅ Agent-Arbeit abgeschlossen!
+
+Der Copilot Agent hat seine Arbeit beendet und der PR ist jetzt **bereit für Review**.
+
+### 📊 Status:
+- ✅ ${agentInfo.agentCommitCount} Agent-Commits erkannt
+- ✅ Alle Checks erfolgreich
+- ✅ PR auf "Ready for Review" gesetzt
+
+---
+*🤖 Orchestrator - Auto Ready*`);
+        console.log('✅ PR marked as ready');
+      } else {
+        console.log('⚠️ Conditions not met for marking ready');
+        console.log(`   - Agent commits: ${agentInfo.hasAgentCommits}`);
+        console.log(`   - Checks passing: ${checksPassing}`);
+      }
+    } else if (isDraft === false) {
+      console.log('ℹ️ PR is already ready for review');
+    } else {
+      console.log('❌ PR not found');
+    }
+    return;
+  }
+  
+  if (ACTION === 'trigger-fix' && options.pr) {
+    console.log(`\n🎯 Action: Trigger Fix for PR #${options.pr}`);
+    const prNumber = parseInt(options.pr);
+    
+    const findings = await collectReviewComments(prNumber);
+    if (findings.length > 0) {
+      await triggerAgentFix(prNumber, findings);
+      await updateLabels(prNumber, 'NEEDS_REVIEW', 'FIXING');
+      console.log('✅ Fix triggered');
+    } else {
+      console.log('⚠️ No review findings to fix');
+    }
+    return;
+  }
+  
+  if (ACTION === 'check-draft-prs') {
+    console.log('\n🔍 Checking all draft PRs for agent completion...');
+    
+    const prs = await githubAPI(`/repos/${owner}/${repo}/pulls?state=open`);
+    const draftPrs = prs.filter(pr => pr.draft);
+    
+    console.log(`   Found ${draftPrs.length} draft PRs`);
+    
+    for (const pr of draftPrs) {
+      const hasOrchestrator = pr.labels.some(l => l.name === ORCHESTRATOR_ENABLED);
+      if (!hasOrchestrator) continue;
+      
+      console.log(`\n   Checking PR #${pr.number}: ${pr.title}`);
+      
+      const agentInfo = await detectAgentCommits(pr.number);
+      const checksPassing = await areChecksPassing(pr.head.sha);
+      
+      console.log(`     Agent commits: ${agentInfo.agentCommitCount}`);
+      console.log(`     Checks passing: ${checksPassing}`);
+      
+      if (agentInfo.hasAgentCommits && checksPassing) {
+        console.log('     → Marking as ready!');
+        await markPRReady(pr.number);
+        await updateLabels(pr.number, 'RUNNING', 'NEEDS_REVIEW');
+        await postComment(pr.number, `## ✅ Agent-Arbeit abgeschlossen!
+
+Der Orchestrator hat erkannt, dass die Agent-Arbeit abgeschlossen ist.
+
+- ✅ ${agentInfo.agentCommitCount} Agent-Commits
+- ✅ Alle Checks erfolgreich
+- ✅ PR auf "Ready for Review" gesetzt
+
+---
+*🤖 Orchestrator - Scheduled Check*`);
+      }
+    }
+    return;
+  }
+  
+  // ============================================================================
+  // END: Handle specific actions
+  // ============================================================================
+  
   if (!workItem) {
     console.log('ℹ️  No active work items found. Exiting successfully.');
     return;
@@ -766,6 +988,33 @@ async function performTransition() {
   const currentState = getCurrentState(workItem.labels);
   console.log(`📊 Current state: ${currentState || 'UNKNOWN'}`);
   
+  // ============================================================================
+  // NEW: Check for Draft PRs that need to be marked ready
+  // ============================================================================
+  if (itemType === 'pr' && workItem.draft) {
+    console.log('📋 Detected draft PR - checking for agent completion...');
+    
+    const agentInfo = await detectAgentCommits(workItem.number);
+    const checksPassing = await areChecksPassing(workItem.head.sha);
+    
+    if (agentInfo.hasAgentCommits && checksPassing) {
+      console.log('✅ Agent work complete - marking PR as ready');
+      await markPRReady(workItem.number);
+      await updateLabels(workItem.number, currentState, 'NEEDS_REVIEW');
+      await postComment(workItem.number, `## ✅ Agent-Arbeit abgeschlossen!
+
+Der Orchestrator hat erkannt, dass der Agent seine Arbeit beendet hat.
+
+- ✅ ${agentInfo.agentCommitCount} Agent-Commits erkannt
+- ✅ Alle Checks erfolgreich
+- ✅ PR auf "Ready for Review" gesetzt
+
+---
+*🤖 Orchestrator - Auto Ready*`);
+      return;
+    }
+  }
+  
   // Perform appropriate transition
   let transitioned = false;
   
@@ -780,6 +1029,16 @@ async function performTransition() {
       if (checkpoint.branch && checkpoint.branch !== NA_VALUE) {
         const pr = await findPRForBranch(checkpoint.branch);
         if (pr) {
+          // NEW: Check if draft and agent complete
+          if (pr.draft) {
+            const agentInfo = await detectAgentCommits(pr.number);
+            const checksPassing = await areChecksPassing(pr.head.sha);
+            
+            if (agentInfo.hasAgentCommits && checksPassing) {
+              console.log('📋 Agent completed in draft PR - marking ready first');
+              await markPRReady(pr.number);
+            }
+          }
           transitioned = await transitionRunningToNeedsReview(workItem, pr);
         } else {
           console.log('ℹ️  Waiting for PR to be created. Staying in RUNNING state.');
@@ -802,6 +1061,11 @@ async function performTransition() {
       if (latestReview && latestReview.state === 'APPROVED') {
         transitioned = await transitionNeedsReviewToPassed(prForReview, latestReview);
       } else if (latestReview && latestReview.state === 'CHANGES_REQUESTED') {
+        // NEW: Automatically trigger fix
+        const findings = await collectReviewComments(prForReview.number);
+        if (findings.length > 0) {
+          await triggerAgentFix(prForReview.number, findings);
+        }
         transitioned = await transitionNeedsReviewToFixing(prForReview);
       } else {
         console.log('ℹ️  Waiting for review. Staying in NEEDS_REVIEW state.');

@@ -1,0 +1,944 @@
+name: Complete Orchestrator
+
+# Vollautomatischer Orchestrator für Issue → PR → Review → Merge Workflow
+# Erkennt Agent-Completion und reagiert automatisch
+
+on:
+  # Agent-Aktivität erkennen (Commits von Copilot)
+  push:
+    branches:
+      - 'orchestrator/**'
+      - 'copilot/**'
+      - 'feature/**'
+  
+  # PR Events
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened, converted_to_draft]
+  
+  # Review Events
+  pull_request_review:
+    types: [submitted]
+  
+  # Check Results
+  check_suite:
+    types: [completed]
+  
+  # Issue Events
+  issues:
+    types: [labeled, opened]
+  
+  # Scheduled Polling für verpasste Events
+  schedule:
+    - cron: '*/5 * * * *'  # Alle 5 Minuten
+  
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR-Nummer (optional)'
+        required: false
+        type: number
+      action:
+        description: 'Spezifische Aktion'
+        required: false
+        type: choice
+        options:
+          - auto-detect
+          - mark-ready
+          - request-review
+          - trigger-fix
+          - merge
+        default: 'auto-detect'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: write
+  statuses: write
+  actions: write
+
+env:
+  COPILOT_AUTHOR: 'copilot[bot]'
+  COPILOT_AUTHOR_ALT: 'github-actions[bot]'
+  ORCHESTRATOR_LABEL: 'orchestrator:enabled'
+
+jobs:
+  # ============================================================================
+  # Job 1: Erkennung von Agent-Arbeit und Draft → Ready Transition
+  # ============================================================================
+  detect-agent-completion:
+    name: 🔍 Detect Agent Work Completion
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'check_suite' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'mark-ready')
+    
+    outputs:
+      pr_number: ${{ steps.find_pr.outputs.pr_number }}
+      is_draft: ${{ steps.check_pr.outputs.is_draft }}
+      agent_completed: ${{ steps.detect_completion.outputs.completed }}
+      should_mark_ready: ${{ steps.decision.outputs.should_mark_ready }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+      
+      - name: Find Associated PR
+        id: find_pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let prNumber = null;
+            
+            // Manuelle Eingabe hat Priorität
+            if ('${{ github.event.inputs.pr_number }}') {
+              prNumber = parseInt('${{ github.event.inputs.pr_number }}');
+              console.log(`📌 PR from input: #${prNumber}`);
+              core.setOutput('pr_number', prNumber);
+              return prNumber;
+            }
+            
+            // Bei Push: Finde PR für den Branch
+            if (context.eventName === 'push') {
+              const branch = context.ref.replace('refs/heads/', '');
+              console.log(`🔍 Looking for PR with head branch: ${branch}`);
+              
+              const prs = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                head: `${context.repo.owner}:${branch}`,
+                state: 'open'
+              });
+              
+              if (prs.data.length > 0) {
+                prNumber = prs.data[0].number;
+                console.log(`✅ Found PR: #${prNumber}`);
+              }
+            }
+            
+            // Bei Check-Suite: Finde PR für den Commit
+            if (context.eventName === 'check_suite') {
+              const sha = context.payload.check_suite?.head_sha;
+              if (sha) {
+                console.log(`🔍 Looking for PR with head SHA: ${sha}`);
+                
+                const prs = await github.rest.pulls.list({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'open'
+                });
+                
+                const matchingPr = prs.data.find(pr => pr.head.sha === sha);
+                if (matchingPr) {
+                  prNumber = matchingPr.number;
+                  console.log(`✅ Found PR: #${prNumber}`);
+                }
+              }
+            }
+            
+            // Bei Schedule: Finde alle Draft PRs mit orchestrator:enabled
+            if (context.eventName === 'schedule') {
+              console.log('🕐 Scheduled run - looking for draft PRs');
+              
+              const prs = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open'
+              });
+              
+              const orchestratorPrs = prs.data.filter(pr => 
+                pr.draft && 
+                pr.labels.some(l => l.name === 'orchestrator:enabled')
+              );
+              
+              if (orchestratorPrs.length > 0) {
+                prNumber = orchestratorPrs[0].number;
+                console.log(`✅ Found draft PR with orchestrator: #${prNumber}`);
+              }
+            }
+            
+            core.setOutput('pr_number', prNumber || '');
+            return prNumber;
+      
+      - name: Check PR Details
+        id: check_pr
+        if: steps.find_pr.outputs.pr_number != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.find_pr.outputs.pr_number }}');
+            
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            console.log(`📋 PR #${prNumber}: "${pr.title}"`);
+            console.log(`   Draft: ${pr.draft}`);
+            console.log(`   State: ${pr.state}`);
+            console.log(`   Labels: ${pr.labels.map(l => l.name).join(', ')}`);
+            
+            core.setOutput('is_draft', pr.draft);
+            core.setOutput('pr_state', pr.state);
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('has_orchestrator', pr.labels.some(l => l.name === 'orchestrator:enabled'));
+            
+            return pr;
+      
+      - name: Detect Agent Work Completion
+        id: detect_completion
+        if: steps.find_pr.outputs.pr_number != '' && steps.check_pr.outputs.is_draft == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.find_pr.outputs.pr_number }}');
+            
+            // Hole die letzten Commits
+            const commits = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              per_page: 20
+            });
+            
+            // Prüfe auf Agent-Commits (Copilot oder GitHub Actions)
+            const agentCommits = commits.data.filter(c => {
+              const author = c.author?.login || c.commit?.author?.name || '';
+              return author.includes('copilot') || 
+                     author.includes('github-actions') ||
+                     author.includes('Copilot') ||
+                     c.commit?.message?.includes('🤖') ||
+                     c.commit?.message?.includes('[copilot]');
+            });
+            
+            console.log(`📊 Total commits: ${commits.data.length}`);
+            console.log(`🤖 Agent commits: ${agentCommits.length}`);
+            
+            if (agentCommits.length > 0) {
+              const latestAgent = agentCommits[agentCommits.length - 1];
+              console.log(`   Latest agent commit: ${latestAgent.commit.message.split('\n')[0]}`);
+              console.log(`   By: ${latestAgent.author?.login || latestAgent.commit.author.name}`);
+            }
+            
+            // Prüfe Check Status
+            const headSha = '${{ steps.check_pr.outputs.head_sha }}';
+            const checks = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: headSha
+            });
+            
+            const allChecksComplete = checks.data.check_runs.every(
+              c => c.status === 'completed'
+            );
+            const allChecksPassing = checks.data.check_runs.every(
+              c => c.status === 'completed' && 
+                   (c.conclusion === 'success' || c.conclusion === 'neutral' || c.conclusion === 'skipped')
+            );
+            
+            console.log(`✅ All checks complete: ${allChecksComplete}`);
+            console.log(`✅ All checks passing: ${allChecksPassing}`);
+            
+            // Agent hat Arbeit beendet wenn:
+            // 1. Es Agent-Commits gibt UND
+            // 2. Alle Checks durchgelaufen sind UND
+            // 3. Alle Checks erfolgreich sind
+            const completed = agentCommits.length > 0 && allChecksComplete && allChecksPassing;
+            
+            console.log(`\n🎯 Agent work completed: ${completed}`);
+            
+            core.setOutput('completed', completed);
+            core.setOutput('agent_commits_count', agentCommits.length);
+            core.setOutput('checks_passing', allChecksPassing);
+            
+            return { completed, agentCommits: agentCommits.length, checksPassing: allChecksPassing };
+      
+      - name: Decision: Should Mark Ready
+        id: decision
+        run: |
+          IS_DRAFT="${{ steps.check_pr.outputs.is_draft }}"
+          COMPLETED="${{ steps.detect_completion.outputs.completed }}"
+          FORCE="${{ github.event.inputs.action == 'mark-ready' }}"
+          
+          if [[ "$IS_DRAFT" == "true" ]] && ([[ "$COMPLETED" == "true" ]] || [[ "$FORCE" == "true" ]]); then
+            echo "should_mark_ready=true" >> $GITHUB_OUTPUT
+            echo "✅ Will mark PR as ready for review"
+          else
+            echo "should_mark_ready=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ Conditions not met for marking ready"
+          fi
+  
+  # ============================================================================
+  # Job 2: Draft PR auf "Ready for Review" setzen
+  # ============================================================================
+  mark-pr-ready:
+    name: 📋 Mark PR as Ready for Review
+    runs-on: ubuntu-latest
+    needs: detect-agent-completion
+    if: needs.detect-agent-completion.outputs.should_mark_ready == 'true'
+    
+    steps:
+      - name: Mark PR as Ready
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ needs.detect-agent-completion.outputs.pr_number }}');
+            
+            console.log(`📋 Marking PR #${prNumber} as ready for review...`);
+            
+            // Mark as ready (remove draft status)
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              draft: false
+            });
+            
+            console.log('✅ PR marked as ready!');
+      
+      - name: Update Labels
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ needs.detect-agent-completion.outputs.pr_number }}');
+            
+            // Remove state:running, add state:needs-review
+            const labelsToRemove = ['state:running', 'state:queued'];
+            for (const label of labelsToRemove) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  name: label
+                });
+              } catch (e) {
+                console.log(`Label ${label} not present`);
+              }
+            }
+            
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['state:needs-review', 'ready-for-review']
+            });
+      
+      - name: Post Ready Comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ needs.detect-agent-completion.outputs.pr_number }}');
+            
+            const comment = `## ✅ Agent-Arbeit abgeschlossen!
+
+Der Copilot Agent hat seine Arbeit erfolgreich beendet und der PR ist jetzt **bereit für Review**.
+
+### 📊 Status:
+- ✅ Agent-Commits erkannt
+- ✅ Alle Checks erfolgreich
+- ✅ PR auf "Ready for Review" gesetzt
+
+### 🔍 Nächste Schritte:
+1. **Reviewer:** Bitte prüfe die Änderungen
+2. Bei **Approve** → Automatischer Merge
+3. Bei **Changes Requested** → Automatischer Fix durch Agent
+
+---
+*🤖 Orchestrator Automatik*`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: comment
+            });
+      
+      - name: Request Review
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ needs.detect-agent-completion.outputs.pr_number }}');
+            
+            // Try to request Copilot review
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                reviewers: []  // GitHub will auto-assign based on CODEOWNERS
+              });
+            } catch (e) {
+              console.log('Could not request reviewers:', e.message);
+            }
+
+  # ============================================================================
+  # Job 3: Review-Handler - Reagiert auf Reviews
+  # ============================================================================
+  handle-review:
+    name: 📝 Handle Review Result
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_review'
+    
+    outputs:
+      review_state: ${{ steps.check_review.outputs.state }}
+      should_fix: ${{ steps.check_review.outputs.should_fix }}
+      should_merge: ${{ steps.check_review.outputs.should_merge }}
+    
+    steps:
+      - name: Check Review State
+        id: check_review
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const review = context.payload.review;
+            const pr = context.payload.pull_request;
+            
+            console.log(`📝 Review submitted on PR #${pr.number}`);
+            console.log(`   State: ${review.state}`);
+            console.log(`   By: ${review.user.login}`);
+            
+            const hasOrchestrator = pr.labels.some(l => l.name === 'orchestrator:enabled');
+            console.log(`   Has orchestrator label: ${hasOrchestrator}`);
+            
+            core.setOutput('state', review.state);
+            core.setOutput('pr_number', pr.number);
+            core.setOutput('reviewer', review.user.login);
+            
+            if (review.state === 'changes_requested') {
+              core.setOutput('should_fix', hasOrchestrator);
+              core.setOutput('should_merge', false);
+            } else if (review.state === 'approved') {
+              core.setOutput('should_fix', false);
+              core.setOutput('should_merge', hasOrchestrator);
+            } else {
+              core.setOutput('should_fix', false);
+              core.setOutput('should_merge', false);
+            }
+            
+            return { state: review.state, prNumber: pr.number };
+      
+      - name: Update Labels for Changes Requested
+        if: steps.check_review.outputs.should_fix == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.check_review.outputs.pr_number }}');
+            
+            // Remove needs-review, add fixing
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                name: 'state:needs-review'
+              });
+            } catch (e) {}
+            
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['state:fixing', 'fix-needed']
+            });
+      
+      - name: Update Labels for Approved
+        if: steps.check_review.outputs.should_merge == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.check_review.outputs.pr_number }}');
+            
+            // Remove needs-review, add passed
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                name: 'state:needs-review'
+              });
+            } catch (e) {}
+            
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['state:passed']
+            });
+
+  # ============================================================================
+  # Job 4: Automatischer Fix bei "Changes Requested"
+  # ============================================================================
+  auto-fix-review:
+    name: 🔧 Auto-Fix Review Findings
+    runs-on: ubuntu-latest
+    needs: handle-review
+    if: needs.handle-review.outputs.should_fix == 'true'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Get PR and Review Details
+        id: details
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            
+            // Get PR
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            // Get all reviews
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            // Get review comments (line-specific)
+            const { data: reviewComments } = await github.rest.pulls.listReviewComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            // Collect all findings
+            let findings = [];
+            
+            // From reviews with CHANGES_REQUESTED
+            reviews.filter(r => r.state === 'CHANGES_REQUESTED').forEach(r => {
+              if (r.body && r.body.trim()) {
+                findings.push({
+                  type: 'review',
+                  author: r.user.login,
+                  body: r.body,
+                  file: null,
+                  line: null
+                });
+              }
+            });
+            
+            // From line comments
+            reviewComments.forEach(c => {
+              findings.push({
+                type: 'comment',
+                author: c.user.login,
+                body: c.body,
+                file: c.path,
+                line: c.line || c.original_line
+              });
+            });
+            
+            console.log(`📋 Found ${findings.length} review findings`);
+            findings.forEach((f, i) => {
+              console.log(`   ${i+1}. [${f.type}] ${f.file || 'general'}: ${f.body.substring(0, 50)}...`);
+            });
+            
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('findings_count', findings.length);
+            core.setOutput('findings_json', JSON.stringify(findings));
+            
+            return { pr, findings };
+      
+      - name: Checkout PR Branch
+        run: |
+          git fetch origin ${{ steps.details.outputs.head_ref }}
+          git checkout ${{ steps.details.outputs.head_ref }}
+      
+      - name: Configure Git
+        run: |
+          git config --global user.name "Orchestrator Bot"
+          git config --global user.email "orchestrator@github.com"
+      
+      - name: Post Fix Task Comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.details.outputs.pr_number }}');
+            const findings = JSON.parse('${{ steps.details.outputs.findings_json }}');
+            
+            let findingsList = findings.map((f, i) => {
+              if (f.file) {
+                return `${i+1}. **\`${f.file}:${f.line || 'N/A'}\`** - @${f.author}:\n   > ${f.body}`;
+              } else {
+                return `${i+1}. **General** - @${f.author}:\n   > ${f.body}`;
+              }
+            }).join('\n\n');
+            
+            const comment = `## 🔧 Automatischer Fix-Task gestartet
+
+Das Review hat **${findings.length}** Findings ergeben. Der Orchestrator startet automatisch den Fix-Prozess.
+
+### 📋 Review-Findings:
+
+${findingsList}
+
+### 🤖 Anweisung an Copilot Agent:
+
+\`\`\`
+@copilot fix
+
+Bitte behebe die folgenden Review-Findings:
+
+${findings.map((f, i) => `${i+1}. ${f.file ? `In ${f.file}` : 'Allgemein'}: ${f.body}`).join('\n')}
+
+Wichtig:
+- Behebe NUR die genannten Issues
+- Halte Änderungen minimal
+- Führe nach dem Fix aus: ./gradlew build
+\`\`\`
+
+---
+*🤖 Orchestrator - Auto-Fix Modus*`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: comment
+            });
+      
+      - name: Trigger Copilot Agent Fix (via comment)
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.details.outputs.pr_number }}');
+            const findings = JSON.parse('${{ steps.details.outputs.findings_json }}');
+            
+            // Create explicit @copilot fix command
+            const fixCommand = `@copilot fix
+
+Bitte behebe alle Review-Findings in diesem PR:
+
+${findings.map((f, i) => {
+  if (f.file) {
+    return `- **${f.file}:${f.line || ''}**: ${f.body}`;
+  }
+  return `- ${f.body}`;
+}).join('\n')}
+
+Nach dem Fix bitte committen und pushen.`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: fixCommand
+            });
+            
+            console.log('✅ Fix command posted - Copilot Agent should pick it up');
+
+  # ============================================================================
+  # Job 5: Auto-Merge bei Approval
+  # ============================================================================
+  auto-merge:
+    name: 🚀 Auto-Merge Approved PR
+    runs-on: ubuntu-latest
+    needs: handle-review
+    if: needs.handle-review.outputs.should_merge == 'true'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Get PR Details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            // Check all status checks
+            const { data: checks } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: pr.head.sha
+            });
+            
+            const allPassing = checks.check_runs.every(c => 
+              c.status === 'completed' && 
+              (c.conclusion === 'success' || c.conclusion === 'neutral' || c.conclusion === 'skipped')
+            );
+            
+            console.log(`📋 PR #${prNumber}: ${pr.title}`);
+            console.log(`   All checks passing: ${allPassing}`);
+            console.log(`   Mergeable: ${pr.mergeable}`);
+            
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('can_merge', allPassing && pr.mergeable !== false);
+            core.setOutput('title', pr.title);
+            
+            return pr;
+      
+      - name: Merge PR
+        if: steps.pr.outputs.can_merge == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.pr.outputs.pr_number }}');
+            
+            console.log(`🚀 Merging PR #${prNumber}...`);
+            
+            try {
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                merge_method: 'squash'
+              });
+              
+              console.log('✅ PR merged successfully!');
+              
+              // Update labels
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  name: 'state:passed'
+                });
+              } catch (e) {}
+              
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                labels: ['state:merged']
+              });
+              
+            } catch (error) {
+              console.log(`❌ Failed to merge: ${error.message}`);
+              core.setFailed(`Merge failed: ${error.message}`);
+            }
+      
+      - name: Post Merge Comment
+        if: steps.pr.outputs.can_merge == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.pr.outputs.pr_number }}');
+            
+            const comment = `## 🎉 PR erfolgreich gemerged!
+
+Dieser Pull Request wurde automatisch gemerged nachdem:
+- ✅ Review Approved
+- ✅ Alle Checks erfolgreich
+- ✅ Keine Merge-Konflikte
+
+---
+*🤖 Orchestrator - Auto-Merge*`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: comment
+            });
+      
+      - name: Close Related Issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.pr.outputs.pr_number }}');
+            const prTitle = '${{ steps.pr.outputs.title }}';
+            
+            // Try to find related issue from PR body or title
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            // Look for "Closes #123" or "Fixes #123" patterns
+            const issueMatch = (pr.body || '').match(/(?:closes?|fixes?|resolves?)\s+#(\d+)/i);
+            
+            if (issueMatch) {
+              const issueNumber = parseInt(issueMatch[1]);
+              console.log(`📌 Found related issue: #${issueNumber}`);
+              
+              try {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  state: 'closed',
+                  state_reason: 'completed'
+                });
+                console.log(`✅ Closed issue #${issueNumber}`);
+              } catch (e) {
+                console.log(`Could not close issue: ${e.message}`);
+              }
+            }
+
+  # ============================================================================
+  # Job 6: Fix-Completion Detection (nach Agent-Fixes)
+  # ============================================================================
+  detect-fix-completion:
+    name: 🔄 Detect Fix Completion
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' || 
+      github.event_name == 'pull_request' && github.event.action == 'synchronize'
+    
+    steps:
+      - name: Check for Fixing State
+        id: check
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let prNumber = null;
+            
+            if (context.eventName === 'pull_request') {
+              prNumber = context.payload.pull_request.number;
+            } else if (context.eventName === 'push') {
+              const branch = context.ref.replace('refs/heads/', '');
+              const prs = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                head: `${context.repo.owner}:${branch}`,
+                state: 'open'
+              });
+              if (prs.data.length > 0) {
+                prNumber = prs.data[0].number;
+              }
+            }
+            
+            if (!prNumber) {
+              console.log('No PR found');
+              core.setOutput('should_transition', false);
+              return;
+            }
+            
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            const isFixing = pr.labels.some(l => l.name === 'state:fixing');
+            const hasOrchestrator = pr.labels.some(l => l.name === 'orchestrator:enabled');
+            
+            console.log(`PR #${prNumber}: fixing=${isFixing}, orchestrator=${hasOrchestrator}`);
+            
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('should_transition', isFixing && hasOrchestrator);
+            core.setOutput('head_sha', pr.head.sha);
+      
+      - name: Wait for Checks
+        if: steps.check.outputs.should_transition == 'true'
+        run: sleep 30
+      
+      - name: Check if Fixes Complete
+        if: steps.check.outputs.should_transition == 'true'
+        id: verify
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ steps.check.outputs.pr_number }}');
+            const headSha = '${{ steps.check.outputs.head_sha }}';
+            
+            // Check all status checks
+            const { data: checks } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: headSha
+            });
+            
+            const allComplete = checks.check_runs.every(c => c.status === 'completed');
+            const allPassing = checks.check_runs.every(c => 
+              c.status === 'completed' && 
+              (c.conclusion === 'success' || c.conclusion === 'neutral' || c.conclusion === 'skipped')
+            );
+            
+            console.log(`Checks complete: ${allComplete}, passing: ${allPassing}`);
+            
+            if (allComplete && allPassing) {
+              // Transition: FIXING → NEEDS_REVIEW
+              console.log('✅ Fixes complete - transitioning to needs-review');
+              
+              // Update labels
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  name: 'state:fixing'
+                });
+              } catch (e) {}
+              
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  name: 'fix-needed'
+                });
+              } catch (e) {}
+              
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                labels: ['state:needs-review']
+              });
+              
+              // Request re-review
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `## 🔄 Fixes angewendet - Erneutes Review benötigt
+
+Die Review-Findings wurden behoben:
+- ✅ Alle Checks erfolgreich
+- ✅ Fixes committed
+
+Bitte führe ein erneutes Review durch.
+
+---
+*🤖 Orchestrator - Fix Complete*`
+              });
+              
+              core.setOutput('transitioned', true);
+            } else {
+              core.setOutput('transitioned', false);
+            }

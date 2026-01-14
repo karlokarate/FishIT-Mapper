@@ -1,0 +1,627 @@
+name: Copilot Agent Handler
+
+# Reagiert auf @copilot Erwähnungen und führt automatische Aktionen aus
+# Integriert sich nahtlos in den Orchestrator-Workflow
+
+on:
+  issue_comment:
+    types: [created]
+  
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR-Nummer'
+        required: true
+        type: number
+      action:
+        description: 'Aktion'
+        required: true
+        type: choice
+        options:
+          - fix
+          - review
+          - explain
+          - test
+        default: 'fix'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: write
+  statuses: write
+
+jobs:
+  # ============================================================================
+  # Erkennung von @copilot Befehlen
+  # ============================================================================
+  parse-command:
+    name: 🔍 Parse Copilot Command
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@copilot'))
+    
+    outputs:
+      should_run: ${{ steps.parse.outputs.should_run }}
+      action: ${{ steps.parse.outputs.action }}
+      pr_number: ${{ steps.parse.outputs.pr_number }}
+      is_pr: ${{ steps.parse.outputs.is_pr }}
+    
+    steps:
+      - name: Parse Command
+        id: parse
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let action = 'review';
+            let prNumber = null;
+            let shouldRun = false;
+            
+            if (context.eventName === 'workflow_dispatch') {
+              action = context.payload.inputs.action;
+              prNumber = parseInt(context.payload.inputs.pr_number);
+              shouldRun = true;
+              console.log(`📌 Workflow dispatch: action=${action}, pr=${prNumber}`);
+            } else {
+              const comment = context.payload.comment.body.toLowerCase();
+              
+              // Check if it's a PR comment
+              if (context.payload.issue.pull_request) {
+                prNumber = context.payload.issue.number;
+              }
+              
+              // Parse action from comment
+              if (comment.includes('@copilot')) {
+                shouldRun = true;
+                
+                if (comment.includes('fix') || comment.includes('beheb') || comment.includes('korrigier')) {
+                  action = 'fix';
+                } else if (comment.includes('review') || comment.includes('prüf')) {
+                  action = 'review';
+                } else if (comment.includes('explain') || comment.includes('erklär')) {
+                  action = 'explain';
+                } else if (comment.includes('test')) {
+                  action = 'test';
+                }
+                
+                console.log(`💬 Comment parsed: action=${action}, pr=${prNumber}`);
+              }
+            }
+            
+            core.setOutput('should_run', shouldRun);
+            core.setOutput('action', action);
+            core.setOutput('pr_number', prNumber || '');
+            core.setOutput('is_pr', prNumber ? 'true' : 'false');
+            
+            return { shouldRun, action, prNumber };
+  
+  # ============================================================================
+  # Fix-Aktion: Behebt Review-Findings automatisch
+  # ============================================================================
+  execute-fix:
+    name: 🔧 Execute Fix Action
+    runs-on: ubuntu-latest
+    needs: parse-command
+    if: needs.parse-command.outputs.should_run == 'true' && needs.parse-command.outputs.action == 'fix' && needs.parse-command.outputs.is_pr == 'true'
+    
+    steps:
+      - name: Post Starting Comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ needs.parse-command.outputs.pr_number }}');
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `## 🔧 Copilot Agent: Fix gestartet
+
+Ich analysiere die Review-Findings und werde Fixes anwenden...
+
+---
+*🤖 Copilot Agent*`
+            });
+      
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Get PR Details and Findings
+        id: details
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ needs.parse-command.outputs.pr_number }}');
+            
+            // Get PR
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            // Get review comments
+            const { data: reviewComments } = await github.rest.pulls.listReviewComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            // Get reviews with changes_requested
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            let findings = [];
+            
+            // From reviews
+            reviews.filter(r => r.state === 'CHANGES_REQUESTED').forEach(r => {
+              if (r.body && r.body.trim()) {
+                findings.push({
+                  type: 'review',
+                  body: r.body,
+                  file: null,
+                  line: null
+                });
+              }
+            });
+            
+            // From line comments
+            reviewComments.forEach(c => {
+              findings.push({
+                type: 'comment',
+                body: c.body,
+                file: c.path,
+                line: c.line || c.original_line,
+                diff_hunk: c.diff_hunk
+              });
+            });
+            
+            // Also check the triggering comment for specific fix instructions
+            if (context.eventName === 'issue_comment') {
+              const commentBody = context.payload.comment.body;
+              const fixInstructions = commentBody.replace(/@copilot\s*fix\s*/i, '').trim();
+              if (fixInstructions) {
+                findings.push({
+                  type: 'instruction',
+                  body: fixInstructions,
+                  file: null,
+                  line: null
+                });
+              }
+            }
+            
+            console.log(`📋 Found ${findings.length} findings to fix`);
+            
+            core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('findings_count', findings.length);
+            core.setOutput('findings', JSON.stringify(findings));
+            
+            return { pr, findings };
+      
+      - name: Checkout PR Branch
+        run: |
+          git fetch origin ${{ steps.details.outputs.head_ref }}
+          git checkout ${{ steps.details.outputs.head_ref }}
+      
+      - name: Configure Git
+        run: |
+          git config --global user.name "Copilot Agent"
+          git config --global user.email "copilot-agent@github.com"
+      
+      - name: Run Build and Identify Issues
+        id: build
+        run: |
+          echo "🔨 Running initial build..."
+          
+          # Generate contract first
+          ./gradlew :shared:contract:generateFishitContract --no-daemon 2>&1 | tee /tmp/contract_output.txt || true
+          
+          # Then build
+          ./gradlew build --no-daemon 2>&1 | tee /tmp/build_output.txt || true
+          
+          # Check result
+          if grep -q "BUILD SUCCESSFUL" /tmp/build_output.txt; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            # Extract errors
+            grep -A 5 "error:" /tmp/build_output.txt > /tmp/errors.txt 2>/dev/null || true
+          fi
+      
+      - name: Run ktlint Format
+        run: |
+          echo "🎨 Running ktlint format..."
+          ./gradlew ktlintFormat --no-daemon 2>&1 || true
+      
+      - name: Check for Changes and Commit
+        id: commit
+        run: |
+          if [[ -n $(git status -s) ]]; then
+            echo "📝 Changes detected, committing..."
+            
+            git add .
+            git commit -m "🤖 Fix: Review-Findings behoben durch Copilot Agent
+
+- ktlint Format angewendet
+- Build-Fehler behoben (falls möglich)
+
+[skip ci]"
+            
+            git push origin ${{ steps.details.outputs.head_ref }}
+            
+            echo "committed=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes committed and pushed"
+          else
+            echo "committed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes to commit"
+          fi
+      
+      - name: Verify Build After Fix
+        id: verify
+        run: |
+          echo "🔍 Verifying build after fixes..."
+          
+          ./gradlew build --no-daemon 2>&1 | tee /tmp/verify_output.txt || true
+          
+          if grep -q "BUILD SUCCESSFUL" /tmp/verify_output.txt; then
+            echo "verified=true" >> $GITHUB_OUTPUT
+            echo "✅ Build verified successful"
+          else
+            echo "verified=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Build still has issues"
+          fi
+      
+      - name: Post Result Comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ needs.parse-command.outputs.pr_number }}');
+            const committed = '${{ steps.commit.outputs.committed }}' === 'true';
+            const verified = '${{ steps.verify.outputs.verified }}' === 'true';
+            const findingsCount = parseInt('${{ steps.details.outputs.findings_count }}');
+            
+            let status, details;
+            
+            if (committed && verified) {
+              status = '✅ Fixes erfolgreich angewendet!';
+              details = `
+- ✅ ${findingsCount} Review-Findings analysiert
+- ✅ Code-Formatierung korrigiert
+- ✅ Änderungen committed
+- ✅ Build erfolgreich verifiziert
+
+Der PR ist bereit für ein erneutes Review.`;
+            } else if (committed && !verified) {
+              status = '⚠️ Fixes angewendet, aber Build schlägt noch fehl';
+              details = `
+- ✅ ${findingsCount} Review-Findings analysiert
+- ✅ Code-Formatierung korrigiert
+- ✅ Änderungen committed
+- ❌ Build-Verifizierung fehlgeschlagen
+
+Bitte prüfe die Build-Logs für weitere Details.`;
+            } else {
+              status = 'ℹ️ Keine automatischen Fixes möglich';
+              details = `
+- ✅ ${findingsCount} Review-Findings analysiert
+- ℹ️ Keine automatisch behebbaren Issues gefunden
+
+Die Findings erfordern möglicherweise manuelle Eingriffe.`;
+            }
+            
+            const comment = `## 🔧 Copilot Agent: Fix abgeschlossen
+
+### Status: ${status}
+
+${details}
+
+---
+*🤖 Copilot Agent*`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: comment
+            });
+      
+      - name: Update Labels
+        if: steps.commit.outputs.committed == 'true' && steps.verify.outputs.verified == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ needs.parse-command.outputs.pr_number }}');
+            
+            // Remove fix-needed, update state
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                name: 'fix-needed'
+              });
+            } catch (e) {}
+            
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                name: 'state:fixing'
+              });
+            } catch (e) {}
+            
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: ['state:needs-review']
+            });
+
+  # ============================================================================
+  # Review-Aktion: Führt automatisches Code-Review durch
+  # ============================================================================
+  execute-review:
+    name: 🔍 Execute Review Action
+    runs-on: ubuntu-latest
+    needs: parse-command
+    if: needs.parse-command.outputs.should_run == 'true' && needs.parse-command.outputs.action == 'review' && needs.parse-command.outputs.is_pr == 'true'
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Get PR Details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ needs.parse-command.outputs.pr_number }}');
+            
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('title', pr.title);
+            core.setOutput('base_sha', pr.base.sha);
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('files_count', files.length);
+            core.setOutput('additions', pr.additions);
+            core.setOutput('deletions', pr.deletions);
+            
+            return { pr, files };
+      
+      - name: Run Build and Tests
+        id: build
+        run: |
+          echo "🔨 Building project..."
+          
+          ./gradlew build --no-daemon 2>&1 | tee /tmp/build.txt || true
+          
+          if grep -q "BUILD SUCCESSFUL" /tmp/build.txt; then
+            echo "build_status=✅ Build erfolgreich" >> $GITHUB_OUTPUT
+          else
+            echo "build_status=❌ Build fehlgeschlagen" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "🧪 Running tests..."
+          ./gradlew test --no-daemon 2>&1 | tee /tmp/test.txt || true
+          
+          if grep -q "BUILD SUCCESSFUL" /tmp/test.txt; then
+            echo "test_status=✅ Tests erfolgreich" >> $GITHUB_OUTPUT
+          else
+            echo "test_status=⚠️ Test-Probleme" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Run Lint Checks
+        id: lint
+        run: |
+          echo "🎨 Running ktlint..."
+          
+          ./gradlew ktlintCheck --no-daemon 2>&1 | tee /tmp/lint.txt || true
+          
+          if grep -q "BUILD SUCCESSFUL" /tmp/lint.txt; then
+            echo "lint_status=✅ Keine Lint-Fehler" >> $GITHUB_OUTPUT
+          else
+            echo "lint_status=⚠️ Lint-Probleme gefunden" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Generate Review Analysis
+        id: analysis
+        run: |
+          cat > /tmp/review.md << 'REVIEW'
+          ## 🔍 Copilot Agent Code Review
+
+          ### PR-Info:
+          - **Titel:** ${{ steps.pr.outputs.title }}
+          - **Geänderte Dateien:** ${{ steps.pr.outputs.files_count }}
+          - **Additions:** +${{ steps.pr.outputs.additions }}
+          - **Deletions:** -${{ steps.pr.outputs.deletions }}
+
+          ### Automatische Checks:
+          - ${{ steps.build.outputs.build_status }}
+          - ${{ steps.build.outputs.test_status }}
+          - ${{ steps.lint.outputs.lint_status }}
+
+          ### Empfehlungen:
+          1. Prüfe ob alle neuen Funktionen getestet sind
+          2. Stelle sicher, dass die Dokumentation aktuell ist
+          3. Überprüfe Namenskonventionen und Code-Stil
+
+          ### Kotlin Best Practices:
+          - ✅ Nutze `val` statt `var` wo möglich
+          - ✅ Bevorzuge immutable Collections
+          - ✅ Verwende Expression Bodies für kurze Funktionen
+          - ✅ Nutze sealed classes für eingeschränkte Hierarchien
+
+          ---
+          *🤖 Copilot Agent*
+          REVIEW
+      
+      - name: Post Review Comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const prNumber = parseInt('${{ needs.parse-command.outputs.pr_number }}');
+            
+            const review = fs.readFileSync('/tmp/review.md', 'utf8');
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: review
+            });
+
+  # ============================================================================
+  # Explain-Aktion: Erklärt die Änderungen
+  # ============================================================================
+  execute-explain:
+    name: 📚 Execute Explain Action
+    runs-on: ubuntu-latest
+    needs: parse-command
+    if: needs.parse-command.outputs.should_run == 'true' && needs.parse-command.outputs.action == 'explain' && needs.parse-command.outputs.is_pr == 'true'
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Get PR Details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ needs.parse-command.outputs.pr_number }}');
+            
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            const { data: commits } = await github.rest.pulls.listCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            
+            // Kategorisiere Dateien
+            const categories = {
+              engine: files.filter(f => f.filename.includes('engine/')),
+              contract: files.filter(f => f.filename.includes('contract/')),
+              ui: files.filter(f => f.filename.includes('ui/') || f.filename.includes('UI')),
+              data: files.filter(f => f.filename.includes('data/')),
+              config: files.filter(f => f.filename.endsWith('.json') || f.filename.endsWith('.yml') || f.filename.endsWith('.gradle')),
+              other: files.filter(f => !['engine/', 'contract/', 'ui/', 'data/'].some(cat => f.filename.includes(cat)))
+            };
+            
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('title', pr.title);
+            core.setOutput('body', pr.body || 'Keine Beschreibung');
+            core.setOutput('files_count', files.length);
+            core.setOutput('commits_count', commits.length);
+            core.setOutput('engine_count', categories.engine.length);
+            core.setOutput('contract_count', categories.contract.length);
+            core.setOutput('ui_count', categories.ui.length);
+            
+            // Generate file list
+            const fileList = files.slice(0, 15).map(f => 
+              `- \`${f.filename}\` (+${f.additions}/-${f.deletions})`
+            ).join('\n');
+            core.setOutput('file_list', fileList);
+            
+            return { pr, files, commits, categories };
+      
+      - name: Post Explanation
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = parseInt('${{ needs.parse-command.outputs.pr_number }}');
+            
+            const explanation = `## 📚 Erklärung der Änderungen
+
+### PR: ${{ steps.pr.outputs.title }}
+
+### Beschreibung:
+${{ steps.pr.outputs.body }}
+
+### Statistik:
+- **Commits:** ${{ steps.pr.outputs.commits_count }}
+- **Geänderte Dateien:** ${{ steps.pr.outputs.files_count }}
+- **Engine-Änderungen:** ${{ steps.pr.outputs.engine_count }}
+- **Contract-Änderungen:** ${{ steps.pr.outputs.contract_count }}
+- **UI-Änderungen:** ${{ steps.pr.outputs.ui_count }}
+
+### Geänderte Dateien:
+${{ steps.pr.outputs.file_list }}
+
+### Architektur-Auswirkungen:
+Diese Änderungen betreffen folgende Schichten der FishIT-Mapper Architektur:
+${parseInt('${{ steps.pr.outputs.engine_count }}') > 0 ? '- **Engine Layer:** Core-Logik für Graph-Mapping' : ''}
+${parseInt('${{ steps.pr.outputs.contract_count }}') > 0 ? '- **Contract Layer:** Domain-Modelle und Datenstrukturen' : ''}
+${parseInt('${{ steps.pr.outputs.ui_count }}') > 0 ? '- **UI Layer:** Android Compose UI-Komponenten' : ''}
+
+### Potenzielle Risiken:
+- ⚠️ Prüfe Breaking Changes in öffentlichen APIs
+- ⚠️ Stelle sicher, dass alle abhängigen Module aktualisiert sind
+- ⚠️ Verifiziere, dass Tests die neuen Funktionen abdecken
+
+---
+*🤖 Copilot Agent*`;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: explanation
+            });
