@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.fishit.mapper.android.webview.JavaScriptBridge
 import dev.fishit.mapper.contract.ConsoleLevel
 import dev.fishit.mapper.contract.ConsoleMessageEvent
 import dev.fishit.mapper.contract.NavigationEvent
@@ -106,6 +107,23 @@ fun BrowserScreen(
                     settings.userAgentString = settings.userAgentString + " FishIT-Mapper/0.1"
 
                     val mainHandler = Handler(Looper.getMainLooper())
+                    
+                    // Load tracking JavaScript from assets
+                    val trackingScript = try {
+                        context.assets.open("tracking.js").bufferedReader().use { it.readText() }
+                    } catch (e: Exception) {
+                        null
+                    }
+                    
+                    // Add JavaScript bridge for user action tracking
+                    addJavascriptInterface(
+                        JavaScriptBridge { event ->
+                            if (recordingState) {
+                                mainHandler.post { onRecorderEventState(event) }
+                            }
+                        },
+                        "FishITMapper"
+                    )
 
                     webViewClient = object : WebViewClient() {
                         private var lastUrl: String? = null
@@ -132,6 +150,14 @@ fun BrowserScreen(
                             )
                             lastUrl = u
                             mainHandler.post { onRecorderEventState(event) }
+                        }
+                        
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            super.onPageFinished(view, url)
+                            // Inject tracking script when recording is active
+                            if (recordingState && trackingScript != null) {
+                                view?.evaluateJavascript(trackingScript, null)
+                            }
                         }
 
                         override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): android.webkit.WebResourceResponse? {
