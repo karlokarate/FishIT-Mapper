@@ -23,7 +23,6 @@ The contract is generated automatically on build. You can also run:
 - `:shared:contract` — generated contract models + JSON configuration
 - `:shared:engine` — in-memory mapping engine + bundle builder helpers
 - `:androidApp` — Compose UI + WebView recorder + local file storage + share/export
-- `:browserApp` — Kotlin/JS Browser target for web deployment
 
 ## Updating versions
 
@@ -34,3 +33,4 @@ Versions are pinned in `gradle/libs.versions.toml`. For latest stable versions, 
 ```
 
 (Add the Gradle Versions Plugin later if you want automated reporting.)
+
