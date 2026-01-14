@@ -83,6 +83,11 @@ log_info "✓ Build outputs cleaned"
 log_info "Regenerating FishIT Contract (KotlinPoet)..."
 ./gradlew :shared:contract:generateFishitContract || {
     log_error "Contract generation failed"
+    log_error "Check the Gradle output above for details"
+    log_error "Common issues:"
+    log_error "  - Schema file (schema/contract.schema.json) is invalid"
+    log_error "  - KotlinPoet codegen has errors"
+    log_error "  - Missing dependencies"
     exit 1
 }
 log_info "✓ Contract regenerated"
@@ -91,6 +96,7 @@ log_info "✓ Contract regenerated"
 log_info "Running compile sanity check (Android Debug Kotlin)..."
 ./gradlew :androidApp:compileDebugKotlin || {
     log_error "Compilation failed"
+    log_error "Check the Gradle output above for details"
     exit 1
 }
 log_info "✓ Compilation successful"

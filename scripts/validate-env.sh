@@ -146,11 +146,18 @@ done
 # --- Disk Space Check ---
 log_header "Disk Space"
 
-AVAILABLE_GB=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
-if [ "$AVAILABLE_GB" -ge 5 ]; then
-    log_info "Available disk space: ${AVAILABLE_GB}GB (sufficient)"
+# More robust disk space parsing
+if command -v df >/dev/null 2>&1; then
+    AVAILABLE_GB=$(df -BG . 2>/dev/null | awk 'NR==2 {print $4}' | sed 's/G//' || echo "0")
+    if [ -n "$AVAILABLE_GB" ] && [ "$AVAILABLE_GB" -ge 5 ]; then
+        log_info "Available disk space: ${AVAILABLE_GB}GB (sufficient)"
+    elif [ -n "$AVAILABLE_GB" ]; then
+        log_warn "Available disk space: ${AVAILABLE_GB}GB (may be tight, 5GB+ recommended)"
+    else
+        log_warn "Could not determine available disk space"
+    fi
 else
-    log_warn "Available disk space: ${AVAILABLE_GB}GB (may be tight, 5GB+ recommended)"
+    log_warn "df command not available, cannot check disk space"
 fi
 
 # --- Memory Check ---

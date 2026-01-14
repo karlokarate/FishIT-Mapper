@@ -103,6 +103,18 @@ Dies gibt einen detaillierten Bericht über:
 - **Festplatte:** 5 GB freier Speicher für Android SDK
 - **Internet:** Stabile Verbindung für Downloads
 
+### Konfigurierbare Optionen
+
+**Android SDK Location:**
+Standardmäßig wird das SDK nach `/opt/android-sdk` installiert. Um einen anderen Pfad zu verwenden:
+
+```bash
+export ANDROID_SDK_ROOT=/path/to/your/sdk
+./scripts/codex-setup.sh
+```
+
+Dies ist nützlich wenn `/opt` nicht beschreibbar ist oder ein anderer Speicherort bevorzugt wird.
+
 ### Im Codex Browser
 
 Der ChatGPT Codex Browser sollte Folgendes bereitstellen:

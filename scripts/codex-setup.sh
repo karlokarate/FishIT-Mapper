@@ -53,6 +53,8 @@ fi
 
 # --- Android SDK Setup ---
 log_info "Setting up Android SDK environment..."
+# NOTE: Default SDK location is /opt/android-sdk, but can be overridden
+# by setting ANDROID_SDK_ROOT environment variable before running this script
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/opt/android-sdk}"
 export ANDROID_HOME="$ANDROID_SDK_ROOT"
 export PATH="$ANDROID_SDK_ROOT/platform-tools:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
@@ -95,6 +97,8 @@ if ! command -v sdkmanager >/dev/null 2>&1; then
     fi
     
     # Download and install command line tools
+    # NOTE: This version (11076708) is current as of 2024. Check for updates at:
+    # https://developer.android.com/studio#command-line-tools-only
     CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
     CMDLINE_ZIP="/tmp/android-cmdline-tools.zip"
     
