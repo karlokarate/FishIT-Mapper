@@ -42,12 +42,13 @@ Siehe [scripts/README.md](scripts/README.md) für Details und Troubleshooting.
 
 ## Automated Issue Workflow (Copilot Ruleset + Orchestrator)
 
-This repository includes a **fully automated workflow** for issue management using GitHub Copilot Rulesets and GitHub Actions Orchestrator.
+This repository includes a **fully automated workflow** for issue management using GitHub Actions Orchestrator and Copilot integration.
 
 ### 🚀 Quick Start (5 Minuten)
 
-1. **Import Ruleset** (einmalig):
-   - Settings → Copilot → Import `.github/copilot/ruleset.json`
+1. **Workflow-Konfiguration** ist bereits vorhanden:
+   - `.github/copilot/workflow-automation.json` dokumentiert die Automation
+   - Orchestrator läuft über GitHub Actions (`.github/workflows/orchestrator.yml`)
 
 2. **Create an issue** with clear requirements
 

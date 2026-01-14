@@ -35,26 +35,23 @@
 
 ## Migrationsschritte
 
-### Schritt 1: Ruleset importieren
+### Schritt 1: Workflow-Konfiguration ist bereits vorhanden ✅
 
-**Via GitHub UI:**
-1. Gehe zu: `https://github.com/karlokarate/FishIT-Mapper/settings/copilot`
-2. Klicke: "Import ruleset"
-3. Datei wählen: `.github/copilot/ruleset.json`
-4. Klicke: "Import"
+Die Automation ist bereits eingerichtet:
+- ✅ `.github/copilot/workflow-automation.json` - Dokumentiert die Workflow-Logik
+- ✅ `.github/workflows/orchestrator.yml` - Implementiert die Automation
+- ✅ `.github/copilot/agents.json` - Konfiguriert die Agents
 
-**Via GitHub CLI:**
-```bash
-gh api repos/karlokarate/FishIT-Mapper/copilot/rulesets \
-  -X POST \
-  --input .github/copilot/ruleset.json
-```
+**Keine Installation notwendig!**
+
+**WICHTIG:** GitHub Repository Rulesets (für Branch Protection) werden über Settings > Branches > Rulesets konfiguriert. Die `workflow-automation.json` ist eine Dokumentation der Workflow-Logik, kein offizielles GitHub Ruleset.
 
 **Verifizierung:**
 ```bash
-# Prüfe ob Ruleset importiert wurde:
-gh api repos/karlokarate/FishIT-Mapper/copilot/rulesets | jq '.[0].name'
-# Erwartete Ausgabe: "FishIT-Mapper Automated Issue Workflow"
+# Prüfe ob die Dateien vorhanden sind:
+ls -la .github/copilot/workflow-automation.json
+ls -la .github/workflows/orchestrator.yml
+ls -la .github/copilot/agents.json
 ```
 
 ### Schritt 2: Labels erstellen

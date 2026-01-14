@@ -1,8 +1,10 @@
-# Copilot Ruleset für FishIT-Mapper
+# Copilot Workflow Automation für FishIT-Mapper
 
 ## Übersicht
 
-Das **Copilot Ruleset** (`/.github/copilot/ruleset.json`) implementiert einen vollständig automatisierten Workflow für die Issue-Bearbeitung mit GitHub Copilot. Es koordiniert alle Schritte von der Issue-Erstellung bis zum finalen Merge und der Dokumentations-Aktualisierung.
+Die **Workflow Automation Konfiguration** (`.github/copilot/workflow-automation.json`) dokumentiert einen vollständig automatisierten Workflow für die Issue-Bearbeitung mit GitHub Copilot. Die Automation wird durch GitHub Actions (`.github/workflows/orchestrator.yml`) implementiert und koordiniert alle Schritte von der Issue-Erstellung bis zum finalen Merge und der Dokumentations-Aktualisierung.
+
+**WICHTIG:** Dies ist eine Dokumentationsdatei, die die gewünschte Automation beschreibt. Sie ist KEIN offizielles GitHub Ruleset. GitHub Repository Rulesets werden über Settings > Branches > Rulesets im Repository konfiguriert, nicht über JSON-Dateien.
 
 ## Workflow-Übersicht
 
@@ -276,7 +278,7 @@ Das Ruleset **erweitert** den bestehenden GitHub Actions Orchestrator aus PR #5:
 ### Workflow-Files
 
 - `.github/workflows/orchestrator.yml` - Haupt-Orchestrator (aus PR #5)
-- `.github/copilot/ruleset.json` - Copilot-Regeln (NEU)
+- `.github/copilot/workflow-automation.json` - Workflow-Automation Dokumentation
 - `.github/copilot/agents.json` - Agent-Konfiguration
 
 ### Checkpoint-System
@@ -287,7 +289,7 @@ Beide Systeme nutzen:
 
 ## Konfiguration
 
-### Settings in ruleset.json
+### Settings in workflow-automation.json
 
 ```json
 {
@@ -306,7 +308,7 @@ Beide Systeme nutzen:
 
 ### Labels
 
-Alle erforderlichen Labels sind in `ruleset.json` definiert:
+Alle erforderlichen Labels sind in `workflow-automation.json` definiert und werden vom Orchestrator verwendet:
 
 **Required Labels:**
 - `orchestrator:enabled` (grün)
@@ -324,19 +326,14 @@ Alle erforderlichen Labels sind in `ruleset.json` definiert:
 
 ## Verwendung
 
-### 1. Ruleset importieren
+### 1. Workflow ist bereits konfiguriert
 
-**Option A: Über GitHub UI**
-1. Gehe zu Repository Settings → Copilot
-2. Wähle "Import Ruleset"
-3. Lade `.github/copilot/ruleset.json` hoch
+Die Automation ist bereits eingerichtet:
+- ✅ `.github/copilot/workflow-automation.json` - Dokumentiert die Automation-Logik
+- ✅ `.github/workflows/orchestrator.yml` - Implementiert die Automation
+- ✅ `.github/copilot/agents.json` - Konfiguriert die Copilot Agents
 
-**Option B: Über GitHub CLI**
-```bash
-gh api repos/karlokarate/FishIT-Mapper/copilot/rulesets \
-  -X POST \
-  --input .github/copilot/ruleset.json
-```
+**WICHTIG:** GitHub Repository Rulesets (für Branch Protection) werden über Settings > Branches > Rulesets konfiguriert. Die Datei `workflow-automation.json` ist eine Dokumentation der Workflow-Logik, kein GitHub Ruleset.
 
 ### 2. Issue erstellen
 
