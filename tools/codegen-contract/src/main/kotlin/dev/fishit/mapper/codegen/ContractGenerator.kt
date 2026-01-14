@@ -44,6 +44,15 @@
             return b.build()
         }
 
+        private fun dataClassProperty(
+            name: String,
+            type: TypeName
+        ): PropertySpec {
+            return PropertySpec.builder(name, type)
+                .initializer(name)
+                .build()
+        }
+
         private fun dataClassBuilder(name: String, kdoc: String? = null): TypeSpec.Builder {
             val builder = TypeSpec.classBuilder(name)
                 .addModifiers(KModifier.DATA)
@@ -224,14 +233,26 @@
                 .addModifiers(KModifier.DATA)
                 .addAnnotation(serializable)
                 .addKdoc("A node in the website map graph.")
-                .addProperty(PropertySpec.builder("id", nodeId).initializer("id").build())
-                .addProperty(PropertySpec.builder("kind", nodeKind).initializer("kind").build())
-                .addProperty(PropertySpec.builder("url", string).initializer("url").build())
-                .addProperty(PropertySpec.builder("title", string.copy(nullable = true)).initializer("title").defaultValue(CodeBlock.of("null")).build())
-                .addProperty(PropertySpec.builder("tags", listOf(string)).initializer("tags").defaultValue(CodeBlock.of("emptyList()")).build())
-                .addProperty(PropertySpec.builder("attributes", attributes).initializer("attributes").defaultValue(CodeBlock.of("emptyMap()")).build())
-                .addProperty(PropertySpec.builder("firstSeenAt", instant.copy(nullable = true)).initializer("firstSeenAt").defaultValue(CodeBlock.of("null")).build())
-                .addProperty(PropertySpec.builder("lastSeenAt", instant.copy(nullable = true)).initializer("lastSeenAt").defaultValue(CodeBlock.of("null")).build())
+                .primaryConstructor(
+                    FunSpec.constructorBuilder()
+                        .addParameter(valParam("id", nodeId))
+                        .addParameter(valParam("kind", nodeKind))
+                        .addParameter(valParam("url", string))
+                        .addParameter(valParam("title", string.copy(nullable = true), CodeBlock.of("null")))
+                        .addParameter(valParam("tags", listOf(string), CodeBlock.of("emptyList()")))
+                        .addParameter(valParam("attributes", attributes, CodeBlock.of("emptyMap()")))
+                        .addParameter(valParam("firstSeenAt", instant.copy(nullable = true), CodeBlock.of("null")))
+                        .addParameter(valParam("lastSeenAt", instant.copy(nullable = true), CodeBlock.of("null")))
+                        .build()
+                )
+                .addProperty(dataClassProperty("id", nodeId))
+                .addProperty(dataClassProperty("kind", nodeKind))
+                .addProperty(dataClassProperty("url", string))
+                .addProperty(dataClassProperty("title", string.copy(nullable = true)))
+                .addProperty(dataClassProperty("tags", listOf(string)))
+                .addProperty(dataClassProperty("attributes", attributes))
+                .addProperty(dataClassProperty("firstSeenAt", instant.copy(nullable = true)))
+                .addProperty(dataClassProperty("lastSeenAt", instant.copy(nullable = true)))
                 .build()
 
             val mapEdge = TypeSpec.classBuilder("MapEdge")
@@ -250,6 +271,14 @@
                         .addParameter(valParam("lastSeenAt", instant.copy(nullable = true), CodeBlock.of("null")))
                         .build()
                 )
+                .addProperty(dataClassProperty("id", edgeId))
+                .addProperty(dataClassProperty("kind", edgeKind))
+                .addProperty(dataClassProperty("from", nodeId))
+                .addProperty(dataClassProperty("to", nodeId))
+                .addProperty(dataClassProperty("label", string.copy(nullable = true)))
+                .addProperty(dataClassProperty("attributes", attributes))
+                .addProperty(dataClassProperty("firstSeenAt", instant.copy(nullable = true)))
+                .addProperty(dataClassProperty("lastSeenAt", instant.copy(nullable = true)))
                 .build()
 
             val mapGraph = TypeSpec.classBuilder("MapGraph")
@@ -263,6 +292,9 @@
                         .addParameter(valParam("updatedAt", instant.copy(nullable = true), CodeBlock.of("null")))
                         .build()
                 )
+                .addProperty(dataClassProperty("nodes", listOf(ClassName(pkg, "MapNode"))))
+                .addProperty(dataClassProperty("edges", listOf(ClassName(pkg, "MapEdge"))))
+                .addProperty(dataClassProperty("updatedAt", instant.copy(nullable = true)))
                 .build()
 
             return generatedFile("Graph")
@@ -299,7 +331,7 @@
 
                 extraParams.forEach { ctor.addParameter(it) }
 
-                return TypeSpec.classBuilder(name)
+                val builder = TypeSpec.classBuilder(name)
                     .addModifiers(KModifier.DATA)
                     .addAnnotation(serializable)
                     .addAnnotation(
@@ -322,7 +354,17 @@
                             .initializer("at")
                             .build()
                     )
-                    .build()
+
+                // Add properties for extra params
+                extraParams.forEach { param ->
+                    builder.addProperty(
+                        PropertySpec.builder(param.name, param.type)
+                            .initializer(param.name)
+                            .build()
+                    )
+                }
+
+                return builder.build()
             }
 
             val navEvent = dataEvent(
@@ -395,6 +437,14 @@
                         .addParameter(valParam("notes", string.copy(nullable = true), CodeBlock.of("null")))
                         .build()
                 )
+                .addProperty(dataClassProperty("id", sessionId))
+                .addProperty(dataClassProperty("projectId", projectId))
+                .addProperty(dataClassProperty("startedAt", instant))
+                .addProperty(dataClassProperty("endedAt", instant.copy(nullable = true)))
+                .addProperty(dataClassProperty("initialUrl", string))
+                .addProperty(dataClassProperty("finalUrl", string.copy(nullable = true)))
+                .addProperty(dataClassProperty("events", listOf(ClassName(pkg, "RecorderEvent"))))
+                .addProperty(dataClassProperty("notes", string.copy(nullable = true)))
                 .build()
 
             val projectMeta = TypeSpec.classBuilder("ProjectMeta")
@@ -403,13 +453,18 @@
                 .addKdoc("Metadata describing a mapping project (workspace).")
                 .primaryConstructor(
                     FunSpec.constructorBuilder()
-                        .addParameter(valParam("id", projectId))
-                        .addParameter(valParam("name", string))
-                        .addParameter(valParam("startUrl", string))
-                        .addParameter(valParam("createdAt", instant))
-                        .addParameter(valParam("updatedAt", instant))
+                        .addParameter("id", projectId)
+                        .addParameter("name", string)
+                        .addParameter("startUrl", string)
+                        .addParameter("createdAt", instant)
+                        .addParameter("updatedAt", instant)
                         .build()
                 )
+                .addProperty(dataClassProperty("id", projectId))
+                .addProperty(dataClassProperty("name", string))
+                .addProperty(dataClassProperty("startUrl", string))
+                .addProperty(dataClassProperty("createdAt", instant))
+                .addProperty(dataClassProperty("updatedAt", instant))
                 .build()
 
             return generatedFile("Recorder")
@@ -443,6 +498,12 @@
                         .addParameter(valParam("notes", string.copy(nullable = true), CodeBlock.of("null")))
                         .build()
                 )
+                .addProperty(dataClassProperty("id", chainPointId))
+                .addProperty(dataClassProperty("label", string))
+                .addProperty(dataClassProperty("url", string.copy(nullable = true)))
+                .addProperty(dataClassProperty("nodeId", nodeId.copy(nullable = true)))
+                .addProperty(dataClassProperty("parentId", chainPointId.copy(nullable = true)))
+                .addProperty(dataClassProperty("notes", string.copy(nullable = true)))
                 .build()
 
             val recordChain = TypeSpec.classBuilder("RecordChain")
@@ -457,6 +518,10 @@
                         .addParameter(valParam("points", listOf(ClassName(pkg, "ChainPoint")), CodeBlock.of("emptyList()")))
                         .build()
                 )
+                .addProperty(dataClassProperty("id", chainId))
+                .addProperty(dataClassProperty("name", string))
+                .addProperty(dataClassProperty("createdAt", instant))
+                .addProperty(dataClassProperty("points", listOf(ClassName(pkg, "ChainPoint"))))
                 .build()
 
             val chainsFile = TypeSpec.classBuilder("ChainsFile")
@@ -468,6 +533,7 @@
                         .addParameter(valParam("chains", listOf(ClassName(pkg, "RecordChain")), CodeBlock.of("emptyList()")))
                         .build()
                 )
+                .addProperty(dataClassProperty("chains", listOf(ClassName(pkg, "RecordChain"))))
                 .build()
 
             return generatedFile("Chains")
@@ -497,6 +563,15 @@
                         .addParameter(valParam("sessionFiles", listOf(string), CodeBlock.of("emptyList()")))
                         .build()
                 )
+                .addProperty(dataClassProperty("appName", string))
+                .addProperty(dataClassProperty("bundleFormatVersion", string))
+                .addProperty(dataClassProperty("contractVersion", string))
+                .addProperty(dataClassProperty("createdAt", instant))
+                .addProperty(dataClassProperty("project", projectMeta))
+                .addProperty(dataClassProperty("graphPath", string))
+                .addProperty(dataClassProperty("chainsPath", string))
+                .addProperty(dataClassProperty("sessionsDir", string))
+                .addProperty(dataClassProperty("sessionFiles", listOf(string)))
                 .build()
 
             return generatedFile("Export")
