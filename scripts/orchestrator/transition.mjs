@@ -30,6 +30,11 @@ for (let i = 0; i < args.length; i += 2) {
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPOSITORY = options.repo || process.env.GITHUB_REPOSITORY;
 
+// Constants
+const NA_VALUE = NA_VALUE;
+const MAX_ITERATIONS = 5;
+const MAX_CHECK_FAILURES = 2;
+
 if (!GITHUB_TOKEN) {
   console.error('❌ Error: GITHUB_TOKEN environment variable is required');
   process.exit(1);
@@ -171,19 +176,19 @@ async function readCheckpoint() {
     if (line.startsWith('**Status:**')) checkpoint.status = line.split('**Status:**')[1].trim();
     if (line.startsWith('**Issue:**')) {
       const issueVal = line.split('**Issue:**')[1].trim().replace('#', '');
-      checkpoint.issue = (issueVal === 'N/A') ? null : issueVal;
+      checkpoint.issue = (issueVal === NA_VALUE) ? null : issueVal;
     }
     if (line.startsWith('**PR:**')) {
       const prVal = line.split('**PR:**')[1].trim().replace('#', '');
-      checkpoint.pr = (prVal === 'N/A') ? null : prVal;
+      checkpoint.pr = (prVal === NA_VALUE) ? null : prVal;
     }
     if (line.startsWith('**Branch:**')) {
       const branchVal = line.split('**Branch:**')[1].trim();
-      checkpoint.branch = (branchVal === 'N/A') ? null : branchVal;
+      checkpoint.branch = (branchVal === NA_VALUE) ? null : branchVal;
     }
     if (line.startsWith('**Current Task:**')) {
       const taskVal = line.split('**Current Task:**')[1].trim();
-      checkpoint.currentTask = (taskVal === 'N/A') ? null : taskVal;
+      checkpoint.currentTask = (taskVal === NA_VALUE) ? null : taskVal;
     }
     if (line.startsWith('**Iteration:**')) {
       const iter = line.split('**Iteration:**')[1].trim().split('/')[0];
@@ -202,13 +207,13 @@ async function writeCheckpoint(checkpoint) {
   const content = `# Orchestrator Checkpoint
 
 **Status:** ${checkpoint.status}
-**Issue:** ${checkpoint.issue ? '#' + checkpoint.issue : 'N/A'}
-**PR:** ${checkpoint.pr ? '#' + checkpoint.pr : 'N/A'}
-**Branch:** ${checkpoint.branch || 'N/A'}
-**Current Task:** ${checkpoint.currentTask || 'N/A'}
-**Iteration:** ${checkpoint.iteration}/5
+**Issue:** ${checkpoint.issue ? '#' + checkpoint.issue : NA_VALUE}
+**PR:** ${checkpoint.pr ? '#' + checkpoint.pr : NA_VALUE}
+**Branch:** ${checkpoint.branch || NA_VALUE}
+**Current Task:** ${checkpoint.currentTask || NA_VALUE}
+**Iteration:** ${checkpoint.iteration}/${MAX_ITERATIONS}
 **Last Check:** ${checkpoint.lastCheck || 'Never'}
-**Last Check Status:** ${checkpoint.lastCheckStatus || 'N/A'}
+**Last Check Status:** ${checkpoint.lastCheckStatus || NA_VALUE}
 **Previous Check Failures:** ${checkpoint.failures}
 
 ## History
@@ -497,7 +502,7 @@ async function transitionFixingToNeedsReview(pr) {
   checkpoint.iteration += 1;
   
   // Check iteration limit
-  if (checkpoint.iteration > 5) {
+  if (checkpoint.iteration > MAX_ITERATIONS) {
     console.log('⚠️  Iteration limit exceeded (5). Moving to BLOCKED.');
     return await transitionToBlocked(pr, 'Iteration limit exceeded (5)');
   }
@@ -510,7 +515,7 @@ async function transitionFixingToNeedsReview(pr) {
     
     // Track failures
     checkpoint.failures += 1;
-    if (checkpoint.failures >= 2) {
+    if (checkpoint.failures >= MAX_CHECK_FAILURES) {
       console.log('⚠️  Too many check failures (2). Moving to BLOCKED.');
       return await transitionToBlocked(pr, 'Checks failed 2 times');
     }
@@ -587,37 +592,39 @@ async function transitionPassedToMerged(pr) {
   
   const checkpoint = await readCheckpoint();
   
+  // Fetch issue details BEFORE closing (for follow-up creation)
+  const issueNumber = checkpoint.issue;
+  let issueDetails = null;
+
+  if (issueNumber && issueNumber !== NA_VALUE) {
+    issueDetails = await githubAPI(`/repos/${owner}/${repo}/issues/${issueNumber}`);
+  }
+
   // Merge PR (squash)
   try {
     await githubAPI(`/repos/${owner}/${repo}/pulls/${pr.number}/merge`, 'PUT', {
       merge_method: 'squash'
     });
-    
+
     console.log('✅ PR merged successfully');
   } catch (err) {
     console.error('❌ Failed to merge PR:', err.message);
     return false;
   }
-  
+
   // Close issue
-  const issueNumber = checkpoint.issue;
-  if (issueNumber && issueNumber !== 'N/A') {
+  if (issueNumber && issueNumber !== NA_VALUE) {
     await githubAPI(`/repos/${owner}/${repo}/issues/${issueNumber}`, 'PATCH', {
       state: 'closed'
     });
     console.log(`✅ Issue #${issueNumber} closed`);
   }
-  
+
   // Check for remaining tasks and create follow-up issue
   const queue = await readTodoQueue();
-  if (queue.tasks.length > 0) {
-    const issue = await githubAPI(`/repos/${owner}/${repo}/issues/${issueNumber}`);
-
-    if (!issue) {
-      console.log('⚠️  Could not fetch original issue for follow-up creation.');
-    } else {
-      try {
-        const followupBody = `# Follow-up: ${issue.title}
+  if (queue.tasks.length > 0 && issueDetails) {
+    try {
+      const followupBody = `# Follow-up: ${issueDetails.title}
 
 Fortsetzung von #${issueNumber}
 
@@ -630,17 +637,16 @@ Original Issue: #${issueNumber}
 ---
 *Automatisch erstellt durch Orchestrator nach erfolgreichem Merge von #${pr.number}*`;
 
-        const newIssue = await githubAPI(`/repos/${owner}/${repo}/issues`, 'POST', {
-          title: `Follow-up: ${issue.title}`,
-          body: followupBody,
-          labels: [ORCHESTRATOR_ENABLED, ORCHESTRATOR_RUN, STATE_LABELS.QUEUED]
-        });
+      const newIssue = await githubAPI(`/repos/${owner}/${repo}/issues`, 'POST', {
+        title: `Follow-up: ${issueDetails.title}`,
+        body: followupBody,
+        labels: [ORCHESTRATOR_ENABLED, ORCHESTRATOR_RUN, STATE_LABELS.QUEUED]
+      });
 
-        console.log(`✅ Follow-up issue created: #${newIssue.number}`);
-      } catch (err) {
-        console.error('⚠️  Failed to create follow-up issue:', err.message);
-        // Don't fail the merge transition if follow-up creation fails
-      }
+      console.log(`✅ Follow-up issue created: #${newIssue.number}`);
+    } catch (err) {
+      console.error('⚠️  Failed to create follow-up issue:', err.message);
+      // Don't fail the merge transition if follow-up creation fails
     }
   }
   
@@ -771,11 +777,15 @@ async function performTransition() {
     case 'RUNNING':
       // Check if PR exists
       const checkpoint = await readCheckpoint();
-      const pr = await findPRForBranch(checkpoint.branch);
-      if (pr) {
-        transitioned = await transitionRunningToNeedsReview(workItem, pr);
+      if (checkpoint.branch && checkpoint.branch !== NA_VALUE) {
+        const pr = await findPRForBranch(checkpoint.branch);
+        if (pr) {
+          transitioned = await transitionRunningToNeedsReview(workItem, pr);
+        } else {
+          console.log('ℹ️  Waiting for PR to be created. Staying in RUNNING state.');
+        }
       } else {
-        console.log('ℹ️  Waiting for PR to be created. Staying in RUNNING state.');
+        console.log('⚠️  No branch in checkpoint. Cannot check for PR.');
       }
       break;
       

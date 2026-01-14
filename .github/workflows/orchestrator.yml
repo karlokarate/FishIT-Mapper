@@ -21,8 +21,8 @@ on:
         required: false
         type: number
   schedule:
-    # Run every 30 minutes
-    - cron: '*/30 * * * *'
+    # Run every hour (adjust as needed for your repository's activity level)
+    - cron: '0 * * * *'
 
 permissions:
   contents: write
@@ -90,7 +90,7 @@ jobs:
         if: steps.check_enabled.outputs.enabled != 'true'
         run: |
           echo "Orchestrator is not enabled. Skipping."
-          echo "To enable: add 'orchestrator:enabled' label to an issue/PR or create 'codex/ORCHESTRATOR_ENABLED' file"
+          echo "To enable: add 'orchestrator:enabled' label to an issue or PR"
           exit 0
 
       - name: Determine Target

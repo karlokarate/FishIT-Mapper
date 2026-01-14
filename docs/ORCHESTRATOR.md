@@ -395,9 +395,9 @@ Orchestrator-Workflow benötigt:
 ✅ **Kostenlos**: Nur GitHub Actions (Free Tier)
 
 ### Limits
-⚠️ Max. 5 Fix-Iterationen pro Task
-⚠️ Max. 2 Check-Failures mit gleicher Root Cause
-⚠️ Workflow läuft max. alle 30 Minuten (Schedule - änderbar in Zeile 24-25 von `.github/workflows/orchestrator.yml`)
+⚠️ Max. 5 Fix-Iterationen pro Task (konfigurierbar in `transition.mjs`: `MAX_ITERATIONS`)
+⚠️ Max. 2 Check-Failures mit gleicher Root Cause (konfigurierbar in `transition.mjs`: `MAX_CHECK_FAILURES`)
+⚠️ Workflow läuft stündlich (Schedule - änderbar in Zeile 24 von `.github/workflows/orchestrator.yml`)
 ⚠️ Keine parallele Verarbeitung mehrerer Issues (sequentiell)
 
 ## Workflow-Trigger
