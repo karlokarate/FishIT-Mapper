@@ -5,7 +5,13 @@ plugins {
 }
 
 kotlin {
-    androidTarget()
+    androidTarget {
+        compilations.all {
+            kotlinOptions {
+                jvmTarget = "17"
+            }
+        }
+    }
 
     sourceSets {
         val commonMain by getting {
@@ -25,6 +31,11 @@ android {
 
     defaultConfig {
         minSdk = 26
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 
@@ -46,7 +57,7 @@ val generateFishitContract = tasks.register<JavaExec>("generateFishitContract") 
     classpath = codegenClasspath
     mainClass.set("dev.fishit.mapper.codegen.MainKt")
     args(
-        "--schema", "${'$'}{rootProject.projectDir}/schema/contract.schema.json",
+        "--schema", "${rootProject.projectDir}/schema/contract.schema.json",
         "--out", generatedDir.get().asFile.absolutePath
     )
 }
