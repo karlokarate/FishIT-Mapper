@@ -35,19 +35,19 @@ permissions:
 jobs:
   orchestrate:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      
+
       - name: Check Orchestrator Enabled
         id: check_enabled
         uses: actions/github-script@v7
@@ -57,14 +57,14 @@ jobs:
             // Check for orchestrator:enabled label on any issue/PR
             // or check for codex/ORCHESTRATOR_ENABLED file
             const fs = require('fs');
-            
+
             // Check file flag first
             if (fs.existsSync('codex/ORCHESTRATOR_ENABLED')) {
               console.log('✅ Orchestrator enabled via file flag');
               core.setOutput('enabled', 'true');
               return true;
             }
-            
+
             // Check for orchestrator:enabled label on any open issue or PR
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -73,24 +73,24 @@ jobs:
               labels: 'orchestrator:enabled',
               per_page: 1
             });
-            
+
             if (issues.data.length > 0) {
               console.log('✅ Orchestrator enabled via label on issue/PR');
               core.setOutput('enabled', 'true');
               return true;
             }
-            
+
             console.log('ℹ️  Orchestrator not enabled');
             core.setOutput('enabled', 'false');
             return false;
-      
+
       - name: Skip if not enabled
         if: steps.check_enabled.outputs.enabled != 'true'
         run: |
           echo "Orchestrator is not enabled. Skipping."
           echo "To enable: add 'orchestrator:enabled' label to an issue/PR or create 'codex/ORCHESTRATOR_ENABLED' file"
           exit 0
-      
+
       - name: Determine Target
         id: target
         run: |
@@ -112,7 +112,7 @@ jobs:
             echo "target_type=auto" >> $GITHUB_OUTPUT
             echo "target_number=" >> $GITHUB_OUTPUT
           fi
-      
+
       - name: Run Orchestrator Transition
         id: transition
         env:
@@ -120,27 +120,27 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           echo "🚀 Running orchestrator transition script..."
-          
+
           # Build command
           CMD="node scripts/orchestrator/transition.mjs"
-          
+
           if [ "${{ steps.target.outputs.target_type }}" == "issue" ]; then
             CMD="$CMD --issue ${{ steps.target.outputs.target_number }}"
           elif [ "${{ steps.target.outputs.target_type }}" == "pr" ]; then
             CMD="$CMD --pr ${{ steps.target.outputs.target_number }}"
           fi
-          
+
           # Run transition script
           $CMD
-          
+
           echo "✅ Transition script completed"
-      
+
       - name: Commit Checkpoint Updates
         id: commit
         run: |
           git config --global user.name "GitHub Actions Orchestrator"
           git config --global user.email "orchestrator@github.com"
-          
+
           # Check for changes to checkpoint files
           if [[ -n $(git status -s codex/) ]]; then
             git add codex/
@@ -152,7 +152,7 @@ jobs:
             echo "committed=false" >> $GITHUB_OUTPUT
             echo "ℹ️  No checkpoint changes to commit"
           fi
-      
+
       - name: Create Summary
         if: always()
         run: |
@@ -174,28 +174,28 @@ jobs:
     runs-on: ubuntu-latest
     needs: orchestrate
     if: needs.orchestrate.outputs.committed == 'true'
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-      
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
           cache: 'gradle'
-      
+
       - name: Generate Contract
         run: |
           echo "Generating FishIT contract..."
           ./gradlew :shared:contract:generateFishitContract --no-daemon
-      
+
       - name: Compile Debug Kotlin
         run: |
           echo "Compiling Android app (debug)..."
           ./gradlew :androidApp:compileDebugKotlin --no-daemon
-      
+
       - name: Report Build Status
         if: always()
         uses: actions/github-script@v7
@@ -203,9 +203,9 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const buildStatus = '${{ job.status }}' === 'success' ? 'success' : 'failure';
-            const description = buildStatus === 'success' 
-              ? 'Build verification passed' 
+            const description = buildStatus === 'success'
+              ? 'Build verification passed'
               : 'Build verification failed';
-            
+
             console.log(`Build status: ${buildStatus}`);
             console.log(`Description: ${description}`);

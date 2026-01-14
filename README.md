@@ -40,6 +40,43 @@ Siehe [scripts/README.md](scripts/README.md) für Details und Troubleshooting.
 - `:shared:engine` — in-memory mapping engine + bundle builder helpers
 - `:androidApp` — Compose UI + WebView recorder + local file storage + share/export
 
+## GitHub Actions Orchestrator
+
+This repository includes a **GitHub Actions Orchestrator** for automated, time-safe issue and PR management.
+
+### Quick Start
+
+1. **Create an issue** with tasks listed in the body
+2. **Add labels**: `orchestrator:enabled` and `orchestrator:run`
+3. The orchestrator will automatically:
+   - Create a working branch
+   - Guide agents through each task
+   - Request reviews
+   - Handle fix iterations
+   - Merge when approved
+   - Create follow-up issues for remaining tasks
+
+### Features
+
+✅ **Time-safe**: Splits work into batches, persists progress  
+✅ **GitHub-native**: No external services required  
+✅ **State machine**: Deterministic transitions (Queued → Running → Needs-review → Passed → Merged)  
+✅ **Free**: Runs on GitHub Actions free tier  
+
+### Documentation
+
+See [docs/ORCHESTRATOR.md](docs/ORCHESTRATOR.md) for:
+- Complete state machine documentation
+- Label conventions
+- Troubleshooting guide
+- Integration with existing workflows
+
+### Manual Trigger
+
+Run the orchestrator manually via GitHub Actions:
+- Go to **Actions** → **GitHub Actions Orchestrator**
+- Click **Run workflow**
+
 ## Updating versions
 
 Versions are pinned in `gradle/libs.versions.toml`. For latest stable versions, run:
