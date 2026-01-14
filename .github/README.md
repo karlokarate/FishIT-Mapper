@@ -10,8 +10,14 @@ Dieser Ordner enthält alle GitHub-spezifischen Konfigurationen für optimale Nu
 │   ├── agents.json          # Agent-Berechtigungen und -Konfiguration
 │   └── mcp.json            # MCP Server Einstellungen für Long Context
 ├── workflows/
-│   └── copilot-permissions.yml  # Workflow-Permissions für Copilot
+│   ├── copilot-permissions.yml   # Workflow-Permissions für Copilot
+│   ├── codex-agent.yml          # OpenAI Codex Agent (@codex)
+│   ├── copilot-agent.yml        # GitHub Copilot Agent (@copilot)
+│   ├── auto-review-request.yml  # Automatische Review-Anfragen
+│   ├── agent-pr-ready.yml       # PR Ready nach Agent-Arbeit
+│   └── prepare-fix-task.yml     # Fix-Tasks nach Reviews
 ├── copilot-instructions.md # Repository-weite Copilot-Anweisungen
+├── CODEOWNERS             # Automatische Review-Requests
 └── settings.yml           # Repository-Settings (für probot/settings)
 ```
 
@@ -38,19 +44,56 @@ Definiert Agent-Berechtigungen und -Fähigkeiten:
 - `copilot-code-review`: Spezialisiert auf Code-Reviews
 - `copilot-test-generator`: Automatische Test-Generierung
 - `copilot-documentation`: Dokumentations-Updates
+- `codex-agent`: OpenAI Codex Agent mit GPT-4 Integration
 
 ### `copilot/mcp.json`
 MCP (Model Context Protocol) Server Konfiguration:
 - **Long Context**: Bis zu 128.000 Tokens
 - **Intelligentes Chunking**: Semantik-bewusste Kontextaufteilung
-- **Multiple Server**: GitHub, Filesystem, Gradle, Kotlin, Android
+- **Multiple Server**: GitHub, Filesystem, Gradle, Kotlin, Android, Codex
 - **Erweiterte Features**:
   - Code Intelligence (Go to Definition, Find References, etc.)
   - Refactoring-Unterstützung
   - Code-Generierung
   - Kontinuierliche Analyse
+  - OpenAI Codex Integration
 
 ## 🔧 Workflows
+
+### Agent-Workflows (Neu! 🎉)
+
+#### `workflows/codex-agent.yml` - OpenAI Codex Agent
+Reagiert auf `@codex` Mentions in PR-Kommentaren:
+- **Review**: `@codex review` - Detailliertes Code-Review mit GPT-4
+- **Fix**: `@codex fix` - Intelligente Bug-Fix-Vorschläge
+- **Explain**: `@codex explain` - Tiefgehende Code-Erklärungen
+- **Test**: `@codex test` - Automatische Test-Generierung
+
+#### `workflows/copilot-agent.yml` - GitHub Copilot Agent
+Reagiert auf `@copilot` Mentions in PR-Kommentaren:
+- **Review**: `@copilot review` - Code-Review mit Build-Checks
+- **Fix**: `@copilot fix` - Automatische Code-Fixes
+- **Explain**: `@copilot explain` - Code-Änderungs-Erklärung
+- **Test**: `@copilot test` - Test-Vorschläge
+
+#### `workflows/auto-review-request.yml` - Automatische Review-Anfragen
+- Wird automatisch bei PR-Erstellung ausgelöst
+- Sendet Review-Anfragen an @copilot und @codex
+- Fügt Labels hinzu: `review:requested`
+- Erstellt PR-Zusammenfassung
+
+#### `workflows/agent-pr-ready.yml` - PR Ready Status
+- Wird nach erfolgreicher Agent-Arbeit ausgelöst
+- Setzt Draft-PRs auf "Ready for Review"
+- Aktualisiert Status-Checks und Labels
+
+#### `workflows/prepare-fix-task.yml` - Fix-Task Vorbereitung
+- Wird nach jedem Review ausgelöst
+- Sammelt alle Review-Findings
+- Erstellt strukturierte Fix-Tasks mit Aktions-Buttons
+- Fügt Label `fix-needed` hinzu
+
+**📚 Weitere Details:** Siehe [AGENT_SETUP.md](../AGENT_SETUP.md) und [AGENT_QUICK_REFERENCE.md](../AGENT_QUICK_REFERENCE.md)
 
 ### `workflows/copilot-permissions.yml`
 Definiert Berechtigungen für GitHub Actions Workflows:
@@ -68,7 +111,13 @@ Definiert Berechtigungen für GitHub Actions Workflows:
 4. **copilot-docs-update**: Dokumentations-Updates
 5. **copilot-workflow-summary**: Zusammenfassung aller Checks
 
-## ⚙️ Repository Settings
+### Repository Settings
+
+### `CODEOWNERS`
+Definiert automatische Review-Requests:
+- `@copilot` als Standard-Reviewer für alle Dateien
+- `@codex` für GitHub Workflows und Schema-Dateien
+- Automatische Review-Anfragen bei PR-Erstellung
 
 ### `settings.yml`
 Konfiguration für die [probot/settings](https://github.com/probot/settings) App:
@@ -94,7 +143,20 @@ Konfiguration für die [probot/settings](https://github.com/probot/settings) App
 Workflows werden automatisch ausgelöst bei:
 - Pull Request erstellen/aktualisieren
 - Push zu `main` oder `develop`
+- `@copilot` oder `@codex` Mention in Kommentaren
+- Nach Reviews (für Fix-Task Vorbereitung)
 - Manuell via `workflow_dispatch`
+
+### Agents verwenden
+In jedem PR-Kommentar können folgende Kommandos verwendet werden:
+```
+@copilot review    # Code-Review durchführen
+@copilot fix       # Automatische Fixes anwenden
+@codex explain     # Code erklären
+@codex test        # Tests generieren
+```
+
+Siehe [AGENT_QUICK_REFERENCE.md](../AGENT_QUICK_REFERENCE.md) für alle Kommandos.
 
 ## 📚 Best Practices
 

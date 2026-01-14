@@ -110,6 +110,44 @@
         "manifest_validation": true,
         "layout_inspection": true
       }
+    },
+    
+    "codex": {
+      "type": "external_ai",
+      "enabled": true,
+      "settings": {
+        "provider": "openai",
+        "model": "gpt-4",
+        "endpoint": "https://api.openai.com/v1",
+        "authentication": "api_key",
+        "api_key_secret": "OPENAI_API_KEY",
+        "temperature": 0.3,
+        "max_tokens": 2000,
+        "enable_streaming": false,
+        "timeout": 60000
+      },
+      "features": {
+        "code_review": true,
+        "bug_fixing": true,
+        "code_explanation": true,
+        "test_generation": true,
+        "refactoring_suggestions": true,
+        "security_analysis": true,
+        "performance_optimization": true
+      },
+      "capabilities": {
+        "languages": ["kotlin", "java", "javascript", "typescript", "json"],
+        "frameworks": ["android", "compose", "gradle"],
+        "analysis_depth": "deep",
+        "context_awareness": "high",
+        "multi_file_analysis": true
+      },
+      "integration": {
+        "github_actions": true,
+        "pull_request_comments": true,
+        "issue_tracking": true,
+        "workflow_dispatch": true
+      }
     }
   },
   

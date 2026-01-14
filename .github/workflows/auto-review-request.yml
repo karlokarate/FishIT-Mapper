@@ -1,0 +1,176 @@
+name: Auto Review Request
+
+# Dieser Workflow fordert automatisch Reviews von @copilot und @codex an,
+# wenn ein neuer Pull Request geöffnet oder auf "Ready for Review" gesetzt wird
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR-Nummer'
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  request-reviews:
+    runs-on: ubuntu-latest
+    # Skip wenn PR ein Draft ist
+    if: github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Get PR Number
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "pr_number=${{ inputs.pr_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Add review:requested Label
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: ${{ steps.pr.outputs.pr_number }},
+                labels: ['review:requested']
+              });
+            } catch (error) {
+              // Label existiert möglicherweise noch nicht
+              console.log('Label konnte nicht hinzugefügt werden:', error.message);
+            }
+      
+      - name: Request Copilot Review
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const comment = `## 🤖 Automatische Review-Anfrage
+            
+            Hallo @copilot! 👋
+            
+            Bitte führe ein Code-Review für diesen Pull Request durch:
+            - Prüfe Code-Qualität und Best Practices
+            - Identifiziere potenzielle Bugs
+            - Validiere Kotlin/Android Konventionen
+            - Gib konstruktives Feedback
+            
+            Du kannst auch spezifische Aufgaben ausführen:
+            - \`@copilot review\` - Vollständiges Code-Review
+            - \`@copilot fix\` - Automatische Fixes anwenden
+            - \`@copilot test\` - Test-Vorschläge generieren
+            - \`@copilot explain\` - Änderungen erklären
+            
+            ---
+            *Automatisch angefordert durch Auto-Review-Workflow*
+            `;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr.outputs.pr_number }},
+              body: comment
+            });
+      
+      - name: Prepare Codex Review Trigger
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const comment = `## 🤖 Codex Review bereit
+            
+            Hallo @codex! 👋
+            
+            Dieser PR ist bereit für dein Review. Du kannst folgende Aktionen ausführen:
+            - \`@codex review\` - Detailliertes Code-Review mit OpenAI
+            - \`@codex fix\` - Intelligente Fixes vorschlagen
+            - \`@codex test\` - Test-Cases generieren
+            - \`@codex explain\` - Tiefgehende Code-Erklärung
+            
+            ---
+            *Automatisch vorbereitet durch Auto-Review-Workflow*
+            `;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr.outputs.pr_number }},
+              body: comment
+            });
+      
+      - name: Add PR Summary
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: ${{ steps.pr.outputs.pr_number }}
+            });
+            
+            const files = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: ${{ steps.pr.outputs.pr_number }}
+            });
+            
+            const summary = `## 📊 PR-Zusammenfassung
+            
+            **Titel:** ${pr.data.title}
+            **Autor:** @${pr.data.user.login}
+            **Branch:** \`${pr.data.head.ref}\` → \`${pr.data.base.ref}\`
+            
+            ### Statistiken:
+            - **Geänderte Dateien:** ${files.data.length}
+            - **Additions:** +${pr.data.additions}
+            - **Deletions:** -${pr.data.deletions}
+            - **Commits:** ${pr.data.commits}
+            
+            ### Status:
+            - ✅ Review-Anfragen gesendet
+            - 🤖 Agents sind bereit
+            - 🔍 Warte auf automatisches Review
+            
+            ---
+            *Generiert durch Auto-Review-Workflow*
+            `;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ steps.pr.outputs.pr_number }},
+              body: summary
+            });
+      
+      - name: Update PR Status
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Setze Status Check
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: ${{ steps.pr.outputs.pr_number }}
+            });
+            
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: pr.data.head.sha,
+              state: 'pending',
+              context: 'Auto Review',
+              description: 'Warten auf Agent-Reviews'
+            });

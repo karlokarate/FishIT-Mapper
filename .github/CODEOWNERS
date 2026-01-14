@@ -1,0 +1,29 @@
+# CODEOWNERS - Automatische Review-Requests für FishIT-Mapper
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Standardmäßig automatische Reviews für alle Dateien
+* @copilot @codex
+
+# GitHub Workflows und Actions
+/.github/ @copilot @codex
+
+# Kotlin Code
+*.kt @copilot @codex
+*.kts @Copilot @codex
+
+# Build Configuration
+build.gradle.kts @copilot
+settings.gradle.kts @copilot
+gradle.properties @copilot
+
+# Schema und Contract
+/schema/ @copilot @codex
+/shared/contract/ @copilot
+
+# Dokumentation
+*.md @copilot @codex
+/docs/ @copilot @codex
+
+# Android spezifische Dateien
+/androidApp/ @copilot
+AndroidManifest.xml @copilot
