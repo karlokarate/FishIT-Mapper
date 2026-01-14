@@ -30,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.fishit.mapper.android.webview.JavaScriptBridge
+import dev.fishit.mapper.android.webview.TrackingScript
 import dev.fishit.mapper.contract.ConsoleLevel
 import dev.fishit.mapper.contract.ConsoleMessageEvent
 import dev.fishit.mapper.contract.NavigationEvent
@@ -134,6 +136,14 @@ fun BrowserScreen(
                             mainHandler.post { onRecorderEventState(event) }
                         }
 
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            super.onPageFinished(view, url)
+                            // Inject tracking script if recording is active
+                            if (recordingState && view != null) {
+                                view.evaluateJavascript(TrackingScript.getScript(), null)
+                            }
+                        }
+
                         override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): android.webkit.WebResourceResponse? {
                             if (!recordingState) return super.shouldInterceptRequest(view, request)
                             val r = request ?: return super.shouldInterceptRequest(view, request)
@@ -183,6 +193,17 @@ fun BrowserScreen(
                             return true
                         }
                     }
+
+                    // Add JavaScript bridge for user action tracking
+                    addJavascriptInterface(
+                        JavaScriptBridge { event ->
+                            // Only process events if recording is active
+                            if (recordingState) {
+                                mainHandler.post { onRecorderEventState(event) }
+                            }
+                        },
+                        "FishITMapper"
+                    )
 
                     loadUrl(urlText.trim())
                     webViewHolder[0] = this
