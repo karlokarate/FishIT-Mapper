@@ -81,7 +81,7 @@
       "enabled": true,
       "settings": {
         "language": "kotlin",
-        "kotlin_version": "1.9.21",
+        "kotlin_version": "1.9.22",
         "enable_analysis": true,
         "enable_refactoring": true,
         "enable_code_completion": true
