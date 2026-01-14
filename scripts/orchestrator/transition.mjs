@@ -796,7 +796,9 @@ async function performTransition() {
               } catch (refreshErr) {
                 console.error('⚠️  Failed to refresh PR data after draft conversion:', refreshErr.message);
                 console.log('ℹ️  Attempting transition with existing PR data...');
-                // Use original PR data but update draft flag
+                // Fallback: Use original PR data but update draft flag
+                // This is acceptable because the API call succeeded but the refresh failed
+                // The PR is now ready for review on GitHub, we just don't have updated data
                 const updatedPR = { ...pr, draft: false };
                 transitioned = await transitionRunningToNeedsReview(workItem, updatedPR);
               }
