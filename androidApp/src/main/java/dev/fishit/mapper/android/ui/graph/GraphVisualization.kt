@@ -11,9 +11,19 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import dev.fishit.mapper.contract.*
 import kotlinx.coroutines.delay
 import kotlin.math.sqrt
+
+// Constants
+private const val MAX_LABEL_LENGTH = 20
+private const val REPULSION_STRENGTH = 5000f
+private const val INTERACTION_RANGE = 500f
+private const val ATTRACTION_STRENGTH = 0.1f
+private const val INITIAL_DAMPING = 0.9f
+private const val DAMPING_DECAY = 0.005f
 
 /**
  * Visual graph representation using Compose Canvas with force-directed layout.
@@ -22,13 +32,12 @@ import kotlin.math.sqrt
  * - Force-directed layout for automatic node positioning
  * - Zoom and pan for navigation
  * - Color-coded nodes by NodeKind
- * - Click on nodes to show details
+ * - Spatial grid optimization for better performance with large graphs
  */
 @Composable
 fun GraphVisualization(
     graph: MapGraph,
-    modifier: Modifier = Modifier,
-    onNodeClick: ((MapNode) -> Unit)? = null
+    modifier: Modifier = Modifier
 ) {
     var nodePositions by remember(graph) { 
         mutableStateOf(initializeNodePositions(graph.nodes)) 
@@ -56,6 +65,9 @@ fun GraphVisualization(
     Canvas(
         modifier = modifier
             .fillMaxSize()
+            .semantics {
+                contentDescription = "Graph visualization with ${graph.nodes.size} nodes and ${graph.edges.size} edges"
+            }
             .pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, _ ->
                     scale = (scale * zoom).coerceIn(0.5f, 3f)
@@ -105,7 +117,7 @@ fun GraphVisualization(
                     isAntiAlias = true
                 }
                 
-                val label = node.title?.take(20) ?: node.url.takeLast(20)
+                val label = node.title?.take(MAX_LABEL_LENGTH) ?: node.url.takeLast(MAX_LABEL_LENGTH)
                 canvas.nativeCanvas.drawText(
                     label,
                     transformedPos.x,
@@ -131,12 +143,14 @@ private fun initializeNodePositions(nodes: List<MapNode>): Map<NodeId, Offset> {
 }
 
 /**
- * Calculate one iteration of force-directed layout
+ * Calculate one iteration of force-directed layout with spatial grid optimization.
  * 
  * Forces:
  * - Repulsion: All nodes repel each other (prevents overlapping)
  * - Attraction: Connected nodes attract each other (groups related nodes)
  * - Damping: Reduces velocity over time (stabilizes layout)
+ * 
+ * Uses spatial grid to reduce repulsion calculation from O(n²) to approximately O(n).
  */
 private fun calculateForceLayout(
     positions: Map<NodeId, Offset>,
@@ -152,34 +166,54 @@ private fun calculateForceLayout(
         forces[node.id] = Offset.Zero
     }
     
-    // Repulsion force between all nodes
-    val repulsionStrength = 5000f
+    // Build spatial grid for efficient neighbor queries
+    val cellSize = INTERACTION_RANGE
+    val spatialGrid = mutableMapOf<Pair<Int, Int>, MutableList<MapNode>>()
+    nodes.forEach { node ->
+        val pos = positions[node.id] ?: Offset.Zero
+        val cellX = (pos.x / cellSize).toInt()
+        val cellY = (pos.y / cellSize).toInt()
+        val key = cellX to cellY
+        spatialGrid.getOrPut(key) { mutableListOf() }.add(node)
+    }
+    
+    // Repulsion force - only check nodes in nearby cells
     nodes.forEach { nodeA ->
-        nodes.forEach { nodeB ->
-            if (nodeA.id != nodeB.id) {
-                val posA = positions[nodeA.id] ?: Offset.Zero
-                val posB = positions[nodeB.id] ?: Offset.Zero
-                val delta = posA - posB
-                val distance = sqrt(delta.x * delta.x + delta.y * delta.y).coerceAtLeast(1f)
+        val posA = positions[nodeA.id] ?: Offset.Zero
+        val cellX = (posA.x / cellSize).toInt()
+        val cellY = (posA.y / cellSize).toInt()
+        
+        // Check node and neighboring cells (9 cells total)
+        for (dx in -1..1) {
+            for (dy in -1..1) {
+                val neighborKey = (cellX + dx) to (cellY + dy)
+                val neighborNodes = spatialGrid[neighborKey] ?: continue
                 
-                if (distance < 500f) { // Only apply within range
-                    val force = repulsionStrength / (distance * distance)
-                    val direction = delta / distance
-                    forces[nodeA.id] = forces[nodeA.id]!! + (direction * force)
+                neighborNodes.forEach { nodeB ->
+                    if (nodeA.id != nodeB.id) {
+                        val posB = positions[nodeB.id] ?: Offset.Zero
+                        val delta = posA - posB
+                        val distance = sqrt(delta.x * delta.x + delta.y * delta.y).coerceAtLeast(1f)
+                        
+                        if (distance < INTERACTION_RANGE) {
+                            val force = REPULSION_STRENGTH / (distance * distance)
+                            val direction = delta / distance
+                            forces[nodeA.id] = forces[nodeA.id]!! + (direction * force)
+                        }
+                    }
                 }
             }
         }
     }
     
     // Attraction force between connected nodes
-    val attractionStrength = 0.1f
     edges.forEach { edge ->
         val posFrom = positions[edge.from] ?: return@forEach
         val posTo = positions[edge.to] ?: return@forEach
         val delta = posTo - posFrom
         val distance = sqrt(delta.x * delta.x + delta.y * delta.y).coerceAtLeast(1f)
         
-        val force = attractionStrength * distance
+        val force = ATTRACTION_STRENGTH * distance
         val direction = delta / distance
         
         forces[edge.from] = forces[edge.from]!! + (direction * force)
@@ -187,7 +221,7 @@ private fun calculateForceLayout(
     }
     
     // Apply forces with damping
-    val damping = 0.9f - (iteration * 0.005f).coerceAtMost(0.5f)
+    val damping = INITIAL_DAMPING - (iteration * DAMPING_DECAY).coerceAtMost(0.5f)
     nodes.forEach { node ->
         val pos = positions[node.id] ?: Offset.Zero
         val force = forces[node.id] ?: Offset.Zero
@@ -219,9 +253,11 @@ private fun transformPosition(
 private fun getNodeColor(kind: NodeKind): Color {
     return when (kind) {
         NodeKind.Page -> Color(0xFF4CAF50) // Green
-        NodeKind.Resource -> Color(0xFF2196F3) // Blue
-        NodeKind.Api -> Color(0xFFFF9800) // Orange
-        NodeKind.External -> Color(0xFF9C27B0) // Purple
+        NodeKind.ApiEndpoint -> Color(0xFFFF9800) // Orange
+        NodeKind.Asset -> Color(0xFF2196F3) // Blue
+        NodeKind.Document -> Color(0xFF9C27B0) // Purple
+        NodeKind.Form -> Color(0xFF03A9F4) // Light Blue
+        NodeKind.Error -> Color(0xFFFF5722) // Red
         NodeKind.Unknown -> Color(0xFF757575) // Gray
     }
 }
@@ -231,10 +267,13 @@ private fun getNodeColor(kind: NodeKind): Color {
  */
 private fun getEdgeColor(kind: EdgeKind): Color {
     return when (kind) {
-        EdgeKind.Navigation -> Color(0xFF000000) // Black
         EdgeKind.Link -> Color(0xFF666666) // Dark Gray
         EdgeKind.Redirect -> Color(0xFFFF5722) // Red
         EdgeKind.Fetch -> Color(0xFF03A9F4) // Light Blue
-        EdgeKind.Reference -> Color(0xFFCDDC39) // Lime
+        EdgeKind.Xhr -> Color(0xFF0288D1) // Darker Blue
+        EdgeKind.FormSubmit -> Color(0xFF000000) // Black
+        EdgeKind.AssetLoad -> Color(0xFF8BC34A) // Light Green
+        EdgeKind.Embed -> Color(0xFFCDDC39) // Lime
+        EdgeKind.Unknown -> Color(0xFF9E9E9E) // Gray
     }
 }

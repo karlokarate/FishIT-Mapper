@@ -53,8 +53,8 @@ Alle kritischen Features der Priority 1 und Priority 2 sind vollständig impleme
     - Zoom-Bereich: 0.5x bis 3x
     - Freie Pan-Navigation
   - **Farbcodierung nach Typ**
-    - Nodes: Page (🟢), Resource (🔵), API (🟠), External (🟣), Unknown (⚫)
-    - Edges: Navigation (⚫), Link (⚫), Redirect (🔴), Fetch (🔵), Reference (🟡)
+    - Nodes: Page (🟢), ApiEndpoint (🟠), Asset (🔵), Document (🟣), Form (🔵), Error (🔴), Unknown (⚫)
+    - Edges: Link (⚫), Redirect (🔴), Fetch (🔵), Xhr (🔵), FormSubmit (⚫), AssetLoad (🟢), Embed (🟡), Unknown (⚫)
   - **View Mode Toggle**
     - Icon-Button zum Wechseln zwischen Listen- und Visualisierungsansicht
     - Filter funktionieren in beiden Modi
