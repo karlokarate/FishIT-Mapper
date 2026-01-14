@@ -103,16 +103,15 @@ class AndroidProjectStore(
             ?: emptyList()
     }
 
-    
-suspend fun loadSession(projectId: ProjectId, sessionId: SessionId): RecordingSession? = withContext(Dispatchers.IO) {
-    val file = File(sessionsDir(projectId), "${'$'}{sessionId.value}.json")
-    if (!file.exists()) return@withContext null
-    runCatching {
-        FishitJson.decodeFromString(RecordingSession.serializer(), file.readText(Charsets.UTF_8))
-    }.getOrNull()
-}
+    suspend fun loadSession(projectId: ProjectId, sessionId: SessionId): RecordingSession? = withContext(Dispatchers.IO) {
+        val file = File(sessionsDir(projectId), "${'$'}{sessionId.value}.json")
+        if (!file.exists()) return@withContext null
+        runCatching {
+            FishitJson.decodeFromString(RecordingSession.serializer(), file.readText(Charsets.UTF_8))
+        }.getOrNull()
+    }
 
-suspend fun saveSession(projectId: ProjectId, session: RecordingSession) = withContext(Dispatchers.IO) {
+    suspend fun saveSession(projectId: ProjectId, session: RecordingSession) = withContext(Dispatchers.IO) {
         val dir = sessionsDir(projectId)
         dir.mkdirs()
         val file = File(dir, "${'$'}{session.id.value}.json")
