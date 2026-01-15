@@ -93,7 +93,7 @@ fun BrowserScreen(
                 Text(if (isRecording) "Stop" else "Record")
             }
 
-            Text("Events: ${'$'}{liveEvents.size}")
+            Text("Events: ${liveEvents.size}")
         }
 
         Spacer(Modifier.height(4.dp))
@@ -138,8 +138,8 @@ fun BrowserScreen(
 
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
-                            // Inject tracking script if recording is active
-                            if (recordingState && view != null) {
+                            // Always inject tracking script so it's available when recording starts mid-session
+                            if (view != null) {
                                 view.evaluateJavascript(TrackingScript.getScript(), null)
                             }
                         }
@@ -196,12 +196,12 @@ fun BrowserScreen(
 
                     // Add JavaScript bridge for user action tracking
                     addJavascriptInterface(
-                        JavaScriptBridge { event ->
-                            // Only process events if recording is active
-                            if (recordingState) {
+                        JavaScriptBridge(
+                            isRecording = { recordingState },
+                            onUserAction = { event ->
                                 mainHandler.post { onRecorderEventState(event) }
                             }
-                        },
+                        ),
                         "FishITMapper"
                     )
 

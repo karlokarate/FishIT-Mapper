@@ -85,12 +85,12 @@ object TrackingScript {
                     const formAction = form.action || window.location.href;
                     const formMethod = (form.method || 'GET').toUpperCase();
                     
-                    // Collect field names (NOT values for privacy)
+                    // Collect field names (NOT values for privacy) as JSON array
                     const inputs = form.querySelectorAll('input, select, textarea');
-                    const fieldNames = Array.from(inputs)
+                    const fieldNamesArray = Array.from(inputs)
                         .map(function(input) { return input.name || input.id || 'unnamed'; })
-                        .filter(function(name) { return name !== 'unnamed'; })
-                        .join(',');
+                        .filter(function(name) { return name !== 'unnamed'; });
+                    const fieldNames = JSON.stringify(fieldNamesArray);
                     
                     if (window.FishITMapper && window.FishITMapper.recordFormSubmit) {
                         window.FishITMapper.recordFormSubmit(formAction, formMethod, fieldNames);
@@ -100,9 +100,23 @@ object TrackingScript {
                 }
             }, true);
             
-            // Track field changes (debounced)
+            // Track field changes (debounced with memory management)
             let fieldChangeTimeouts = {};
             const fieldChangeDebounceMs = 500;
+            const MAX_TRACKED_FIELDS = 100; // Limit to prevent unbounded growth
+            
+            // Cleanup old timeouts periodically
+            function cleanupFieldTimeouts() {
+                const keys = Object.keys(fieldChangeTimeouts);
+                if (keys.length > MAX_TRACKED_FIELDS) {
+                    // Remove oldest half of tracked fields
+                    const toRemove = keys.slice(0, Math.floor(keys.length / 2));
+                    toRemove.forEach(function(key) {
+                        clearTimeout(fieldChangeTimeouts[key]);
+                        delete fieldChangeTimeouts[key];
+                    });
+                }
+            }
             
             document.addEventListener('input', function(e) {
                 try {
@@ -111,12 +125,19 @@ object TrackingScript {
                         const fieldName = field.name || field.id || field.type || 'unnamed';
                         const fieldType = field.type || 'text';
                         
+                        // Cleanup if needed
+                        if (Object.keys(fieldChangeTimeouts).length >= MAX_TRACKED_FIELDS) {
+                            cleanupFieldTimeouts();
+                        }
+                        
                         // Debounce per field
                         clearTimeout(fieldChangeTimeouts[fieldName]);
                         fieldChangeTimeouts[fieldName] = setTimeout(function() {
                             if (window.FishITMapper && window.FishITMapper.recordFieldChange) {
                                 window.FishITMapper.recordFieldChange(fieldName, fieldType);
                             }
+                            // Remove timeout after firing
+                            delete fieldChangeTimeouts[fieldName];
                         }, fieldChangeDebounceMs);
                     }
                 } catch (err) {

@@ -55,6 +55,7 @@ android {
 }
 
 dependencies {
+    implementation(projects.shared.contract)
     implementation(projects.shared.engine)
 
     // KotlinX

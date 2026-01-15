@@ -12,6 +12,7 @@ import kotlinx.datetime.Clock
  * back to the native Android app for tracking and analysis.
  */
 class JavaScriptBridge(
+    private val isRecording: () -> Boolean,
     private val onUserAction: (UserActionEvent) -> Unit
 ) {
     
@@ -25,11 +26,16 @@ class JavaScriptBridge(
      */
     @JavascriptInterface
     fun recordClick(targetSelector: String, targetText: String, x: Int, y: Int) {
+        if (!isRecording()) return
+        
+        val sanitizedSelector = sanitizeInput(targetSelector, MAX_SELECTOR_LENGTH)
+        val sanitizedText = sanitizeInput(targetText, MAX_TEXT_LENGTH)
+        
         val event = UserActionEvent(
             id = IdGenerator.newEventId(),
             at = Clock.System.now(),
             action = "click",
-            target = buildTargetString(targetSelector, targetText, mapOf("x" to x.toString(), "y" to y.toString()))
+            target = buildTargetString(sanitizedSelector, sanitizedText, mapOf("x" to x.toString(), "y" to y.toString()))
         )
         onUserAction(event)
     }
@@ -42,6 +48,8 @@ class JavaScriptBridge(
      */
     @JavascriptInterface
     fun recordScroll(scrollY: Int, scrollX: Int) {
+        if (!isRecording()) return
+        
         val event = UserActionEvent(
             id = IdGenerator.newEventId(),
             at = Clock.System.now(),
@@ -56,15 +64,21 @@ class JavaScriptBridge(
      * 
      * @param formAction The form's action URL
      * @param formMethod The form's method (GET/POST)
-     * @param fieldNames Comma-separated list of form field names (NOT values for privacy)
+     * @param fieldNames JSON array of form field names (NOT values for privacy)
      */
     @JavascriptInterface
     fun recordFormSubmit(formAction: String, formMethod: String, fieldNames: String) {
+        if (!isRecording()) return
+        
+        val sanitizedAction = sanitizeInput(formAction, MAX_URL_LENGTH)
+        val sanitizedMethod = sanitizeInput(formMethod, MAX_METHOD_LENGTH)
+        val sanitizedFieldNames = sanitizeInput(fieldNames, MAX_FIELD_NAMES_LENGTH)
+        
         val event = UserActionEvent(
             id = IdGenerator.newEventId(),
             at = Clock.System.now(),
             action = "formSubmit",
-            target = "action=$formAction, method=$formMethod, fields=[$fieldNames]"
+            target = "action=$sanitizedAction, method=$sanitizedMethod, fields=$sanitizedFieldNames"
         )
         onUserAction(event)
     }
@@ -77,11 +91,16 @@ class JavaScriptBridge(
      */
     @JavascriptInterface
     fun recordFieldChange(fieldName: String, fieldType: String) {
+        if (!isRecording()) return
+        
+        val sanitizedFieldName = sanitizeInput(fieldName, MAX_FIELD_NAME_LENGTH)
+        val sanitizedFieldType = sanitizeInput(fieldType, MAX_FIELD_TYPE_LENGTH)
+        
         val event = UserActionEvent(
             id = IdGenerator.newEventId(),
             at = Clock.System.now(),
             action = "fieldChange",
-            target = "field=$fieldName, type=$fieldType"
+            target = "field=$sanitizedFieldName, type=$sanitizedFieldType"
         )
         onUserAction(event)
     }
@@ -93,5 +112,30 @@ class JavaScriptBridge(
         val truncatedText = if (text.length > 100) text.take(97) + "..." else text
         val metaStr = metadata.entries.joinToString(", ") { "${it.key}=${it.value}" }
         return "$selector | $truncatedText | $metaStr"
+    }
+    
+    /**
+     * Sanitizes input by limiting length and removing potentially malicious characters.
+     */
+    private fun sanitizeInput(input: String, maxLength: Int): String {
+        // Limit length
+        val truncated = if (input.length > maxLength) {
+            input.take(maxLength)
+        } else {
+            input
+        }
+        
+        // Remove control characters and null bytes
+        return truncated.replace(Regex("[\\x00-\\x1F\\x7F]"), "")
+    }
+    
+    companion object {
+        private const val MAX_SELECTOR_LENGTH = 500
+        private const val MAX_TEXT_LENGTH = 1000
+        private const val MAX_URL_LENGTH = 2000
+        private const val MAX_METHOD_LENGTH = 10
+        private const val MAX_FIELD_NAMES_LENGTH = 5000
+        private const val MAX_FIELD_NAME_LENGTH = 200
+        private const val MAX_FIELD_TYPE_LENGTH = 50
     }
 }
