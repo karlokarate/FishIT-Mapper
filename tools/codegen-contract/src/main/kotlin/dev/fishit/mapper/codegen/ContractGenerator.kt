@@ -63,6 +63,8 @@
                 generateGraph(),
                 generateRecorder(),
                 generateChains(),
+                generateTimeline(),
+                generateCredentials(),
                 generateExport(),
                 generateContractIndex()
             )
@@ -582,6 +584,147 @@
                 .build()
         }
 
+        private fun generateTimeline(): FileSpec {
+            val eventId = ClassName(pkg, "EventId")
+            val sessionId = ClassName(pkg, "SessionId")
+            val nodeId = ClassName(pkg, "NodeId")
+            val recorderEvent = ClassName(pkg, "RecorderEvent")
+
+            // TimelineEntry - represents a single event in the unified timeline
+            val timelineEntry = TypeSpec.classBuilder("TimelineEntry")
+                .addModifiers(KModifier.DATA)
+                .addAnnotation(serializable)
+                .addKdoc("A single entry in the unified session timeline with correlation metadata.")
+                .primaryConstructor(
+                    FunSpec.constructorBuilder()
+                        .addParameter(valParam("event", recorderEvent))
+                        .addParameter(valParam("correlatedEventId", eventId.copy(nullable = true), CodeBlock.of("null")))
+                        .addParameter(valParam("parentEventId", eventId.copy(nullable = true), CodeBlock.of("null")))
+                        .addParameter(valParam("depth", int, CodeBlock.of("0")))
+                        .build()
+                )
+                .addProperty(dataClassProperty("event", recorderEvent))
+                .addProperty(dataClassProperty("correlatedEventId", eventId.copy(nullable = true)))
+                .addProperty(dataClassProperty("parentEventId", eventId.copy(nullable = true)))
+                .addProperty(dataClassProperty("depth", int))
+                .build()
+
+            // SessionTreeNode - represents a node in the session tree hierarchy
+            val sessionTreeNode = TypeSpec.classBuilder("SessionTreeNode")
+                .addModifiers(KModifier.DATA)
+                .addAnnotation(serializable)
+                .addKdoc("A node in the session tree representing parent-child relationships.")
+                .primaryConstructor(
+                    FunSpec.constructorBuilder()
+                        .addParameter(valParam("nodeId", nodeId))
+                        .addParameter(valParam("url", string))
+                        .addParameter(valParam("title", string.copy(nullable = true), CodeBlock.of("null")))
+                        .addParameter(valParam("parentNodeId", nodeId.copy(nullable = true), CodeBlock.of("null")))
+                        .addParameter(valParam("children", listOf(nodeId), CodeBlock.of("emptyList()")))
+                        .addParameter(valParam("depth", int, CodeBlock.of("0")))
+                        .addParameter(valParam("eventIds", listOf(eventId), CodeBlock.of("emptyList()")))
+                        .build()
+                )
+                .addProperty(dataClassProperty("nodeId", nodeId))
+                .addProperty(dataClassProperty("url", string))
+                .addProperty(dataClassProperty("title", string.copy(nullable = true)))
+                .addProperty(dataClassProperty("parentNodeId", nodeId.copy(nullable = true)))
+                .addProperty(dataClassProperty("children", listOf(nodeId)))
+                .addProperty(dataClassProperty("depth", int))
+                .addProperty(dataClassProperty("eventIds", listOf(eventId)))
+                .build()
+
+            // UnifiedTimeline - complete timeline with tree structure
+            val unifiedTimeline = TypeSpec.classBuilder("UnifiedTimeline")
+                .addModifiers(KModifier.DATA)
+                .addAnnotation(serializable)
+                .addKdoc("Unified timeline combining chronological events with tree structure.")
+                .primaryConstructor(
+                    FunSpec.constructorBuilder()
+                        .addParameter(valParam("sessionId", sessionId))
+                        .addParameter(valParam("entries", listOf(ClassName(pkg, "TimelineEntry")), CodeBlock.of("emptyList()")))
+                        .addParameter(valParam("treeNodes", listOf(ClassName(pkg, "SessionTreeNode")), CodeBlock.of("emptyList()")))
+                        .addParameter(valParam("rootNodeId", nodeId.copy(nullable = true), CodeBlock.of("null")))
+                        .build()
+                )
+                .addProperty(dataClassProperty("sessionId", sessionId))
+                .addProperty(dataClassProperty("entries", listOf(ClassName(pkg, "TimelineEntry"))))
+                .addProperty(dataClassProperty("treeNodes", listOf(ClassName(pkg, "SessionTreeNode"))))
+                .addProperty(dataClassProperty("rootNodeId", nodeId.copy(nullable = true)))
+                .build()
+
+            return generatedFile("Timeline")
+                .addType(timelineEntry)
+                .addType(sessionTreeNode)
+                .addType(unifiedTimeline)
+                .build()
+        }
+
+        private fun generateCredentials(): FileSpec {
+            val credentialId = TypeAliasSpec.builder("CredentialId", string).build()
+            val sessionId = ClassName(pkg, "SessionId")
+
+            // CredentialType enum
+            val credentialType = TypeSpec.enumBuilder("CredentialType")
+                .addAnnotation(serializable)
+                .addKdoc("Type of authentication credential.")
+                .apply {
+                    listOf(
+                        "UsernamePassword" to "Username and password credentials",
+                        "Token" to "Bearer token or API key",
+                        "Cookie" to "Session cookie",
+                        "OAuth" to "OAuth token",
+                        "Header" to "Custom header-based auth",
+                        "Unknown" to "Unknown credential type"
+                    ).forEach { (name, doc) ->
+                        addEnumConstant(
+                            name,
+                            TypeSpec.anonymousClassBuilder()
+                                .addKdoc(doc)
+                                .build()
+                        )
+                    }
+                }
+                .build()
+
+            // StoredCredential - represents extracted credentials
+            val storedCredential = TypeSpec.classBuilder("StoredCredential")
+                .addModifiers(KModifier.DATA)
+                .addAnnotation(serializable)
+                .addKdoc("Extracted authentication credentials with privacy support.")
+                .primaryConstructor(
+                    FunSpec.constructorBuilder()
+                        .addParameter(valParam("id", ClassName(pkg, "CredentialId")))
+                        .addParameter(valParam("sessionId", sessionId))
+                        .addParameter(valParam("type", ClassName(pkg, "CredentialType")))
+                        .addParameter(valParam("url", string))
+                        .addParameter(valParam("username", string.copy(nullable = true), CodeBlock.of("null")))
+                        .addParameter(valParam("passwordHash", string.copy(nullable = true), CodeBlock.of("null")))
+                        .addParameter(valParam("token", string.copy(nullable = true), CodeBlock.of("null")))
+                        .addParameter(valParam("metadata", mapStringString, CodeBlock.of("emptyMap()")))
+                        .addParameter(valParam("capturedAt", instant))
+                        .addParameter(valParam("isEncrypted", boolean, CodeBlock.of("false")))
+                        .build()
+                )
+                .addProperty(dataClassProperty("id", ClassName(pkg, "CredentialId")))
+                .addProperty(dataClassProperty("sessionId", sessionId))
+                .addProperty(dataClassProperty("type", ClassName(pkg, "CredentialType")))
+                .addProperty(dataClassProperty("url", string))
+                .addProperty(dataClassProperty("username", string.copy(nullable = true)))
+                .addProperty(dataClassProperty("passwordHash", string.copy(nullable = true)))
+                .addProperty(dataClassProperty("token", string.copy(nullable = true)))
+                .addProperty(dataClassProperty("metadata", mapStringString))
+                .addProperty(dataClassProperty("capturedAt", instant))
+                .addProperty(dataClassProperty("isEncrypted", boolean))
+                .build()
+
+            return generatedFile("Credentials")
+                .addTypeAlias(credentialId)
+                .addType(credentialType)
+                .addType(storedCredential)
+                .build()
+        }
+
         private fun generateContractIndex(): FileSpec {
             val types = listOf(
                 "ContractInfo",
@@ -598,6 +741,7 @@
                 "EdgeId",
                 "ChainId",
                 "ChainPointId",
+                "CredentialId",
                 "MapNode",
                 "MapEdge",
                 "MapGraph",
@@ -613,6 +757,11 @@
                 "ChainPoint",
                 "RecordChain",
                 "ChainsFile",
+                "TimelineEntry",
+                "SessionTreeNode",
+                "UnifiedTimeline",
+                "CredentialType",
+                "StoredCredential",
                 "ExportManifest"
             )
 
