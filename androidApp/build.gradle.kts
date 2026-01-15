@@ -52,6 +52,19 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    lint {
+        // Enable XML output for SonarQube import
+        xmlReport = true
+        xmlOutput = file("build/reports/lint-results-debug.xml")
+        
+        // Also keep HTML for human-readable reports
+        htmlReport = true
+        htmlOutput = file("build/reports/lint-results-debug.html")
+        
+        // Don't abort build on lint errors
+        abortOnError = false
+    }
 }
 
 dependencies {
