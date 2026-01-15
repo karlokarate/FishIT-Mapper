@@ -1,0 +1,223 @@
+package dev.fishit.mapper.engine
+
+import dev.fishit.mapper.contract.*
+import kotlinx.datetime.Instant
+
+/**
+ * Extracts authentication credentials from recording sessions.
+ * 
+ * Features:
+ * - Detects login forms from UserActionEvents
+ * - Extracts HTTP Authorization headers
+ * - Identifies session cookies
+ * - Supports privacy-aware storage (hashed passwords)
+ */
+object CredentialExtractor {
+    
+    /**
+     * Extracts all credentials from a recording session.
+     */
+    fun extractCredentials(session: RecordingSession): List<StoredCredential> {
+        val credentials = mutableListOf<StoredCredential>()
+        
+        // Extract from user actions (form submits)
+        credentials.addAll(extractFromUserActions(session))
+        
+        // Extract from HTTP requests (Authorization headers)
+        credentials.addAll(extractFromHttpRequests(session))
+        
+        // Extract from HTTP responses (Set-Cookie headers)
+        credentials.addAll(extractFromHttpResponses(session))
+        
+        return credentials
+    }
+    
+    /**
+     * Extracts credentials from form submissions.
+     */
+    private fun extractFromUserActions(session: RecordingSession): List<StoredCredential> {
+        val credentials = mutableListOf<StoredCredential>()
+        
+        session.events.filterIsInstance<UserActionEvent>().forEach { event ->
+            // Check if this is a form submit
+            val formInfo = FormAnalyzer.parseFormSubmit(event)
+            if (formInfo != null) {
+                val pattern = FormAnalyzer.detectFormPattern(formInfo.fields)
+                
+                if (pattern == FormAnalyzer.FormPattern.LOGIN || 
+                    pattern == FormAnalyzer.FormPattern.REGISTRATION) {
+                    
+                    val usernameField = formInfo.fields.find { 
+                        it.type == FormAnalyzer.FieldType.EMAIL || 
+                        it.name?.lowercase()?.contains("username") == true ||
+                        it.name?.lowercase()?.contains("user") == true
+                    }
+                    
+                    val passwordField = formInfo.fields.find { 
+                        it.type == FormAnalyzer.FieldType.PASSWORD 
+                    }
+                    
+                    if (usernameField?.value != null || passwordField?.value != null) {
+                        credentials.add(
+                            StoredCredential(
+                                id = "cred-${event.id.value}",
+                                sessionId = session.id,
+                                type = CredentialType.UsernamePassword,
+                                url = event.target ?: "unknown",
+                                username = usernameField?.value,
+                                passwordHash = passwordField?.value?.let { hashPassword(it) },
+                                token = null,
+                                metadata = mapOf(
+                                    "formPattern" to pattern.name,
+                                    "formId" to (formInfo.formId ?: "unknown")
+                                ),
+                                capturedAt = event.at,
+                                isEncrypted = false
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        
+        return credentials
+    }
+    
+    /**
+     * Extracts credentials from HTTP Authorization headers.
+     */
+    private fun extractFromHttpRequests(session: RecordingSession): List<StoredCredential> {
+        val credentials = mutableListOf<StoredCredential>()
+        
+        session.events.filterIsInstance<ResourceResponseEvent>().forEach { event ->
+            // Check for Authorization header in the response headers (captured by proxy)
+            val authHeader = event.headers["authorization"] 
+                ?: event.headers["Authorization"]
+                ?: event.headers["x-auth-token"]
+                ?: event.headers["x-api-key"]
+            
+            if (authHeader != null && authHeader.isNotBlank()) {
+                val type = when {
+                    authHeader.startsWith("Bearer ", ignoreCase = true) -> CredentialType.Token
+                    authHeader.startsWith("Basic ", ignoreCase = true) -> CredentialType.UsernamePassword
+                    authHeader.startsWith("OAuth ", ignoreCase = true) -> CredentialType.OAuth
+                    else -> CredentialType.Header
+                }
+                
+                credentials.add(
+                    StoredCredential(
+                        id = "cred-${event.id.value}-auth",
+                        sessionId = session.id,
+                        type = type,
+                        url = event.url,
+                        username = null,
+                        passwordHash = null,
+                        token = authHeader.take(50), // Truncate for privacy
+                        metadata = mapOf(
+                            "headerType" to type.name,
+                            "statusCode" to event.statusCode.toString()
+                        ),
+                        capturedAt = event.at,
+                        isEncrypted = false
+                    )
+                )
+            }
+        }
+        
+        return credentials
+    }
+    
+    /**
+     * Extracts session cookies from HTTP responses.
+     */
+    private fun extractFromHttpResponses(session: RecordingSession): List<StoredCredential> {
+        val credentials = mutableListOf<StoredCredential>()
+        
+        session.events.filterIsInstance<ResourceResponseEvent>().forEach { event ->
+            // Check for Set-Cookie header
+            val setCookieHeader = event.headers["set-cookie"] 
+                ?: event.headers["Set-Cookie"]
+            
+            if (setCookieHeader != null && setCookieHeader.isNotBlank()) {
+                // Look for session-related cookies
+                val lowerCookie = setCookieHeader.lowercase()
+                if (lowerCookie.contains("session") || 
+                    lowerCookie.contains("token") ||
+                    lowerCookie.contains("auth") ||
+                    lowerCookie.contains("jwt")) {
+                    
+                    // Extract cookie name and value (simplified parsing)
+                    val cookieParts = setCookieHeader.split(";").firstOrNull()?.split("=", limit = 2)
+                    val cookieName = cookieParts?.getOrNull(0)?.trim()
+                    val cookieValue = cookieParts?.getOrNull(1)?.trim()
+                    
+                    if (cookieName != null && cookieValue != null) {
+                        credentials.add(
+                            StoredCredential(
+                                id = "cred-${event.id.value}-cookie",
+                                sessionId = session.id,
+                                type = CredentialType.Cookie,
+                                url = event.url,
+                                username = null,
+                                passwordHash = null,
+                                token = cookieValue.take(50), // Truncate for privacy
+                                metadata = mapOf(
+                                    "cookieName" to cookieName,
+                                    "statusCode" to event.statusCode.toString()
+                                ),
+                                capturedAt = event.at,
+                                isEncrypted = false
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        
+        return credentials
+    }
+    
+    /**
+     * Simple password hashing for privacy.
+     * In production, use a proper hashing algorithm.
+     */
+    private fun hashPassword(password: String): String {
+        // Simple hash for demonstration - in production use bcrypt or similar
+        return "hash_${password.length}_${password.hashCode()}"
+    }
+    
+    /**
+     * Detects if a session contains login activity.
+     */
+    fun hasLoginActivity(session: RecordingSession): Boolean {
+        return session.events.filterIsInstance<UserActionEvent>().any { event ->
+            val formInfo = FormAnalyzer.parseFormSubmit(event)
+            if (formInfo != null) {
+                val pattern = FormAnalyzer.detectFormPattern(formInfo.fields)
+                pattern == FormAnalyzer.FormPattern.LOGIN || 
+                pattern == FormAnalyzer.FormPattern.REGISTRATION
+            } else {
+                false
+            }
+        }
+    }
+    
+    /**
+     * Groups credentials by domain for better organization.
+     */
+    fun groupByDomain(credentials: List<StoredCredential>): Map<String, List<StoredCredential>> {
+        return credentials.groupBy { credential ->
+            extractDomain(credential.url) ?: "unknown"
+        }
+    }
+    
+    private fun extractDomain(url: String): String? {
+        return try {
+            val cleanUrl = url.substringAfter("://")
+            val domain = cleanUrl.substringBefore("/").substringBefore(":")
+            domain.takeIf { it.isNotBlank() }
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
