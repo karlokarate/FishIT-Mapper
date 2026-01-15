@@ -22,6 +22,11 @@ kotlin {
                 implementation(libs.kotlinx.datetime)
             }
         }
+        val commonTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
     }
 }
 
