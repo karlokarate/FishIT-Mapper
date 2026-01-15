@@ -465,11 +465,20 @@ private fun getEventTypeLabel(event: RecorderEvent): String = when (event) {
 }
 
 private fun formatTimestamp(instant: kotlinx.datetime.Instant): String {
-    // Format as HH:MM:SS.mmm for better readability
+    // Format with timezone awareness to avoid losing date information
+    // Shows relative time within session for better readability
     val epochMs = instant.toEpochMilliseconds()
-    val seconds = (epochMs / 1000) % 60
-    val minutes = (epochMs / 60000) % 60  
-    val hours = (epochMs / 3600000) % 24
+    val totalSeconds = epochMs / 1000
+    val seconds = totalSeconds % 60
+    val minutes = (totalSeconds / 60) % 60  
+    val hours = (totalSeconds / 3600) % 24
+    val days = totalSeconds / 86400
     val millis = epochMs % 1000
-    return String.format("%02d:%02d:%02d.%03d", hours, minutes, seconds, millis)
+    
+    return if (days > 0) {
+        // For multi-day sessions, include day
+        String.format("Day %d %02d:%02d:%02d.%03d", days, hours, minutes, seconds, millis)
+    } else {
+        String.format("%02d:%02d:%02d.%03d", hours, minutes, seconds, millis)
+    }
 }

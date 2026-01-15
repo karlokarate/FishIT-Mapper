@@ -183,7 +183,7 @@ suspend fun saveSession(projectId: ProjectId, session: RecordingSession) = withC
     
     suspend fun addCredential(projectId: ProjectId, credential: StoredCredential) = withContext(Dispatchers.IO) {
         val current = loadCredentials(projectId)
-        // Filter out duplicates efficiently using a Set
+        // Filter out duplicate by id and add new credential
         val existing = current.filter { it.id != credential.id }
         val updated = existing + credential
         saveCredentials(projectId, updated)

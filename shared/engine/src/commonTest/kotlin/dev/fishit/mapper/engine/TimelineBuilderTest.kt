@@ -64,9 +64,9 @@ class TimelineBuilderTest {
         assertEquals(null, firstEntry.parentEventId)
         
         // Verify second entry (request) has navigation as parent
-        // After navigation is added to stack, request depth is navigationStack.size + 1 = 1 + 1 = 2
+        // Requests are children of navigation, so depth = navigationStack.size = 1
         val secondEntry = timeline.entries[1]
-        assertEquals(2, secondEntry.depth)
+        assertEquals(1, secondEntry.depth)
         assertNotNull(secondEntry.parentEventId)
     }
     

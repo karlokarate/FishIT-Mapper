@@ -41,10 +41,17 @@ object TimelineBuilder {
         val requestMap = mutableMapOf<EventId, ResourceRequestEvent>()
         val responseMap = mutableMapOf<EventId, ResourceResponseEvent>()
         
-        // First pass: collect requests and responses
+        // First pass: collect requests and responses with normalized URL index for fast lookup
+        // Map: normalizedURL -> List of requests (sorted by time)
+        val requestsByUrl = mutableMapOf<String, MutableList<ResourceRequestEvent>>()
+        
         events.forEach { event ->
             when (event) {
-                is ResourceRequestEvent -> requestMap[event.id] = event
+                is ResourceRequestEvent -> {
+                    requestMap[event.id] = event
+                    val normalizedUrl = UrlNormalizer.normalize(event.url)
+                    requestsByUrl.getOrPut(normalizedUrl) { mutableListOf() }.add(event)
+                }
                 is ResourceResponseEvent -> responseMap[event.id] = event
                 else -> {}
             }
@@ -75,40 +82,42 @@ object TimelineBuilder {
                     // Request is child of current navigation
                     parentEventId = navigationStack.lastOrNull()
                     correlatedEventId = null
-                    depth = navigationStack.size + 1
+                    depth = navigationStack.size  // Direct child of navigation has same depth + 0 offset
                 }
                 
                 is ResourceResponseEvent -> {
-                    // Try to correlate with request
-                    val matchingRequest = requestMap.values.find { req ->
-                        UrlNormalizer.normalize(req.url) == UrlNormalizer.normalize(event.url) &&
+                    // Try to correlate with request using O(1) URL lookup + linear search within same URL
+                    val normalizedUrl = UrlNormalizer.normalize(event.url)
+                    val candidateRequests = requestsByUrl[normalizedUrl] ?: emptyList()
+                    
+                    val matchingRequest = candidateRequests.findLast { req ->
                         req.at <= event.at &&
                         (event.at.toEpochMilliseconds() - req.at.toEpochMilliseconds()) < CORRELATION_WINDOW_MS
                     }
                     
                     parentEventId = matchingRequest?.id ?: navigationStack.lastOrNull()
                     correlatedEventId = matchingRequest?.id
-                    depth = navigationStack.size + 1
+                    depth = navigationStack.size  // Same depth as requests
                 }
                 
                 is UserActionEvent -> {
                     // User action at current navigation level
                     parentEventId = navigationStack.lastOrNull()
                     correlatedEventId = null
-                    depth = navigationStack.size + 1
+                    depth = navigationStack.size  // Same level as navigation
                 }
                 
                 is ConsoleMessageEvent -> {
                     // Console message at current navigation level
                     parentEventId = navigationStack.lastOrNull()
                     correlatedEventId = null
-                    depth = navigationStack.size + 1
+                    depth = navigationStack.size  // Same level as navigation
                 }
                 
                 else -> {
                     parentEventId = navigationStack.lastOrNull()
                     correlatedEventId = null
-                    depth = navigationStack.size + 1
+                    depth = navigationStack.size  // Same level as navigation
                 }
             }
             
@@ -166,6 +175,9 @@ object TimelineBuilder {
             val node = nodeMap[url]
             if (node != null) {
                 urlToNodeId[url] = node.id
+            } else {
+                // Generate consistent NodeId for nodes not in graph yet
+                urlToNodeId[url] = IdGenerator.newNodeId()
             }
         }
         

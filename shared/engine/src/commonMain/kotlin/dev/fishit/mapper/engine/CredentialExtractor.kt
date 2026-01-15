@@ -27,8 +27,8 @@ object CredentialExtractor {
         // Extract from user actions (form submits)
         credentials.addAll(extractFromUserActions(session))
         
-        // Extract from HTTP requests (Authorization headers)
-        credentials.addAll(extractFromHttpRequests(session))
+        // Extract from HTTP Authorization headers (captured by proxy in response events)
+        credentials.addAll(extractFromHttpHeaders(session))
         
         // Extract from HTTP responses (Set-Cookie headers)
         credentials.addAll(extractFromHttpResponses(session))
@@ -88,9 +88,10 @@ object CredentialExtractor {
     }
     
     /**
-     * Extracts credentials from HTTP Authorization headers.
+     * Extracts credentials from HTTP Authorization headers captured by the proxy.
+     * Note: The MITM proxy captures request headers in ResourceResponseEvent for correlation.
      */
-    private fun extractFromHttpRequests(session: RecordingSession): List<StoredCredential> {
+    private fun extractFromHttpHeaders(session: RecordingSession): List<StoredCredential> {
         val credentials = mutableListOf<StoredCredential>()
         
         session.events.filterIsInstance<ResourceResponseEvent>().forEach { event ->
