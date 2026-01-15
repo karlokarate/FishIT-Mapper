@@ -249,5 +249,5 @@ jobs:
           name: build-outputs
           path: |
             androidApp/build/outputs/
-            shared/contract/src/generated/
+            shared/contract/src/generated/kotlin/
           retention-days: 7
