@@ -63,9 +63,9 @@ val generateFishitContract = tasks.register<JavaExec>("generateFishitContract") 
         "--out", generatedDir.absolutePath
     )
     
-    // Ensure output directory exists
+    // Ensure output directory exists using Gradle file utilities
     doFirst {
-        generatedDir.mkdirs()
+        project.mkdir(generatedDir)
     }
 }
 

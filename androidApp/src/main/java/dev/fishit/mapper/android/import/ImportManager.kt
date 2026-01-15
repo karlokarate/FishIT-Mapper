@@ -242,7 +242,7 @@ class ImportManager(
         val nodesById = (existing.nodes + imported.nodes)
             .groupBy { it.id }
             .mapValues { (_, nodes) ->
-                // Sort by lastSeenAt (nulls last), then take the first
+                // Keep the node with the newest lastSeenAt (nulls are treated as oldest)
                 nodes.sortedByDescending { it.lastSeenAt ?: kotlinx.datetime.Instant.DISTANT_PAST }.first()
             }
         
