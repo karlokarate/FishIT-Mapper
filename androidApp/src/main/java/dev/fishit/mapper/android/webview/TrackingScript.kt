@@ -101,20 +101,27 @@ object TrackingScript {
             }, true);
             
             // Track field changes (debounced with memory management)
-            let fieldChangeTimeouts = {};
+            let fieldChangeTimeouts = new Map();
             const fieldChangeDebounceMs = 500;
             const MAX_TRACKED_FIELDS = 100; // Limit to prevent unbounded growth
             
+            // Generate unique key for field tracking
+            function getFieldKey(field) {
+                return (field.name || '') + '_' + (field.id || '') + '_' + (field.type || '');
+            }
+            
             // Cleanup old timeouts periodically
             function cleanupFieldTimeouts() {
-                const keys = Object.keys(fieldChangeTimeouts);
-                if (keys.length > MAX_TRACKED_FIELDS) {
-                    // Remove oldest half of tracked fields
-                    const toRemove = keys.slice(0, Math.floor(keys.length / 2));
-                    toRemove.forEach(function(key) {
-                        clearTimeout(fieldChangeTimeouts[key]);
-                        delete fieldChangeTimeouts[key];
-                    });
+                if (fieldChangeTimeouts.size > MAX_TRACKED_FIELDS) {
+                    // Remove oldest half of tracked fields by iterating and removing first entries
+                    const toRemove = Math.floor(fieldChangeTimeouts.size / 2);
+                    let removed = 0;
+                    for (let key of fieldChangeTimeouts.keys()) {
+                        clearTimeout(fieldChangeTimeouts.get(key));
+                        fieldChangeTimeouts.delete(key);
+                        removed++;
+                        if (removed >= toRemove) break;
+                    }
                 }
             }
             
@@ -124,21 +131,22 @@ object TrackingScript {
                     if (field.tagName === 'INPUT' || field.tagName === 'TEXTAREA' || field.tagName === 'SELECT') {
                         const fieldName = field.name || field.id || field.type || 'unnamed';
                         const fieldType = field.type || 'text';
+                        const fieldKey = getFieldKey(field);
                         
                         // Cleanup if needed
-                        if (Object.keys(fieldChangeTimeouts).length >= MAX_TRACKED_FIELDS) {
+                        if (fieldChangeTimeouts.size >= MAX_TRACKED_FIELDS) {
                             cleanupFieldTimeouts();
                         }
                         
                         // Debounce per field
-                        clearTimeout(fieldChangeTimeouts[fieldName]);
-                        fieldChangeTimeouts[fieldName] = setTimeout(function() {
+                        clearTimeout(fieldChangeTimeouts.get(fieldKey));
+                        fieldChangeTimeouts.set(fieldKey, setTimeout(function() {
                             if (window.FishITMapper && window.FishITMapper.recordFieldChange) {
                                 window.FishITMapper.recordFieldChange(fieldName, fieldType);
                             }
                             // Remove timeout after firing
-                            delete fieldChangeTimeouts[fieldName];
-                        }, fieldChangeDebounceMs);
+                            fieldChangeTimeouts.delete(fieldKey);
+                        }, fieldChangeDebounceMs));
                     }
                 } catch (err) {
                     console.error('[FishIT-Mapper] Field change tracking error:', err);
