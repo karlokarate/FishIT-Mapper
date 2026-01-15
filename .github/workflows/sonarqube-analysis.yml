@@ -28,11 +28,7 @@ on:
         type: boolean
         default: false
       enable_duplications:
-        description: '🔄 Duplikat-Erkennung aktivieren'
-        type: boolean
-        default: true
-      verbose_mode:
-        description: '🔍 Verbose Output'
+        description: '🔄 Output'
         type: boolean
         default: false
 
@@ -68,14 +64,7 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Cache SonarQube packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
+          
           restore-keys: ${{ runner.os }}-sonar
 
       - name: Grant execute permission for gradlew
@@ -96,27 +85,35 @@ jobs:
           # Bei push/PR: alle Module analysieren
           # Bei workflow_dispatch: basierend auf Inputs
           if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
-            SOURCES="androidApp/src/main,shared/contract/src/commonMain,shared/contract/src/androidMain,shared/engine/src,tools/codegen-contract/src"
+            SOURCES="androidApp/src/main/java,shared/contract/src/commonMain/kotlin,shared/contract/src/generated/kotlin,shared/engine/src/commonMain/kotlin,tools/codegen-contract/src/main/kotlin"
           else
             if [[ "${{ inputs.analyze_android }}" == "true" ]]; then
-              SOURCES="androidApp/src/main"
+              SOURCES="androidApp/src/main/java"
             fi
             if [[ "${{ inputs.analyze_contract }}" == "true" ]]; then
               [ -n "$SOURCES" ] && SOURCES="$SOURCES,"
-              SOURCES="${SOURCES}shared/contract/src/commonMain,shared/contract/src/androidMain"
+              SOURCES="${SOURCES}shared/contract/src/commonMain/kotlin,shared/contract/src/generated/kotlin"
             fi
             if [[ "${{ inputs.analyze_engine }}" == "true" ]]; then
               [ -n "$SOURCES" ] && SOURCES="$SOURCES,"
-              SOURCES="${SOURCES}shared/engine/src"
+              SOURCES="${SOURCES}shared/engine/src/commonMain/kotlin"
             fi
             if [[ "${{ inputs.analyze_codegen }}" == "true" ]]; then
               [ -n "$SOURCES" ] && SOURCES="$SOURCES,"
-              SOURCES="${SOURCES}tools/codegen-contract/src"
+              SOURCES="${SOURCES}tools/codegen-contract/src/main/kotlin"
             fi
           fi
           
           echo "SONAR_SOURCES=$SOURCES" >> $GITHUB_OUTPUT
           echo "📁 Sources to analyze: $SOURCES"
+
+      # --- Optional: Tests mit Coverage ---
+      - name: Run Tests with Coverage
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.enable_coverage == true }}
+        continue-on-error: true
+        run: |
+          echo "🧪 Running tests..."
+          ./gradlew test --continue || true
 
       # --- SonarQube Analyse ---
       - name: Build and Analyze with SonarQube
@@ -127,27 +124,37 @@ jobs:
           echo "🔍 Starting SonarQube Analysis..."
           echo "📁 Analyzing sources: ${{ steps.sources.outputs.SONAR_SOURCES }}"
           
-          # Build Sonar Arguments
-          SONAR_ARGS="-Dsonar.projectKey=FishIT-Mapper"
-          SONAR_ARGS="$SONAR_ARGS -Dsonar.projectName=FishIT-Mapper"
-          SONAR_ARGS="$SONAR_ARGS -Dsonar.organization=${{ github.repository_owner }}"
-          SONAR_ARGS="$SONAR_ARGS -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}"
-          SONAR_ARGS="$SONAR_ARGS -Dsonar.token=${{ secrets.SONAR_TOKEN }}"
-          SONAR_ARGS="$SONAR_ARGS -Dsonar.sources=${{ steps.sources.outputs.SONAR_SOURCES }}"
-          SONAR_ARGS="$SONAR_ARGS -Dsonar.java.binaries=**/build/classes"
-          SONAR_ARGS="$SONAR_ARGS -Dsonar.sourceEncoding=UTF-8"
+          # Argumente als Array für korrekte Übergabe an Gradle
+          GRADLE_ARGS=(
+            "-Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}"
+            "-Dsonar.token=${{ secrets.SONAR_TOKEN }}"
+            "-Dsonar.organization=${{ github.repository_owner }}"
+          )
           
-          # Coverage (optional)
+          # Dynamische Sources überschreiben die build.gradle.kts Defaults
+          if [[ -n "${{ steps.sources.outputs.SONAR_SOURCES }}" ]]; then
+            GRADLE_ARGS+=("-Dsonar.sources=${{ steps.sources.outputs.SONAR_SOURCES }}")
+          fi
+          
+          # Coverage-Pfade (wenn aktiviert)
           if [[ "${{ github.event_name }}" != "workflow_dispatch" ]] || [[ "${{ inputs.enable_coverage }}" == "true" ]]; then
-            SONAR_ARGS="$SONAR_ARGS -Dsonar.coverage.jacoco.xmlReportPaths=**/build/reports/jacoco/**/*.xml"
+            GRADLE_ARGS+=("-Dsonar.coverage.jacoco.xmlReportPaths=**/build/reports/jacoco/**/*.xml")
           fi
           
-          # Duplikaterkennung (optional deaktivierbar)
+          # Duplikaterkennung deaktivieren (wenn gewünscht)
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ inputs.enable_duplications }}" == "false" ]]; then
-            SONAR_ARGS="$SONAR_ARGS=true"
+            GRADLE_ARGS+=("-Dsonar.cpd.exclusions=**/*")
           fi
           
-          ./gradlew sonar $SONAR_ARGS
+          # Verbose Mode
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]] || [[ "${{ inputs.verbose_mode }}" == "true" ]]; then
+            GRADLE_ARGS+=("-Dsonar.verbose=true")
+          fi
+          
+          echo "🔧 Gradle Arguments: ${GRADLE_ARGS[*]}"
+          
+          # Korrekte Übergabe als separate Argumente (behebt den String-to-Collection Cast-Fehler)
+          ./gradlew sonar "${GRADLE_ARGS[@]}"
 
       - name: Generate Analysis Summary
         if: always()
@@ -159,10 +166,17 @@ jobs:
           echo "📅 Timestamp: $(date)"
           echo "📁 Repository: ${{ github.repository }}"
           echo "🔀 Event: ${{ github.event_name }}"
+          echo "🔖 Ref: ${{ github.ref }}"
           echo ""
           echo "📊 Configuration:"
           echo "   Sources: ${{ steps.sources.outputs.SONAR_SOURCES }}"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo ""
+            echo "📋 Input Settings:"
+            echo "   Android App: ${{ inputs.analyze_android }}"
+            echo "   Contract Module: ${{ inputs.analyze_contract }}"
+            echo "   Engine Module: ${{ inputs.analyze_engine }}"
+            echo "   Codegen Tools: ${{ inputs.analyze_codegen }}"
             echo "   Coverage: ${{ inputs.enable_coverage }}"
             echo "   Duplications: ${{ inputs.enable_duplications }}"
             echo "   Verbose: ${{ inputs.verbose_mode }}"
