@@ -5,6 +5,17 @@ and builds a reusable **Map Graph** (nodes/edges) plus exportable session bundle
 
 Core design principle: the domain contract is **generated** via **KotlinPoet** from `schema/contract.schema.json`.
 
+## 🆕 New Feature: HTTPS Traffic Capture
+
+FishIT-Mapper now supports **vollständige HTTPS-Traffic-Erfassung** mit Entschlüsselung! 
+
+✅ **Request/Response-Daten im Klartext**  
+✅ **System-weite Traffic-Erfassung via VPN**  
+✅ **Eigenes CA-Zertifikat für MITM-Proxy**  
+✅ **Einfache Installation aus der App**  
+
+📖 **[Vollständige Dokumentation](docs/features/HTTPS_TRAFFIC_CAPTURE.md)**
+
 ## Quickstart
 
 ### Option 1: Android Studio (Lokal)

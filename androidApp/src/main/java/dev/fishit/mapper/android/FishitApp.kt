@@ -14,6 +14,7 @@ import dev.fishit.mapper.android.di.LocalAppContainer
 import dev.fishit.mapper.android.ui.projects.ProjectsScreen
 import dev.fishit.mapper.android.ui.project.ProjectHomeScreen
 import dev.fishit.mapper.android.ui.session.SessionDetailScreen
+import dev.fishit.mapper.android.ui.settings.SettingsScreen
 
 @Composable
 fun FishitApp(container: AppContainer) {
@@ -27,7 +28,16 @@ fun FishitApp(container: AppContainer) {
                         ProjectsScreen(
                             onOpenProject = { projectId ->
                                 navController.navigate("project/${'$'}{projectId}")
+                            },
+                            onOpenSettings = {
+                                navController.navigate("settings")
                             }
+                        )
+                    }
+
+                    composable("settings") {
+                        SettingsScreen(
+                            onBack = { navController.popBackStack() }
                         )
                     }
 

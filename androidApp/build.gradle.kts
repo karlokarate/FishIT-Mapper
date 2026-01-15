@@ -81,4 +81,10 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.documentfile)
+
+    // Security & Networking
+    implementation(libs.bouncycastle.bcprov)
+    implementation(libs.bouncycastle.bcpkix)
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
 }
