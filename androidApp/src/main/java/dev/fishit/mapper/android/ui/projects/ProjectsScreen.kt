@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -51,7 +52,8 @@ import dev.fishit.mapper.android.ui.common.SimpleVmFactory
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProjectsScreen(
-    onOpenProject: (projectId: String) -> Unit
+    onOpenProject: (projectId: String) -> Unit,
+    onOpenSettings: () -> Unit = {}
 ) {
     val container = LocalAppContainer.current
     val vm: ProjectsViewModel = viewModel(
@@ -79,6 +81,10 @@ fun ProjectsScreen(
             TopAppBar(
                 title = { Text("Projects") },
                 actions = {
+                    // Settings button
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
                     // Import button
                     IconButton(
                         onClick = { importLauncher.launch("application/zip") },
