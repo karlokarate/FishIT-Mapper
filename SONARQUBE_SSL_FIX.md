@@ -2,7 +2,7 @@
 
 ## Problem
 
-Die SonarQube-Analyse schlug in GitHub Actions mit folgendem Fehler fehl:
+Die SonarQube-Analyse scheiterte in GitHub Actions mit folgendem Fehler:
 
 ```
 Execution failed for task ':sonar'.
