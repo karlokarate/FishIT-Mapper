@@ -144,6 +144,49 @@ class ProjectViewModel(
     }
 
     /**
+     * Updates tags for a specific node and persists the change.
+     */
+    fun updateNodeTags(nodeId: NodeId, tags: List<String>) {
+        viewModelScope.launch {
+            runCatching {
+                val currentGraph = store.loadGraph(projectId)
+                val updatedNodes = currentGraph.nodes.map { node ->
+                    if (node.id == nodeId) {
+                        node.copy(tags = tags)
+                    } else {
+                        node
+                    }
+                }
+                val updatedGraph = currentGraph.copy(nodes = updatedNodes)
+                store.saveGraph(projectId, updatedGraph)
+                updatedGraph
+            }.onSuccess { updatedGraph ->
+                _state.value = _state.value.copy(graph = updatedGraph)
+            }.onFailure { t ->
+                _state.value = _state.value.copy(error = t.message)
+            }
+        }
+    }
+
+    /**
+     * Applies hub detection algorithm to automatically tag important nodes.
+     */
+    fun applyHubDetection(threshold: Double = 5.0) {
+        viewModelScope.launch {
+            runCatching {
+                val currentGraph = store.loadGraph(projectId)
+                val hubDetectedGraph = dev.fishit.mapper.engine.HubDetector.tagHubs(currentGraph, threshold)
+                store.saveGraph(projectId, hubDetectedGraph)
+                hubDetectedGraph
+            }.onSuccess { updatedGraph ->
+                _state.value = _state.value.copy(graph = updatedGraph)
+            }.onFailure { t ->
+                _state.value = _state.value.copy(error = t.message)
+            }
+        }
+    }
+
+    /**
      * Small helper to avoid pulling in a tuple library just for MVP.
      */
     private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
