@@ -1,0 +1,85 @@
+name: Build Android App
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        type: choice
+        options:
+          - debug
+          - unsigned-release
+        default: 'debug'
+
+jobs:
+  build:
+    name: Build ${{ inputs.build_type }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      
+      - name: Build Debug APK
+        if: inputs.build_type == 'debug'
+        run: ./gradlew :androidApp:assembleDebug --stacktrace
+      
+      - name: Build Unsigned Release APK
+        if: inputs.build_type == 'unsigned-release'
+        run: ./gradlew :androidApp:assembleRelease --stacktrace
+      
+      - name: Build Unsigned Release Bundle
+        if: inputs.build_type == 'unsigned-release'
+        run: ./gradlew :androidApp:bundleRelease --stacktrace
+      
+      - name: Upload Debug APK
+        if: inputs.build_type == 'debug'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: androidApp/build/outputs/apk/debug/*.apk
+          retention-days: 30
+      
+      - name: Upload Unsigned Release APK
+        if: inputs.build_type == 'unsigned-release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-unsigned-release-apk
+          path: androidApp/build/outputs/apk/release/*.apk
+          retention-days: 30
+      
+      - name: Upload Unsigned Release Bundle
+        if: inputs.build_type == 'unsigned-release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-unsigned-release-bundle
+          path: androidApp/build/outputs/bundle/release/*.aab
+          retention-days: 30
+      
+      - name: Build Summary
+        run: |
+          echo "### Build Completed Successfully! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Type:** ${{ inputs.build_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.build_type }}" == "debug" ]; then
+            echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
+            echo "- Debug APK (app-debug)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
+            echo "- Unsigned Release APK (app-unsigned-release-apk)" >> $GITHUB_STEP_SUMMARY
+            echo "- Unsigned Release Bundle/AAB (app-unsigned-release-bundle)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download the artifacts from the workflow run page." >> $GITHUB_STEP_SUMMARY
