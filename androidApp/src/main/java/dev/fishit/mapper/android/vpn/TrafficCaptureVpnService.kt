@@ -168,8 +168,6 @@ class TrafficCaptureVpnService : VpnService() {
 
                 val protocol = buffer.get(9).toInt() and 0xFF
                 
-                // WARNUNG: Einfaches Durchreichen ohne Proxy-Routing
-                // Dies führt dazu, dass VPN zwar aktiv ist, aber Traffic nicht funktioniert
                 // TCP (6) und UDP (17) Pakete bearbeiten
                 when (protocol) {
                     6 -> handleTcpPacket(buffer, outputStream)

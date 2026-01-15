@@ -282,18 +282,16 @@ class CertificateManager(private val context: Context) {
             val trustManagerFactory = javax.net.ssl.TrustManagerFactory.getInstance(
                 javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm()
             )
-            trustManagerFactory.init(null as KeyStore?) // Verwendet System-Keystore
+            trustManagerFactory.init(null) // Verwendet System-Keystore
             
             val trustManagers = trustManagerFactory.trustManagers
             for (trustManager in trustManagers) {
                 if (trustManager is javax.net.ssl.X509TrustManager) {
                     val acceptedIssuers = trustManager.acceptedIssuers
                     // Prüfe, ob unser CA-Zertifikat in den akzeptierten Zertifikaten ist
-                    for (acceptedCert in acceptedIssuers) {
-                        if (acceptedCert.equals(certificate)) {
-                            Log.i(TAG, "CA certificate is installed in system")
-                            return true
-                        }
+                    if (acceptedIssuers.any { it.equals(certificate) }) {
+                        Log.i(TAG, "CA certificate is installed in system")
+                        return true
                     }
                 }
             }
