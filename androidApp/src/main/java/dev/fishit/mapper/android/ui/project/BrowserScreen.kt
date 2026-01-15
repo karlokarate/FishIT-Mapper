@@ -108,13 +108,6 @@ fun BrowserScreen(
                     settings.userAgentString = settings.userAgentString + " FishIT-Mapper/0.1"
 
                     val mainHandler = Handler(Looper.getMainLooper())
-                    
-                    // Load tracking JavaScript from assets
-                    val trackingScript = try {
-                        context.assets.open("tracking.js").bufferedReader().use { it.readText() }
-                    } catch (e: Exception) {
-                        null
-                    }
 
                     webViewClient = object : WebViewClient() {
                         private var lastUrl: String? = null
