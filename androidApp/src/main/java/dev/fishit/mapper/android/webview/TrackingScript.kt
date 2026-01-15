@@ -113,7 +113,7 @@ object TrackingScript {
             // Cleanup old timeouts periodically
             function cleanupFieldTimeouts() {
                 if (fieldChangeTimeouts.size > MAX_TRACKED_FIELDS) {
-                    // Remove oldest half of tracked fields by iterating and removing first entries
+                    // Remove half of tracked fields in Map iteration order
                     const toRemove = Math.floor(fieldChangeTimeouts.size / 2);
                     let removed = 0;
                     for (let key of fieldChangeTimeouts.keys()) {

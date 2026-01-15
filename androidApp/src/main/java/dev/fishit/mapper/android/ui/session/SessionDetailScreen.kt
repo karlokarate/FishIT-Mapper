@@ -83,7 +83,7 @@ fun SessionDetailScreen(
             }
 
             Text("Started: ${s.startedAt}")
-            Text("Ended: ${s.endedAt?.toString() ?: "-"}")
+            Text("Ended: ${s.endedAt ?: "-"}")
             Text("Initial: ${s.initialUrl}")
             if (s.finalUrl != null) Text("Final: ${s.finalUrl}")
             Text("Events: ${s.events.size}")
@@ -112,7 +112,7 @@ private fun EventRow(e: RecorderEvent) {
                 if (e.fromUrl != null) Text("from: ${e.fromUrl}")
             }
             is ResourceRequestEvent -> {
-                Text("REQ  ${e.at}  ${e.method ?: ""}  ${e.resourceKind?.toString() ?: ResourceKind.Other.toString()}")
+                Text("REQ  ${e.at}  ${e.method ?: ""}  ${e.resourceKind ?: ResourceKind.Other}")
                 Text(e.url)
                 if (e.initiatorUrl != null) Text("init: ${e.initiatorUrl}")
             }
