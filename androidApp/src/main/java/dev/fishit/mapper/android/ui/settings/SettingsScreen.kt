@@ -31,6 +31,8 @@ import dev.fishit.mapper.android.ui.common.SimpleVmFactory
 import dev.fishit.mapper.android.vpn.TrafficCaptureVpnService
 import dev.fishit.mapper.contract.RecorderEvent
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -288,7 +290,7 @@ fun SettingsScreen(
                     )
                 ) {
                     Text(
-                        state.statusMessage!!,
+                        text = state.statusMessage!!,
                         modifier = Modifier.padding(16.dp),
                         style = MaterialTheme.typography.bodyMedium
                     )
