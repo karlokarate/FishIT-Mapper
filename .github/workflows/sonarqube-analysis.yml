@@ -23,10 +23,6 @@ on:
         description: '🛠️ Codegen Tools analysieren'
         type: boolean
         default: true
-      enable_coverage:
-        description: '📊 Code Coverage aktivieren'
-        type: boolean
-        default: false
       enable_duplications:
         description: '🔄 Duplikat-Erkennung aktivieren'
         type: boolean
@@ -121,8 +117,7 @@ jobs:
           ./gradlew assemble --no-daemon
           echo "✅ Build complete"
 
-      - name: Run Tests with Coverage
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.enable_coverage == true }}
+      - name: Run Tests
         continue-on-error: true
         run: |
           echo "🧪 Running tests..."
@@ -145,10 +140,6 @@ jobs:
           
           if [[ -n "${{ steps.sources.outputs.SONAR_SOURCES }}" ]]; then
             GRADLE_ARGS+=("-Dsonar.sources=${{ steps.sources.outputs.SONAR_SOURCES }}")
-          fi
-          
-          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]] || [[ "${{ inputs.enable_coverage }}" == "true" ]]; then
-            GRADLE_ARGS+=("-Dsonar.coverage.jacoco.xmlReportPaths=**/build/reports/jacoco/**/*.xml")
           fi
           
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ inputs.enable_duplications }}" == "false" ]]; then
@@ -184,7 +175,6 @@ jobs:
             echo "   Contract Module: ${{ inputs.analyze_contract }}"
             echo "   Engine Module: ${{ inputs.analyze_engine }}"
             echo "   Codegen Tools: ${{ inputs.analyze_codegen }}"
-            echo "   Coverage: ${{ inputs.enable_coverage }}"
             echo "   Duplications: ${{ inputs.enable_duplications }}"
             echo "   Verbose: ${{ inputs.verbose_mode }}"
           fi
