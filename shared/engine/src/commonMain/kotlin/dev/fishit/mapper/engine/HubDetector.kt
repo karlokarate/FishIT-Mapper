@@ -151,8 +151,10 @@ object HubDetector {
             while (stack.isNotEmpty()) {
                 val w = stack.removeLast()
                 predecessors[w]?.forEach { v ->
-                    // paths[w] defaults to 1.0 to avoid division by zero
-                    // This is safe because nodes with 0 paths won't be in predecessors
+                    // Note: paths[w] should never be null or 0 for nodes in predecessors,
+                    // as they were reached via BFS. Default to 1.0 as safe fallback.
+                    // This is mathematically correct since a node with 1 path contributes
+                    // its full delta value to its predecessor.
                     val pathsW = paths[w]?.toDouble() ?: 1.0
                     val pathsV = paths[v]?.toDouble() ?: 0.0
                     val factor = pathsV / pathsW

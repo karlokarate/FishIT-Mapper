@@ -172,16 +172,19 @@ private fun TagChip(
             )
             
             // Use a clickable Icon instead of IconButton for better space efficiency
-            // while maintaining accessibility
+            // while maintaining accessibility with proper touch target and semantics
             Box(
                 modifier = Modifier
-                    .size(24.dp) // Minimum touch target size
-                    .clickable(onClick = onRemove),
+                    .size(24.dp) // Minimum touch target size for accessibility
+                    .clickable(
+                        onClick = onRemove,
+                        onClickLabel = "Remove tag $tag" // Enhanced screen reader support
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Default.Close,
-                    contentDescription = "Remove tag",
+                    contentDescription = "Remove",
                     tint = Color.White,
                     modifier = Modifier.size(12.dp)
                 )
