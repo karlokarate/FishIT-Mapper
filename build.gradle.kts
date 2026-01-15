@@ -13,14 +13,22 @@ tasks.register("clean", Delete::class) {
     delete(rootProject.layout.buildDirectory)
 }
 
-// SonarQube configuration for code analysis
+// =============================================================================
+// SonarQube Configuration for Comprehensive Code Analysis
+// =============================================================================
+// Analyzes: Bugs, Vulnerabilities, Security Hotspots, Code Smells, Duplications
+// Documentation: https://docs.sonarsource.com/sonarqube-server/analyzing-source-code/scanners/sonarscanner-for-gradle/
+// =============================================================================
+
 sonar {
     properties {
-        property("sonar.projectKey", "FishIT-Mapper")
+        // === Project Identification ===
+        property("sonar.projectKey", "karlokarate_FishIT-Mapper")
         property("sonar.projectName", "FishIT-Mapper")
-        property("sonar.sourceEncoding", "UTF-8")
+        property("sonar.projectVersion", "0.1.0")
         
-        // Kotlin source directories
+        // === Source Configuration ===
+        // All Kotlin source directories to analyze
         property("sonar.sources", listOf(
             "androidApp/src/main/java",
             "shared/contract/src/commonMain/kotlin",
@@ -29,11 +37,34 @@ sonar {
             "tools/codegen-contract/src/main/kotlin"
         ).joinToString(","))
         
-        // Exclusions
+        // === Language Configuration ===
+        property("sonar.sourceEncoding", "UTF-8")
+        property("sonar.kotlin.source.version", "1.9")
+        property("sonar.java.source", "17")
+        property("sonar.java.target", "17")
+        
+        // === Exclusions ===
+        // Exclude build artifacts, tests, and non-code files from analysis
         property("sonar.exclusions", listOf(
             "**/build/**",
             "**/test/**",
-            "**/*.json"
+            "**/androidTest/**",
+            "**/*.json",
+            "**/*.xml",
+            "**/R.java",
+            "**/R$*.java",
+            "**/BuildConfig.java",
+            "**/Manifest.java"
         ).joinToString(","))
+        
+        // === Duplicate Code Detection ===
+        // Exclude generated code from duplication check (it's expected to have patterns)
+        property("sonar.cpd.exclusions", listOf(
+            "**/generated/**",
+            "**/contract/src/generated/**"
+        ).joinToString(","))
+        
+        // === Android Lint Integration (if lint reports exist) ===
+        property("sonar.android.lint.report", "androidApp/build/reports/lint-results-debug.xml")
     }
 }
