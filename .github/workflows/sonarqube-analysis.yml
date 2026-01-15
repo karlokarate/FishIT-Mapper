@@ -163,7 +163,7 @@ jobs:
           echo ""
           echo "📅 Timestamp: $(date)"
           echo "📁 Repository: ${{ github.repository }}"
-          echo "🔀 Event: ${{ github.event_name }Ref: ${{ github.ref }}"
+          echo "🔀 Event: ${{ github.event_name }} | Ref: ${{ github.ref }}"
           echo ""
           echo "📊 Configuration:"
           echo "   Sources: ${{ steps.sources.outputs.SONAR_SOURCES }}"
