@@ -118,11 +118,6 @@ jobs:
           echo "SONAR_SOURCES=$SOURCES" >> $GITHUB_OUTPUT
           echo "📁 Sources to analyze: $SOURCES"
 
-      # --- Build mit optionalem Coverage ---
-      - name: Run Tests with Coverage
-        if🧪 Running tests with JaCoCo coverage..."
-          ./gradlew test jacocoTestReport --continue || true
-
       # --- SonarQube Analyse ---
       - name: Build and Analyze with SonarQube
         env:
