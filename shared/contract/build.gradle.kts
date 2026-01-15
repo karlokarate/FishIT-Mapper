@@ -63,6 +63,9 @@ val generateFishitContract = tasks.register<JavaExec>("generateFishitContract") 
         "--out", generatedDir.absolutePath
     )
     
+    // Declare output directory for incremental build support
+    outputs.dir(generatedDir)
+    
     // Ensure output directory exists using Gradle file utilities
     doFirst {
         project.mkdir(generatedDir)
