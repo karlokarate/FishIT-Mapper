@@ -66,8 +66,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          ./gradlew build sonar \
-            --info \
+          ./gradlew sonar \
             -Dsonar.projectKey=FishIT-Mapper \
             -Dsonar.projectName="FishIT-Mapper" \
             -Dsonar.organization=${{ github.repository_owner }} \
