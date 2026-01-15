@@ -1,6 +1,7 @@
 [versions]
 kotlin = "1.9.22"
 agp = "8.2.2"
+sonarqube = "4.4.1.3373"
 
 # Compose
 compose-bom = "2024.02.00"
@@ -67,3 +68,4 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+sonarqube = { id = "org.sonarqube", version.ref = "sonarqube" }

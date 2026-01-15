@@ -1,0 +1,253 @@
+name: SonarQube Analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:  # Manuelle Auslösung möglich
+
+env:
+  JAVA_VERSION: '17'
+
+jobs:
+  sonarqube-analysis:
+    name: SonarQube Code Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for better relevancy of analysis
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Cache SonarQube packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # --- Contract Generation (wichtig für generierte Felder!) ---
+      - name: Generate Contract Code
+        run: |
+          echo "📝 Generating FishIT Contract from schema..."
+          ./gradlew :shared:contract:generateFishitContract
+          echo "✅ Contract generation complete"
+
+      # --- Vollständiger Build mit Analyse ---
+      - name: Build and Analyze with Gradle
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          ./gradlew sonar \
+            -Dsonar.projectKey=FishIT-Mapper \
+            -Dsonar.projectName="FishIT-Mapper" \
+            -Dsonar.organization=${{ github.repository_owner }} \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.sources=androidApp/src/main,shared/contract/src/commonMain,shared/contract/src/androidMain,shared/engine/src,tools/codegen-contract/src \
+            -Dsonar.java.binaries=**/build/classes \
+            -Dsonar.kotlin.detekt.reportPaths=**/build/reports/detekt/*.xml \
+            -Dsonar.coverage.jacoco.xmlReportPaths=**/build/reports/jacoco/**/*.xml \
+            -Dsonar.sourceEncoding=UTF-8 \
+            -Dsonar.verbose=true
+
+      # --- Detaillierter Debug-Bericht ---
+      - name: Generate Debug Report
+        if: always()
+        run: |
+          echo "=============================================="
+          echo "🔍 SONARQUBE ANALYSIS DEBUG REPORT"
+          echo "=============================================="
+          echo ""
+          echo "📅 Timestamp: $(date)"
+          echo "📁 Repository: ${{ github.repository }}"
+          echo "🔀 Branch: ${{ github.ref_name }}"
+          echo "📝 Commit: ${{ github.sha }}"
+          echo ""
+          
+          echo "=============================================="
+          echo "📦 PROJECT STRUCTURE"
+          echo "=============================================="
+          echo ""
+          echo "=== Modules ==="
+          find . -name "build.gradle.kts" -type f | head -20
+          echo ""
+          
+          echo "=== Generated Contract Files ==="
+          if [ -d "shared/contract/src/generated" ]; then
+            find shared/contract/src/generated -name "*.kt" -type f 2>/dev/null || echo "No generated files found"
+          else
+            echo "Generated directory not found - checking build directory..."
+            find shared/contract/build -name "*.kt" -type f 2>/dev/null | head -20 || echo "No files in build directory"
+          fi
+          echo ""
+          
+          echo "=============================================="
+          echo "🔧 BUILD RESULTS"
+          echo "=============================================="
+          echo ""
+          
+          echo "=== Compilation Status ==="
+          if [ -f "androidApp/build/outputs/apk/debug/androidApp-debug.apk" ]; then
+            echo "✅ Android APK: Built successfully"
+            ls -lh androidApp/build/outputs/apk/debug/androidApp-debug.apk
+          else
+            echo "❌ Android APK: Not found"
+          fi
+          echo ""
+          
+          echo "=== Module Build Status ==="
+          for module in "shared/contract" "shared/engine" "androidApp" "tools/codegen-contract"; do
+            if [ -d "$module/build" ]; then
+              echo "✅ $module: Build directory exists"
+            else
+              echo "❌ $module: No build directory"
+            fi
+          done
+          echo ""
+          
+          echo "=============================================="
+          echo "⚠️ KOTLIN COMPILATION ISSUES"
+          echo "=============================================="
+          echo ""
+          
+          echo "=== Checking for unresolved references ==="
+          if [ -d "shared/engine/build" ]; then
+            grep -r "Unresolved reference" shared/engine/build/reports 2>/dev/null || echo "No unresolved references found in reports"
+          fi
+          echo ""
+          
+          echo "=== Import Consistency Check ==="
+          echo "Checking contract imports across modules..."
+          echo ""
+          echo "--- Imports in androidApp ---"
+          grep -rh "^import dev.fishit.mapper.contract" androidApp/src --include="*.kt" 2>/dev/null | sort | uniq -c | sort -rn | head -20 || echo "No contract imports found"
+          echo ""
+          echo "--- Imports in shared/engine ---"
+          grep -rh "^import dev.fishit.mapper.contract" shared/engine/src --include="*.kt" 2>/dev/null | sort | uniq -c | sort -rn | head -20 || echo "No contract imports found"
+          echo ""
+          
+          echo "=============================================="
+          echo "📊 CODE METRICS"
+          echo "=============================================="
+          echo ""
+          
+          echo "=== Kotlin Files per Module ==="
+          for module in "androidApp/src/main" "shared/contract/src" "shared/engine/src" "tools/codegen-contract/src"; do
+            if [ -d "$module" ]; then
+              count=$(find "$module" -name "*.kt" -type f 2>/dev/null | wc -l)
+              echo "$module: $count Kotlin files"
+            fi
+          done
+          echo ""
+          
+          echo "=== Lines of Code (Kotlin) ==="
+          find . -name "*.kt" -type f \( -path "*/src/main/*" -o -path "*/src/commonMain/*" -o -path "*/src/generated/*" \) 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 || echo "Could not count lines"
+          echo ""
+          
+          echo "=============================================="
+          echo "🔗 DEPENDENCY ANALYSIS"
+          echo "=============================================="
+          echo ""
+          
+          echo "=== Contract Types Used ==="
+          echo "Checking which contract types are referenced..."
+          for type in "NodeKind" "EdgeKind" "MapGraph" "RecorderEvent" "MapNode" "MapEdge" "ChainPoint" "SessionId" "ProjectId"; do
+            count=$(grep -rh "$type" androidApp/src shared/engine/src --include="*.kt" 2>/dev/null | wc -l)
+            echo "  $type: $count references"
+          done
+          echo ""
+          
+          echo "=============================================="
+          echo "📁 GENERATED CODE VERIFICATION"
+          echo "=============================================="
+          echo ""
+          
+          echo "=== Expected Generated Types ==="
+          expected_types=("NodeKind" "EdgeKind" "ResourceKind" "ConsoleLevel" "MapNode" "MapEdge" "MapGraph" "RecorderEvent" "ProjectId" "SessionId" "EventId" "NodeId" "EdgeId" "ChainId")
+          
+          for type in "${expected_types[@]}"; do
+            # Check in generated source
+            if find shared/contract -name "*.kt" -exec grep -l "class $type\|enum class $type\|value class $type\|object $type" {} \; 2>/dev/null | head -1 | grep -q .; then
+              echo "✅ $type: Found"
+            else
+              echo "❌ $type: NOT FOUND"
+            fi
+          done
+          echo ""
+          
+          echo "=============================================="
+          echo "🧪 TEST RESULTS"
+          echo "=============================================="
+          echo ""
+          
+          if [ -d "shared/engine/build/reports/tests" ]; then
+            echo "=== Engine Module Tests ==="
+            find shared/engine/build/reports/tests -name "*.html" -exec basename {} \; 2>/dev/null || echo "No test reports found"
+          fi
+          
+          if [ -d "androidApp/build/reports/tests" ]; then
+            echo "=== AndroidApp Tests ==="
+            find androidApp/build/reports/tests -name "*.html" -exec basename {} \; 2>/dev/null || echo "No test reports found"
+          fi
+          echo ""
+          
+          echo "=============================================="
+          echo "📋 SUMMARY"
+          echo "=============================================="
+          echo ""
+          echo "This report was generated to help debug:"
+          echo "  1. Contract generation issues"
+          echo "  2. Import/reference problems between modules"
+          echo "  3. Build failures related to generated code"
+          echo "  4. Consistency of contract field usage"
+          echo ""
+          echo "For SonarQube results, check your SonarQube dashboard."
+          echo "=============================================="
+
+      - name: Upload Debug Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonarqube-debug-report
+          path: |
+            **/build/reports/
+            **/build/test-results/
+          retention-days: 14
+
+      - name: Upload Build Outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-outputs
+          path: |
+            androidApp/build/outputs/
+            shared/contract/src/generated/kotlin/
+          retention-days: 7
