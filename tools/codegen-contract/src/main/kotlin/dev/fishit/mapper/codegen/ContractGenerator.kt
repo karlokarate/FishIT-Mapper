@@ -28,6 +28,8 @@
 
         private val string = String::class.asClassName()
         private val boolean = Boolean::class.asClassName()
+        private val int = Int::class.asClassName()
+        private val long = Long::class.asClassName()
 
         private val mapStringString = ClassName("kotlin.collections", "Map").parameterizedBy(string, string)
         private val listString = ClassName("kotlin.collections", "List").parameterizedBy(string)
@@ -401,6 +403,26 @@
                 kdoc = "A custom event that allows extensions without breaking the schema."
             )
 
+            val resEvent = dataEvent(
+                name = "ResourceResponseEvent",
+                serial = "res",
+                extraParams = listOf(
+                    valParam("requestId", eventId),
+                    valParam("url", string),
+                    valParam("statusCode", int),
+                    valParam("statusMessage", string.copy(nullable = true), CodeBlock.of("null")),
+                    valParam("headers", mapStringString, CodeBlock.of("emptyMap()")),
+                    valParam("contentType", string.copy(nullable = true), CodeBlock.of("null")),
+                    valParam("contentLength", long.copy(nullable = true), CodeBlock.of("null")),
+                    valParam("body", string.copy(nullable = true), CodeBlock.of("null")),
+                    valParam("bodyTruncated", boolean, CodeBlock.of("false")),
+                    valParam("responseTimeMs", long, CodeBlock.of("0L")),
+                    valParam("isRedirect", boolean, CodeBlock.of("false")),
+                    valParam("redirectLocation", string.copy(nullable = true), CodeBlock.of("null"))
+                ),
+                kdoc = "A resource response captured by the MITM proxy with full HTTP details."
+            )
+
             val recordingSession = TypeSpec.classBuilder("RecordingSession")
                 .addModifiers(KModifier.DATA)
                 .addAnnotation(serializable)
@@ -452,6 +474,7 @@
                 .addType(recorderEvent)
                 .addType(navEvent)
                 .addType(reqEvent)
+                .addType(resEvent)
                 .addType(consoleEvent)
                 .addType(userActionEvent)
                 .addType(customEvent)
@@ -582,6 +605,7 @@
                 "RecorderEvent",
                 "NavigationEvent",
                 "ResourceRequestEvent",
+                "ResourceResponseEvent",
                 "ConsoleMessageEvent",
                 "UserActionEvent",
                 "CustomEvent",

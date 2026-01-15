@@ -5,6 +5,7 @@ import android.util.Log
 import dev.fishit.mapper.android.cert.CertificateManager
 import dev.fishit.mapper.contract.RecorderEvent
 import dev.fishit.mapper.contract.ResourceRequestEvent
+import dev.fishit.mapper.contract.ResourceResponseEvent
 import dev.fishit.mapper.engine.IdGenerator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +13,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -41,6 +43,22 @@ class MitmProxyServer(
 ) {
     companion object {
         private const val TAG = "MitmProxyServer"
+        
+        // Realistische Limits für vollständiges Website-Mapping
+        const val MAX_TEXT_BODY_SIZE = 10 * 1024 * 1024      // 10 MB für Text (HTML, JSON, XML)
+        const val MAX_BINARY_BODY_SIZE = 5 * 1024 * 1024     // 5 MB für Binär (Base64)
+        const val MAX_TOTAL_SESSION_CACHE = 500 * 1024 * 1024 // 500 MB pro Session
+        
+        // Text Content-Types (vollständig erfassen)
+        private val TEXT_CONTENT_TYPES = setOf(
+            "text/html", "text/plain", "text/css", "text/javascript", "text/xml",
+            "application/json", "application/javascript", "application/xml",
+            "application/xhtml+xml", "application/ld+json", "application/manifest+json",
+            "application/x-www-form-urlencoded"
+        )
+        
+        // Redirect Status Codes
+        private val REDIRECT_STATUS_CODES = setOf(301, 302, 303, 307, 308)
     }
 
     private var serverSocket: ServerSocket? = null
@@ -214,11 +232,18 @@ class MitmProxyServer(
 
             val fullUrl = "https://$host$path"
 
-            // Logge Request
-            logRequest(method, fullUrl, headers)
+            // Logge Request und speichere RequestId
+            val requestId = logRequest(method, fullUrl, headers)
+            val requestTime = Clock.System.now()
 
             // Leite Request zum echten Server weiter
             val response = forwardRequest(method, fullUrl, headers)
+
+            // Capture Response Body
+            val capturedBody = captureResponseBody(response)
+            
+            // Logge Response mit allen HTTP-Details
+            logResponse(requestId, requestTime, fullUrl, response, capturedBody)
 
             // Sende Response zum Client
             sslWriter.write("HTTP/1.1 ${response.code} ${response.message}\r\n")
@@ -228,8 +253,14 @@ class MitmProxyServer(
             sslWriter.write("\r\n")
             sslWriter.flush()
 
-            response.body?.byteStream()?.copyTo(sslSocket.outputStream)
-            sslSocket.outputStream.flush()
+            // Sende Body zum Client (nutze gecachte Version falls vorhanden)
+            if (capturedBody != null) {
+                sslWriter.write(capturedBody)
+                sslWriter.flush()
+            } else {
+                response.body?.byteStream()?.copyTo(sslSocket.outputStream)
+                sslSocket.outputStream.flush()
+            }
 
         } catch (e: Exception) {
             Log.e(TAG, "Error handling CONNECT", e)
@@ -247,11 +278,18 @@ class MitmProxyServer(
         reader: BufferedReader
     ) {
         try {
-            // Logge Request
-            logRequest(method, url, headers)
+            // Logge Request und speichere RequestId
+            val requestId = logRequest(method, url, headers)
+            val requestTime = Clock.System.now()
 
             // Leite Request weiter
             val response = forwardRequest(method, url, headers)
+
+            // Capture Response Body
+            val capturedBody = captureResponseBody(response)
+            
+            // Logge Response mit allen HTTP-Details
+            logResponse(requestId, requestTime, url, response, capturedBody)
 
             // Sende Response
             writer.write("HTTP/1.1 ${response.code} ${response.message}\r\n")
@@ -261,9 +299,15 @@ class MitmProxyServer(
             writer.write("\r\n")
             writer.flush()
 
-            response.body?.string()?.let { body ->
-                writer.write(body)
+            // Sende Body zum Client
+            if (capturedBody != null) {
+                writer.write(capturedBody)
                 writer.flush()
+            } else {
+                response.body?.string()?.let { body ->
+                    writer.write(body)
+                    writer.flush()
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error handling HTTP request", e)
@@ -294,11 +338,12 @@ class MitmProxyServer(
     }
 
     /**
-     * Loggt einen Request als RecorderEvent.
+     * Loggt einen Request als RecorderEvent und gibt die EventId zurück.
      */
-    private fun logRequest(method: String, url: String, headers: Map<String, String>) {
+    private fun logRequest(method: String, url: String, headers: Map<String, String>): dev.fishit.mapper.contract.EventId {
+        val eventId = IdGenerator.newEventId()
         val event = ResourceRequestEvent(
-            id = IdGenerator.newEventId(),
+            id = eventId,
             at = Clock.System.now(),
             url = url,
             initiatorUrl = null,
@@ -308,6 +353,87 @@ class MitmProxyServer(
         
         onEvent(event)
         Log.d(TAG, "Request logged: $method $url")
+        return eventId
+    }
+
+    /**
+     * Erfasst Response Body falls Content-Type relevant ist.
+     */
+    private fun captureResponseBody(response: Response): String? {
+        val contentType = response.header("Content-Type")?.lowercase() ?: return null
+        val contentLength = response.header("Content-Length")?.toLongOrNull() ?: 0
+        
+        val body = response.body ?: return null
+        
+        // Prüfe, ob Content-Type text-basiert ist
+        val isTextContent = TEXT_CONTENT_TYPES.any { contentType.contains(it) }
+        
+        // Bestimme Max-Size basierend auf Content-Type
+        val maxSize = if (isTextContent) MAX_TEXT_BODY_SIZE else MAX_BINARY_BODY_SIZE
+        
+        // Überspringe zu große Bodies
+        if (contentLength > maxSize) {
+            Log.d(TAG, "Body too large ($contentLength bytes), skipping capture")
+            return null
+        }
+        
+        return try {
+            val bodyString = body.string()
+            if (bodyString.length > maxSize) {
+                bodyString.substring(0, maxSize)
+            } else {
+                bodyString
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error capturing body", e)
+            null
+        }
+    }
+
+    /**
+     * Loggt Response mit allen relevanten HTTP-Details.
+     */
+    private fun logResponse(
+        requestId: dev.fishit.mapper.contract.EventId,
+        requestTime: Instant,
+        url: String,
+        response: Response,
+        capturedBody: String?
+    ) {
+        val statusCode = response.code
+        val isRedirect = statusCode in REDIRECT_STATUS_CODES
+        val redirectLocation = if (isRedirect) response.header("Location") else null
+        
+        // Konvertiere OkHttp Headers zu Map
+        val headersMap = mutableMapOf<String, String>()
+        response.headers.forEach { (name, value) ->
+            headersMap[name] = value
+        }
+        
+        val event = ResourceResponseEvent(
+            id = IdGenerator.newEventId(),
+            requestId = requestId,
+            at = Clock.System.now(),
+            url = url,
+            statusCode = statusCode,
+            statusMessage = response.message,
+            headers = headersMap,
+            contentType = response.header("Content-Type"),
+            contentLength = response.header("Content-Length")?.toLongOrNull(),
+            body = capturedBody,
+            bodyTruncated = capturedBody != null && capturedBody.length.toLong() < (response.header("Content-Length")?.toLongOrNull() ?: 0),
+            responseTimeMs = Clock.System.now().toEpochMilliseconds() - requestTime.toEpochMilliseconds(),
+            isRedirect = isRedirect,
+            redirectLocation = redirectLocation
+        )
+        
+        onEvent(event)
+        
+        if (isRedirect) {
+            Log.d(TAG, "REDIRECT: $statusCode $url → $redirectLocation")
+        } else {
+            Log.d(TAG, "Response logged: $statusCode $url")
+        }
     }
 
     /**

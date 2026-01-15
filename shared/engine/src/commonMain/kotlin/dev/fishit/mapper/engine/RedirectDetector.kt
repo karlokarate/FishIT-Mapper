@@ -148,6 +148,99 @@ object RedirectDetector {
         }
     }
     
+    /**
+     * Kombiniert HTTP-basierte und Timing-basierte Redirect-Erkennung.
+     * HTTP-Status hat Priorität wenn verfügbar.
+     */
+    fun analyzeWithHttpStatus(
+        navigationEvents: List<NavigationEvent>,
+        responseEvents: List<ResourceResponseEvent>
+    ): List<EnhancedRedirectInfo> {
+        val results = mutableListOf<EnhancedRedirectInfo>()
+        
+        // Erstelle URL -> Response-Event Map für schnellen Lookup
+        val responseByUrl = responseEvents.filter { it.isRedirect }.associateBy { UrlNormalizer.normalize(it.url) }
+        
+        for (i in 0 until navigationEvents.size - 1) {
+            val current = navigationEvents[i]
+            val next = navigationEvents[i + 1]
+            val timeDiff = next.at.toEpochMilliseconds() - current.at.toEpochMilliseconds()
+            
+            val normalizedUrl = UrlNormalizer.normalize(current.url)
+            val httpRedirect = responseByUrl[normalizedUrl]
+            
+            val isRedirect: Boolean
+            val reason: String
+            val method: RedirectDetectionMethod
+            
+            when {
+                // Priorität 1: HTTP Status Code
+                httpRedirect != null -> {
+                    isRedirect = true
+                    reason = "HTTP ${httpRedirect.statusCode} redirect to ${httpRedirect.redirectLocation}"
+                    method = RedirectDetectionMethod.HTTP_STATUS
+                }
+                // Priorität 2: Manuell markiert
+                current.isRedirect -> {
+                    isRedirect = true
+                    reason = "Marked as redirect"
+                    method = RedirectDetectionMethod.MANUAL
+                }
+                // Priorität 3: Timing-Heuristik
+                timeDiff <= REDIRECT_THRESHOLD_MS -> {
+                    isRedirect = true
+                    reason = "Fast redirect (${timeDiff}ms)"
+                    method = RedirectDetectionMethod.TIMING
+                }
+                // Priorität 4: Same-Domain-Heuristik
+                isSameDomainRedirect(current.url, next.url) && timeDiff <= SAME_DOMAIN_REDIRECT_THRESHOLD_MS -> {
+                    isRedirect = true
+                    reason = "Same-domain redirect"
+                    method = RedirectDetectionMethod.SAME_DOMAIN
+                }
+                else -> {
+                    isRedirect = false
+                    reason = "Not a redirect"
+                    method = RedirectDetectionMethod.NONE
+                }
+            }
+            
+            if (isRedirect) {
+                results.add(
+                    EnhancedRedirectInfo(
+                        fromEvent = current,
+                        toEvent = next,
+                        timeDiffMs = timeDiff,
+                        reason = reason,
+                        method = method,
+                        httpStatusCode = httpRedirect?.statusCode,
+                        responseEvent = httpRedirect
+                    )
+                )
+            }
+        }
+        
+        return results
+    }
+    
+    enum class RedirectDetectionMethod {
+        HTTP_STATUS,      // Zuverlässig: HTTP 3xx Status Code
+        MANUAL,           // Zuverlässig: Manuell markiert
+        TIMING,           // Heuristik: Schnelle Navigation
+        SAME_DOMAIN,      // Heuristik: Same-Domain Navigation
+        NONE              // Kein Redirect
+    }
+    
+    data class EnhancedRedirectInfo(
+        val fromEvent: NavigationEvent,
+        val toEvent: NavigationEvent,
+        val timeDiffMs: Long,
+        val reason: String,
+        val method: RedirectDetectionMethod,
+        val httpStatusCode: Int? = null,
+        val responseEvent: ResourceResponseEvent? = null
+    )
+    
     data class RedirectInfo(
         val fromEvent: NavigationEvent,
         val toEvent: NavigationEvent,

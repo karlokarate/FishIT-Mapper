@@ -24,6 +24,7 @@ class MappingEngine {
         return when (event) {
             is NavigationEvent -> applyNavigation(graph, event)
             is ResourceRequestEvent -> applyResourceRequest(graph, event)
+            is ResourceResponseEvent -> applyResourceResponse(graph, event)
             else -> graph
         }
     }
@@ -104,6 +105,109 @@ class MappingEngine {
             label = e.method,
             at = e.at
         ).first
+    }
+
+    private fun applyResourceResponse(graph: MapGraph, e: ResourceResponseEvent): MapGraph {
+        val url = UrlNormalizer.normalize(e.url)
+        
+        // Finde existierenden Node
+        val existingNode = graph.nodes.find { it.url == url }
+        
+        if (existingNode != null) {
+            // Enriche Node mit HTTP-Response-Daten
+            val updatedAttributes = existingNode.attributes.toMutableMap().apply {
+                put("httpStatusCode", e.statusCode.toString())
+                put("contentType", e.contentType ?: "unknown")
+                put("lastResponseTimeMs", e.responseTimeMs.toString())
+                
+                // Markiere Error-Pages
+                if (e.statusCode >= 400) {
+                    put("isErrorPage", "true")
+                }
+                
+                // Markiere erfolgreiche Redirects
+                if (e.isRedirect) {
+                    put("isRedirect", "true")
+                    e.redirectLocation?.let { put("redirectLocation", it) }
+                }
+            }
+            
+            // Ändere NodeKind basierend auf Status Code
+            val newKind = when {
+                e.statusCode >= 400 -> NodeKind.Error
+                else -> existingNode.kind
+            }
+            
+            val updatedNode = existingNode.copy(
+                kind = newKind,
+                attributes = updatedAttributes,
+                lastSeenAt = e.at
+            )
+            
+            val updatedNodes = graph.nodes.map { 
+                if (it.id == existingNode.id) updatedNode else it 
+            }
+            
+            var updatedGraph = graph.copy(nodes = updatedNodes)
+            
+            // Erstelle Redirect-Edge wenn Location Header vorhanden
+            val redirectLoc = e.redirectLocation
+            if (e.isRedirect && redirectLoc != null) {
+                val targetUrl = UrlNormalizer.normalize(redirectLoc)
+                val (g2, targetId) = upsertNode(updatedGraph, targetUrl, NodeKind.Page, null, e.at)
+                
+                updatedGraph = upsertEdge(
+                    graph = g2,
+                    from = existingNode.id,
+                    to = targetId,
+                    kind = EdgeKind.Redirect,
+                    label = e.statusCode.toString(),  // "301", "302", etc.
+                    at = e.at
+                ).first
+            }
+            
+            return updatedGraph.copy(updatedAt = e.at)
+        }
+        
+        // Falls Node nicht existiert, erstelle einen neuen
+        val kind = if (e.statusCode >= 400) NodeKind.Error else NodeKind.Page
+        val attributes = mutableMapOf(
+            "httpStatusCode" to e.statusCode.toString(),
+            "contentType" to (e.contentType ?: "unknown"),
+            "lastResponseTimeMs" to e.responseTimeMs.toString()
+        )
+        
+        if (e.statusCode >= 400) {
+            attributes["isErrorPage"] = "true"
+        }
+        
+        var (g1, nodeId) = upsertNode(graph, url, kind, null, e.at)
+        
+        // Update attributes
+        val node = g1.nodes.find { it.id == nodeId }
+        if (node != null) {
+            val updatedNode = node.copy(attributes = attributes)
+            val updatedNodes = g1.nodes.map { if (it.id == nodeId) updatedNode else it }
+            g1 = g1.copy(nodes = updatedNodes)
+        }
+        
+        // Erstelle Redirect-Edge falls erforderlich
+        val redirectLoc = e.redirectLocation
+        if (e.isRedirect && redirectLoc != null) {
+            val targetUrl = UrlNormalizer.normalize(redirectLoc)
+            val (g2, targetId) = upsertNode(g1, targetUrl, NodeKind.Page, null, e.at)
+            
+            return upsertEdge(
+                graph = g2,
+                from = nodeId,
+                to = targetId,
+                kind = EdgeKind.Redirect,
+                label = e.statusCode.toString(),
+                at = e.at
+            ).first.copy(updatedAt = e.at)
+        }
+        
+        return g1.copy(updatedAt = e.at)
     }
 
     private fun upsertNode(
