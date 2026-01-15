@@ -119,6 +119,7 @@ object HubDetector {
             // BFS to find shortest paths
             val distance = mutableMapOf<NodeId, Int>()
             val paths = mutableMapOf<NodeId, Int>()
+            val predecessors = mutableMapOf<NodeId, MutableList<NodeId>>()
             val queue = mutableListOf<NodeId>()
             
             distance[source.id] = 0
@@ -140,6 +141,7 @@ object HubDetector {
                     // Shortest path to w via v?
                     if (distance[w] == distance[v]!! + 1) {
                         paths[w] = (paths[w] ?: 0) + (paths[v] ?: 0)
+                        predecessors.getOrPut(w) { mutableListOf() }.add(v)
                     }
                 }
             }
@@ -148,9 +150,7 @@ object HubDetector {
             val delta = mutableMapOf<NodeId, Double>()
             while (stack.isNotEmpty()) {
                 val w = stack.removeLast()
-                adjacency.values.flatten().filter { v ->
-                    (distance[v] ?: Int.MAX_VALUE) == (distance[w] ?: Int.MAX_VALUE) - 1
-                }.forEach { v ->
+                predecessors[w]?.forEach { v ->
                     val factor = (paths[v]?.toDouble() ?: 0.0) / (paths[w]?.toDouble() ?: 1.0)
                     delta[v] = (delta[v] ?: 0.0) + factor * (1.0 + (delta[w] ?: 0.0))
                 }

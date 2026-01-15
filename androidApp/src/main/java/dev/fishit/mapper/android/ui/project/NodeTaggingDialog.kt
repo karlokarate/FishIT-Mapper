@@ -1,6 +1,7 @@
 package dev.fishit.mapper.android.ui.project
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -170,9 +171,13 @@ private fun TagChip(
                 color = Color.White
             )
             
-            IconButton(
-                onClick = onRemove,
-                modifier = Modifier.size(16.dp)
+            // Use a clickable Icon instead of IconButton for better space efficiency
+            // while maintaining accessibility
+            Box(
+                modifier = Modifier
+                    .size(24.dp) // Minimum touch target size
+                    .clickable(onClick = onRemove),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Default.Close,

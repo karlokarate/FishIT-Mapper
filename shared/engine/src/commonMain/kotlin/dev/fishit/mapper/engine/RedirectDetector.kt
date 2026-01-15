@@ -61,18 +61,21 @@ object RedirectDetector {
         
         // Find all redirect chains
         graph.nodes.forEach { startNode ->
-            if (startNode.id !in visited) {
+            if (startNode.id !in visited && startNode.id in redirectMap) {
                 val chain = mutableListOf<NodeId>()
+                val seenInChain = mutableSetOf<NodeId>()
                 var current = startNode.id
                 
-                while (current in redirectMap && current !in chain) {
+                // Follow redirect chain, stop on cycle or dead end
+                while (current in redirectMap && current !in seenInChain) {
                     chain.add(current)
+                    seenInChain.add(current)
                     visited.add(current)
                     current = redirectMap[current]!!
                 }
                 
-                // Add final node if it's a redirect destination
-                if (chain.isNotEmpty()) {
+                // Add final destination if it's not already in chain (not a cycle)
+                if (current !in seenInChain) {
                     chain.add(current)
                     visited.add(current)
                 }
