@@ -70,17 +70,9 @@ sonar {
 
 ### Änderungen in `.github/workflows/sonarqube-analysis.yml`
 
-Die dynamisch berechneten Sources werden jetzt auch an Gradle übergeben:
+Die dynamisch berechneten Sources werden derzeit nicht verwendet, da standardmäßig alle Module analysiert werden. Das Build-Source-Paths-Step bleibt für zukünftige Erweiterungen erhalten, wird aber momentan nicht genutzt.
 
-```yaml
-GRADLE_ARGS=(
-  "-Dsonar.gradle.skipCompile=true"
-  "-Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}"
-  "-Dsonar.token=${{ secrets.SONAR_TOKEN }}"
-  "-Dsonar.organization=${{ github.repository_owner }}"
-  "-Dsonar.sources=${{ steps.sources.outputs.SONAR_SOURCES }}"  # ✅ NEU
-)
-```
+Die SonarQube-Konfiguration in `build.gradle.kts` definiert bereits alle zu analysierenden Quellen.
 
 ## 🎯 Warum die letzten 5 Commits das Problem nicht beheben konnten
 
@@ -151,4 +143,4 @@ BUILD SUCCESSFUL in Xs
 ```
 
 Die Analyse-Ergebnisse werden dann auf SonarCloud verfügbar sein unter:
-https://sonarcloud.io/project/overview?id=karlokarate_FishIT-Mapper
+`https://sonarcloud.io/project/overview?id=<your-project-id>`

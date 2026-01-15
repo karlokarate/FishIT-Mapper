@@ -136,7 +136,6 @@ jobs:
             "-Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}"
             "-Dsonar.token=${{ secrets.SONAR_TOKEN }}"
             "-Dsonar.organization=${{ github.repository_owner }}"
-            "-Dsonar.sources=${{ steps.sources.outputs.SONAR_SOURCES }}"
           )
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ inputs.enable_duplications }}" == "false" ]]; then

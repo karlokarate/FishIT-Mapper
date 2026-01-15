@@ -28,17 +28,15 @@ sonar {
         property("sonar.projectVersion", "0.1.0")
         
         // === Source Configuration ===
-        // HINWEIS: sonar.sources wird dynamisch über Workflow gesetzt
-        // Default-Wert nur als Fallback (falls lokal ausgeführt)
-        if (!project.hasProperty("sonar.sources")) {
-            property("sonar.sources", listOf(
-                "androidApp/src/main/java",
-                "shared/contract/src/commonMain/kotlin",
-                "shared/contract/src/generated/kotlin",
-                "shared/engine/src/commonMain/kotlin",
-                "tools/codegen-contract/src/main/kotlin"
-            ))
-        }
+        // Default source directories for all modules
+        // Can be overridden by setting project property 'sonar.sources' as a comma-separated list
+        property("sonar.sources", listOf(
+            "androidApp/src/main/java",
+            "shared/contract/src/commonMain/kotlin",
+            "shared/contract/src/generated/kotlin",
+            "shared/engine/src/commonMain/kotlin",
+            "tools/codegen-contract/src/main/kotlin"
+        ))
         
         // === Language Configuration ===
         property("sonar.sourceEncoding", "UTF-8")
