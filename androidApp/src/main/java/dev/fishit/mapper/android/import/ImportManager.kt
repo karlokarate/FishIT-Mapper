@@ -242,7 +242,8 @@ class ImportManager(
         val nodesById = (existing.nodes + imported.nodes)
             .groupBy { it.id }
             .mapValues { (_, nodes) ->
-                nodes.maxByOrNull { it.lastSeenAt } ?: nodes.first()
+                // Keep the node with the newest lastSeenAt (nulls are treated as oldest)
+                nodes.sortedByDescending { it.lastSeenAt ?: kotlinx.datetime.Instant.DISTANT_PAST }.first()
             }
         
         // Merge edges - keep unique edges

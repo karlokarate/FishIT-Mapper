@@ -229,7 +229,7 @@ fun GraphScreen(graph: MapGraph) {
 @Composable
 private fun NodeRow(node: MapNode) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text("${'$'}{node.kind}  ${'$'}{node.title ?: ""}")
+        Text("${node.kind}  ${node.title ?: ""}")
         Text(node.url)
     }
 }
