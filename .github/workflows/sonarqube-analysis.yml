@@ -137,11 +137,7 @@ jobs:
             "-Dsonar.token=${{ secrets.SONAR_TOKEN }}"
             "-Dsonar.organization=${{ github.repository_owner }}"
           )
-          
-          if [[ -n "${{ steps.sources.outputs.SONAR_SOURCES }}" ]]; then
-            GRADLE_ARGS+=("-Dsonar.sources=${{ steps.sources.outputs.SONAR_SOURCES }}")
-          fi
-          
+
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ inputs.enable_duplications }}" == "false" ]]; then
             GRADLE_ARGS+=("-Dsonar.cpd.exclusions=**/*")
           fi
