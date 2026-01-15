@@ -14,6 +14,10 @@ import kotlinx.datetime.Instant
  */
 object CredentialExtractor {
     
+    // Configuration constants
+    private const val TOKEN_TRUNCATE_LENGTH = 50
+    private const val COOKIE_VALUE_TRUNCATE_LENGTH = 50
+    
     /**
      * Extracts all credentials from a recording session.
      */
@@ -112,7 +116,7 @@ object CredentialExtractor {
                         url = event.url,
                         username = null,
                         passwordHash = null,
-                        token = authHeader.take(50), // Truncate for privacy
+                        token = authHeader.take(TOKEN_TRUNCATE_LENGTH),
                         metadata = mapOf(
                             "headerType" to type.name,
                             "statusCode" to event.statusCode.toString()
@@ -160,7 +164,7 @@ object CredentialExtractor {
                                 url = event.url,
                                 username = null,
                                 passwordHash = null,
-                                token = cookieValue.take(50), // Truncate for privacy
+                                token = cookieValue.take(COOKIE_VALUE_TRUNCATE_LENGTH),
                                 metadata = mapOf(
                                     "cookieName" to cookieName,
                                     "statusCode" to event.statusCode.toString()
@@ -179,11 +183,15 @@ object CredentialExtractor {
     
     /**
      * Simple password hashing for privacy.
-     * In production, use a proper hashing algorithm.
+     * 
+     * Note: This is a placeholder implementation for MVP.
+     * In production, use a proper cryptographic hashing algorithm like bcrypt, PBKDF2, or Argon2.
+     * The current implementation provides basic obfuscation but is NOT cryptographically secure.
      */
     private fun hashPassword(password: String): String {
-        // Simple hash for demonstration - in production use bcrypt or similar
-        return "hash_${password.length}_${password.hashCode()}"
+        // TODO: Replace with proper password hashing (bcrypt/PBKDF2/Argon2)
+        // This is intentionally simple for MVP - DO NOT use in production
+        return "hash_len${password.length}_code${password.hashCode()}"
     }
     
     /**

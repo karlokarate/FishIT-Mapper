@@ -14,6 +14,9 @@ import kotlinx.datetime.Instant
  */
 object TimelineBuilder {
     
+    // Configuration constants
+    private const val CORRELATION_WINDOW_MS = 30_000L // 30 seconds
+    
     /**
      * Builds a unified timeline from a recording session.
      */
@@ -80,7 +83,7 @@ object TimelineBuilder {
                     val matchingRequest = requestMap.values.find { req ->
                         UrlNormalizer.normalize(req.url) == UrlNormalizer.normalize(event.url) &&
                         req.at <= event.at &&
-                        (event.at.toEpochMilliseconds() - req.at.toEpochMilliseconds()) < 30000 // 30 sec window
+                        (event.at.toEpochMilliseconds() - req.at.toEpochMilliseconds()) < CORRELATION_WINDOW_MS
                     }
                     
                     parentEventId = matchingRequest?.id ?: navigationStack.lastOrNull()
@@ -181,33 +184,35 @@ object TimelineBuilder {
         
         visitedUrls.forEach { url ->
             val node = nodeMap[url]
-            val nodeId = urlToNodeId[url] ?: NodeId("node-${url.hashCode()}")
-            val parentUrl = parentMap[url]
-            val parentNodeId = parentUrl?.let { urlToNodeId[it] }
-            val children = childrenMap[url]?.mapNotNull { urlToNodeId[it] } ?: emptyList()
-            val depth = calculateDepth(url)
-            
-            // Find all events related to this URL
-            val eventIds = session.events.filter { event ->
-                when (event) {
-                    is NavigationEvent -> UrlNormalizer.normalize(event.url) == url
-                    is ResourceRequestEvent -> UrlNormalizer.normalize(event.url) == url
-                    is ResourceResponseEvent -> UrlNormalizer.normalize(event.url) == url
-                    else -> false
-                }
-            }.map { it.id }
-            
-            treeNodes.add(
-                SessionTreeNode(
-                    nodeId = nodeId,
-                    url = url,
-                    title = node?.title,
-                    parentNodeId = parentNodeId,
-                    children = children,
-                    depth = depth,
-                    eventIds = eventIds
+            val nodeId = urlToNodeId[url]
+            if (nodeId != null) {
+                val parentUrl = parentMap[url]
+                val parentNodeId = parentUrl?.let { urlToNodeId[it] }
+                val children = childrenMap[url]?.mapNotNull { urlToNodeId[it] } ?: emptyList()
+                val depth = calculateDepth(url)
+                
+                // Find all events related to this URL
+                val eventIds = session.events.filter { event ->
+                    when (event) {
+                        is NavigationEvent -> UrlNormalizer.normalize(event.url) == url
+                        is ResourceRequestEvent -> UrlNormalizer.normalize(event.url) == url
+                        is ResourceResponseEvent -> UrlNormalizer.normalize(event.url) == url
+                        else -> false
+                    }
+                }.map { it.id }
+                
+                treeNodes.add(
+                    SessionTreeNode(
+                        nodeId = nodeId,
+                        url = url,
+                        title = node?.title,
+                        parentNodeId = parentNodeId,
+                        children = children,
+                        depth = depth,
+                        eventIds = eventIds
+                    )
                 )
-            )
+            }
         }
         
         return treeNodes.sortedBy { it.depth }

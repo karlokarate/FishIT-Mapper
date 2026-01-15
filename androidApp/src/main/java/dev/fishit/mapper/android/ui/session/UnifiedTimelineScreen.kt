@@ -465,7 +465,11 @@ private fun getEventTypeLabel(event: RecorderEvent): String = when (event) {
 }
 
 private fun formatTimestamp(instant: kotlinx.datetime.Instant): String {
-    val seconds = instant.epochSeconds
-    val millis = instant.nanosecondsOfSecond / 1_000_000
-    return String.format("%d.%03d", seconds % 1000, millis)
+    // Format as HH:MM:SS.mmm for better readability
+    val epochMs = instant.toEpochMilliseconds()
+    val seconds = (epochMs / 1000) % 60
+    val minutes = (epochMs / 60000) % 60  
+    val hours = (epochMs / 3600000) % 24
+    val millis = epochMs % 1000
+    return String.format("%02d:%02d:%02d.%03d", hours, minutes, seconds, millis)
 }

@@ -182,11 +182,11 @@ suspend fun saveSession(projectId: ProjectId, session: RecordingSession) = withC
     }
     
     suspend fun addCredential(projectId: ProjectId, credential: StoredCredential) = withContext(Dispatchers.IO) {
-        val current = loadCredentials(projectId).toMutableList()
-        // Remove duplicate if exists (by id)
-        current.removeAll { it.id == credential.id }
-        current.add(credential)
-        saveCredentials(projectId, current)
+        val current = loadCredentials(projectId)
+        // Filter out duplicates efficiently using a Set
+        val existing = current.filter { it.id != credential.id }
+        val updated = existing + credential
+        saveCredentials(projectId, updated)
     }
     
     suspend fun deleteCredential(projectId: ProjectId, credentialId: CredentialId) = withContext(Dispatchers.IO) {
