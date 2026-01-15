@@ -28,15 +28,17 @@ sonar {
         property("sonar.projectVersion", "0.1.0")
         
         // === Source Configuration ===
-        // WICHTIG: String-Concatenation statt listOf().joinToString() 
-        // um Cast-Fehler bei CLI-Override zu vermeiden
-        property("sonar.sources",
-            "androidApp/src/main/java," +
-            "shared/contract/src/commonMain/kotlin," +
-            "shared/contract/src/generated/kotlin," +
-            "shared/engine/src/commonMain/kotlin," +
-            "tools/codegen-contract/src/main/kotlin"
-        )
+        // HINWEIS: sonar.sources wird dynamisch über Workflow gesetzt
+        // Default-Wert nur als Fallback (falls lokal ausgeführt)
+        if (!project.hasProperty("sonar.sources")) {
+            property("sonar.sources",
+                "androidApp/src/main/java," +
+                "shared/contract/src/commonMain/kotlin," +
+                "shared/contract/src/generated/kotlin," +
+                "shared/engine/src/commonMain/kotlin," +
+                "tools/codegen-contract/src/main/kotlin"
+            )
+        }
         
         // === Language Configuration ===
         property("sonar.sourceEncoding", "UTF-8")
