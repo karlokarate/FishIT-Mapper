@@ -116,6 +116,11 @@ private fun EventRow(e: RecorderEvent) {
                 Text(e.url)
                 if (e.initiatorUrl != null) Text("init: ${e.initiatorUrl}")
             }
+            is ResourceResponseEvent -> {
+                Text("RES  ${e.at}  ${e.statusCode}  ${e.contentType ?: "unknown"}")
+                Text(e.url)
+                if (e.isRedirect && e.redirectLocation != null) Text("→ ${e.redirectLocation}")
+            }
             is ConsoleMessageEvent -> {
                 Text("CONSOLE  ${e.at}  ${e.level}")
                 Text(e.message)
