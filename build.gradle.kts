@@ -54,16 +54,5 @@ sonar {
         
         // === Android Lint Integration ===
         property("sonar.android.lint.report", "androidApp/build/reports/lint-results-debug.xml")
-        
-        // === Java Binaries ===
-        property("sonar.java.binaries", "**/build/classes")
-    }
-}
-        
-        // === Android Lint Integration (if lint reports exist) ===
-        property("sonar.android.lint.report", "androidApp/build/reports/lint-results-debug.xml")
-        
-        // === Java Binaries (für Bytecode-Analyse) ===
-        property("sonar.java.binaries", "**/build/classes")
     }
 }
