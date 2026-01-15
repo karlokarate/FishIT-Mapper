@@ -6,10 +6,13 @@ import dev.fishit.mapper.engine.IdGenerator
 import kotlinx.datetime.Clock
 
 /**
- * JavaScript interface for capturing user interactions from web pages.
+ * JavaScript bridge that allows web pages to send user action events back to the Android app.
  * 
- * This bridge allows web pages to report user actions (clicks, scrolls, form submits)
- * back to the native Android app for tracking and analysis.
+ * This bridge is exposed to JavaScript via `addJavascriptInterface()` and allows tracking
+ * of user interactions like clicks, scrolls, form submissions, etc.
+ * 
+ * Includes input validation and dynamic recording state checking to ensure only valid data
+ * is processed and only when recording is active.
  */
 class JavaScriptBridge(
     private val isRecording: () -> Boolean,
@@ -17,10 +20,11 @@ class JavaScriptBridge(
 ) {
     
     /**
-     * Records a click event from the web page.
+     * Records a click event from JavaScript.
+     * Called when user clicks on an element in the web page.
      * 
-     * @param targetSelector CSS selector of the clicked element
-     * @param targetText Text content of the clicked element (truncated to 100 chars)
+     * @param targetSelector CSS selector or element identifier (e.g., "#button1", ".nav-link")
+     * @param targetText Text content of the clicked element
      * @param x X coordinate of the click
      * @param y Y coordinate of the click
      */
@@ -41,7 +45,8 @@ class JavaScriptBridge(
     }
     
     /**
-     * Records a scroll event from the web page.
+     * Records a scroll event from JavaScript.
+     * Called when user scrolls the page.
      * 
      * @param scrollY Vertical scroll position in pixels
      * @param scrollX Horizontal scroll position in pixels
@@ -60,7 +65,8 @@ class JavaScriptBridge(
     }
     
     /**
-     * Records a form submit event from the web page.
+     * Records a form submission from JavaScript.
+     * Called when a form is submitted.
      * 
      * @param formAction The form's action URL
      * @param formMethod The form's method (GET/POST)
