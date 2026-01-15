@@ -55,6 +55,8 @@ android {
 }
 
 dependencies {
+    // Direct dependency on contract to ensure generated code is available
+    implementation(projects.shared.contract)
     implementation(projects.shared.engine)
 
     // KotlinX

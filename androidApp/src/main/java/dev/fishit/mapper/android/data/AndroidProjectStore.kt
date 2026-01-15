@@ -127,6 +127,25 @@ suspend fun saveSession(projectId: ProjectId, session: RecordingSession) = withC
         val updated = listProjects().map { if (it.id == meta.id) meta else it }
         saveProjectIndex(updated)
     }
+    
+    /**
+     * Save or update project metadata in the index.
+     * Used for importing projects with existing metadata.
+     */
+    suspend fun saveProjectMeta(meta: ProjectMeta) = withContext(Dispatchers.IO) {
+        val current = listProjects().toMutableList()
+        val existing = current.indexOfFirst { it.id == meta.id }
+        if (existing >= 0) {
+            current[existing] = meta
+        } else {
+            current.add(meta)
+        }
+        saveProjectIndex(current)
+        
+        // Ensure directories exist
+        projectDir(meta.id).mkdirs()
+        sessionsDir(meta.id).mkdirs()
+    }
 
     private fun saveProjectIndex(projects: List<ProjectMeta>) {
         projectsDir.mkdirs()

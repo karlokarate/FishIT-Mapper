@@ -15,7 +15,8 @@ kotlin {
 
     sourceSets {
         val commonMain by getting {
-            kotlin.srcDir(layout.buildDirectory.dir("generated/source/fishitContract/commonMain/kotlin"))
+            // Use src/generated instead of build/generated for better IDE support and reliability
+            kotlin.srcDir(projectDir.resolve("src/generated/kotlin"))
 
             dependencies {
                 implementation(libs.kotlinx.serialization.json)
@@ -40,7 +41,8 @@ android {
 }
 
 // --- KotlinPoet contract generation wiring ---
-val generatedDir = layout.buildDirectory.dir("generated/source/fishitContract/commonMain/kotlin")
+// Use src/generated instead of build/generated for better reliability
+val generatedDir = projectDir.resolve("src/generated/kotlin")
 
 val codegenClasspath by configurations.creating {
     isCanBeResolved = true
@@ -58,8 +60,13 @@ val generateFishitContract = tasks.register<JavaExec>("generateFishitContract") 
     mainClass.set("dev.fishit.mapper.codegen.MainKt")
     args(
         "--schema", "${rootProject.projectDir}/schema/contract.schema.json",
-        "--out", generatedDir.get().asFile.absolutePath
+        "--out", generatedDir.absolutePath
     )
+    
+    // Ensure output directory exists
+    doFirst {
+        generatedDir.mkdirs()
+    }
 }
 
 tasks.matching { it.name.startsWith("compileKotlin") }.configureEach {
