@@ -68,13 +68,23 @@ class TrafficCaptureVpnService : VpnService() {
         }
 
         try {
-            // Erstelle VPN-Interface
+            // Erstelle VPN-Interface mit verbesserter Konfiguration
             val builder = Builder()
                 .setSession("FishIT-Mapper VPN")
                 .addAddress(VPN_ADDRESS, 24)
                 .addRoute(VPN_ROUTE, 0)
                 .addDnsServer(VPN_DNS)
+                .addDnsServer("8.8.4.4") // Backup DNS
                 .setMtu(1500)
+                .setBlocking(false) // Non-blocking für bessere Performance
+            
+            // Erlaube Apps, die nicht durch VPN geroutet werden sollen
+            try {
+                // Lasse die eigene App durch (um Loops zu vermeiden)
+                builder.addDisallowedApplication(packageName)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not exclude own app from VPN", e)
+            }
 
             // Setze diesen VPN als System-Standard
             vpnInterface = builder.establish()
@@ -116,8 +126,21 @@ class TrafficCaptureVpnService : VpnService() {
 
     /**
      * Leitet Netzwerk-Pakete vom VPN-Interface zum Proxy weiter.
-     * Vereinfachte Implementierung - in Produktion würde man eine
-     * vollständige TCP/IP-Stack-Implementierung benötigen.
+     * 
+     * WICHTIGER HINWEIS: Diese Implementierung ist vereinfacht und nicht vollständig funktional.
+     * Eine vollständige VPN-Implementierung würde benötigen:
+     * 1. Einen kompletten TCP/IP-Stack (z.B. lwIP)
+     * 2. NAT (Network Address Translation)
+     * 3. TCP-State-Machine für Verbindungen
+     * 4. Proper Packet-Reassembly
+     * 5. Socket-Connection-Pool für Proxy-Forwarding
+     * 
+     * Für die MVP-Version wird empfohlen:
+     * - WebView mit JavaScript-Bridge für Browser-Traffic (bereits implementiert)
+     * - System-weite Proxy-Einstellungen für andere Apps
+     * - Oder Verwendung einer VPN-Library wie tun2socks oder Clash
+     * 
+     * Siehe: https://github.com/shadowsocks/shadowsocks-android/tree/master/core
      */
     private suspend fun forwardPackets() {
         val vpnFd = vpnInterface ?: return
@@ -145,6 +168,8 @@ class TrafficCaptureVpnService : VpnService() {
 
                 val protocol = buffer.get(9).toInt() and 0xFF
                 
+                // WARNUNG: Einfaches Durchreichen ohne Proxy-Routing
+                // Dies führt dazu, dass VPN zwar aktiv ist, aber Traffic nicht funktioniert
                 // TCP (6) und UDP (17) Pakete bearbeiten
                 when (protocol) {
                     6 -> handleTcpPacket(buffer, outputStream)

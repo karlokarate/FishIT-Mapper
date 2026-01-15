@@ -251,16 +251,58 @@ class CertificateManager(private val context: Context) {
     fun getCACertificateInfo(): CertificateInfo? {
         return try {
             val (certificate, _) = getOrCreateCACertificate()
+            val isInstalled = isCACertificateInstalledInSystem()
             CertificateInfo(
                 subject = certificate.subjectX500Principal.name,
                 issuer = certificate.issuerX500Principal.name,
                 notBefore = certificate.notBefore,
                 notAfter = certificate.notAfter,
-                serialNumber = certificate.serialNumber.toString()
+                serialNumber = certificate.serialNumber.toString(),
+                isInstalledInSystem = isInstalled
             )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get CA certificate info", e)
             null
+        }
+    }
+
+    /**
+     * Prüft, ob das CA-Zertifikat im Android-System installiert ist.
+     * Verwendet TrustManager um zu prüfen, ob das Zertifikat vertraut wird.
+     */
+    fun isCACertificateInstalledInSystem(): Boolean {
+        return try {
+            if (!hasCACertificate()) {
+                return false
+            }
+            
+            val (certificate, _) = getOrCreateCACertificate()
+            
+            // Versuche das Zertifikat mit dem System-TrustManager zu verifizieren
+            val trustManagerFactory = javax.net.ssl.TrustManagerFactory.getInstance(
+                javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm()
+            )
+            trustManagerFactory.init(null as KeyStore?) // Verwendet System-Keystore
+            
+            val trustManagers = trustManagerFactory.trustManagers
+            for (trustManager in trustManagers) {
+                if (trustManager is javax.net.ssl.X509TrustManager) {
+                    val acceptedIssuers = trustManager.acceptedIssuers
+                    // Prüfe, ob unser CA-Zertifikat in den akzeptierten Zertifikaten ist
+                    for (acceptedCert in acceptedIssuers) {
+                        if (acceptedCert.equals(certificate)) {
+                            Log.i(TAG, "CA certificate is installed in system")
+                            return true
+                        }
+                    }
+                }
+            }
+            
+            Log.i(TAG, "CA certificate is NOT installed in system")
+            false
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to check if CA certificate is installed in system", e)
+            false
         }
     }
 }
@@ -273,5 +315,6 @@ data class CertificateInfo(
     val issuer: String,
     val notBefore: Date,
     val notAfter: Date,
-    val serialNumber: String
+    val serialNumber: String,
+    val isInstalledInSystem: Boolean = false
 )

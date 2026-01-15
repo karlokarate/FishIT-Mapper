@@ -21,12 +21,19 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Debug builds werden automatisch mit Android Debug Keystore signiert
+            // Dies ist ausreichend für VPN und Zertifikat-Funktionalität
+            isDebuggable = true
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Für Release-Build sollte ein eigener Keystore verwendet werden:
+            // signingConfig = signingConfigs.getByName("release")
         }
     }
 
