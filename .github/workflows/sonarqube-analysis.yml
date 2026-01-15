@@ -83,34 +83,6 @@ jobs:
           ./gradlew :shared:contract:generateFishitContract
           echo "✅ Contract generation complete"
 
-      - name: Build Source Paths
-        id: sources
-        run: |
-          SOURCES=""
-          
-          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
-            SOURCES="androidApp/src/main/java,shared/contract/src/commonMain/kotlin,shared/contract/src/generated/kotlin,shared/engine/src/commonMain/kotlin,tools/codegen-contract/src/main/kotlin"
-          else
-            if [[ "${{ inputs.analyze_android }}" == "true" ]]; then
-              SOURCES="androidApp/src/main/java"
-            fi
-            if [[ "${{ inputs.analyze_contract }}" == "true" ]]; then
-              [ -n "$SOURCES" ] && SOURCES="$SOURCES,"
-              SOURCES="${SOURCES}shared/contract/src/commonMain/kotlin,shared/contract/src/generated/kotlin"
-            fi
-            if [[ "${{ inputs.analyze_engine }}" == "true" ]]; then
-              [ -n "$SOURCES" ] && SOURCES="$SOURCES,"
-              SOURCES="${SOURCES}shared/engine/src/commonMain/kotlin"
-            fi
-            if [[ "${{ inputs.analyze_codegen }}" == "true" ]]; then
-              [ -n "$SOURCES" ] && SOURCES="$SOURCES,"
-              SOURCES="${SOURCES}tools/codegen-contract/src/main/kotlin"
-            fi
-          fi
-          
-          echo "SONAR_SOURCES=$SOURCES" >> $GITHUB_OUTPUT
-          echo "📁 Sources to analyze: $SOURCES"
-
       - name: Build Project
         run: |
           echo "🔨 Building all modules..."
@@ -129,7 +101,7 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           echo "🔍 Starting SonarQube Analysis..."
-          echo "📁 Analyzing sources: ${{ steps.sources.outputs.SONAR_SOURCES }}"
+          echo "📁 Sources will be auto-detected by SonarQube plugin"
           
           GRADLE_ARGS=(
             "-Dsonar.gradle.skipCompile=true"
@@ -162,7 +134,7 @@ jobs:
           echo "🔀 Event: ${{ github.event_name }} | Ref: ${{ github.ref }}"
           echo ""
           echo "📊 Configuration:"
-          echo "   Sources: ${{ steps.sources.outputs.SONAR_SOURCES }}"
+          echo "   Sources: Auto-detected by SonarQube plugin"
           echo "   Skip Compile: true (explicit build step used)"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo ""

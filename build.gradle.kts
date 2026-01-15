@@ -52,7 +52,7 @@ sonar {
             "**/contract/src/generated/**"
         )
         
-        // === Android Lint Integration ===
-        property("sonar.android.lint.report", "androidApp/build/reports/lint-results-debug.xml")
+        // === Java Binaries (for bytecode analysis) ===
+        property("sonar.java.binaries", "**/build/classes")
     }
 }
