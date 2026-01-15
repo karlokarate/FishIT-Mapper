@@ -83,7 +83,7 @@ fun SessionDetailScreen(
             }
 
             Text("Started: ${s.startedAt}")
-            Text("Ended: ${s.endedAt ?: "-"}")
+            Text("Ended: ${s.endedAt ?: "ongoing"}")
             Text("Initial: ${s.initialUrl}")
             if (s.finalUrl != null) Text("Final: ${s.finalUrl}")
             Text("Events: ${s.events.size}")

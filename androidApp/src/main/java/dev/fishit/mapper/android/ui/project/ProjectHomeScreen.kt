@@ -125,7 +125,12 @@ fun ProjectHomeScreen(
                         onRecorderEvent = { event -> vm.onRecorderEvent(event) }
                     )
 
-                    ProjectTab.Graph -> GraphScreen(graph = state.graph)
+                    ProjectTab.Graph -> GraphScreen(
+                        graph = state.graph,
+                        onNodeTagsChanged = { nodeId, tags ->
+                            vm.updateNodeTags(nodeId, tags)
+                        }
+                    )
 
                     ProjectTab.Sessions -> SessionsScreen(
                         sessions = state.sessions,

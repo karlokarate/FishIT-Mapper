@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dev.fishit.mapper.android.data.AndroidProjectStore
 import dev.fishit.mapper.android.export.ExportManager
 import dev.fishit.mapper.contract.*
+import dev.fishit.mapper.engine.HubDetector
 import dev.fishit.mapper.engine.IdGenerator
 import dev.fishit.mapper.engine.MappingEngine
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -140,6 +141,49 @@ class ProjectViewModel(
                 .onFailure { t ->
                     _state.value = _state.value.copy(error = t.message)
                 }
+        }
+    }
+
+    /**
+     * Updates tags for a specific node and persists the change.
+     */
+    fun updateNodeTags(nodeId: NodeId, tags: List<String>) {
+        viewModelScope.launch {
+            runCatching {
+                val currentGraph = store.loadGraph(projectId)
+                val updatedNodes = currentGraph.nodes.map { node ->
+                    if (node.id == nodeId) {
+                        node.copy(tags = tags)
+                    } else {
+                        node
+                    }
+                }
+                val updatedGraph = currentGraph.copy(nodes = updatedNodes)
+                store.saveGraph(projectId, updatedGraph)
+                updatedGraph
+            }.onSuccess { updatedGraph ->
+                _state.value = _state.value.copy(graph = updatedGraph)
+            }.onFailure { t ->
+                _state.value = _state.value.copy(error = t.message)
+            }
+        }
+    }
+
+    /**
+     * Applies hub detection algorithm to automatically tag important nodes.
+     */
+    fun applyHubDetection(threshold: Double = 5.0) {
+        viewModelScope.launch {
+            runCatching {
+                val currentGraph = store.loadGraph(projectId)
+                val hubDetectedGraph = HubDetector.tagHubs(currentGraph, threshold)
+                store.saveGraph(projectId, hubDetectedGraph)
+                hubDetectedGraph
+            }.onSuccess { updatedGraph ->
+                _state.value = _state.value.copy(graph = updatedGraph)
+            }.onFailure { t ->
+                _state.value = _state.value.copy(error = t.message)
+            }
         }
     }
 

@@ -12,7 +12,8 @@ local.properties
 **/*.keystore
 **/*.jks
 
-# Generated (we generate into build/, so nothing here by default)
+# Generated contract sources (moved from build/ to src/generated/ for reliability)
+shared/contract/src/generated/
 
 # Archive files
 *.zip
