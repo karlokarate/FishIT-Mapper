@@ -29,7 +29,6 @@ sonar {
         
         // === Source Configuration ===
         // Default source directories for all modules
-        // Can be overridden by setting project property 'sonar.sources' as a comma-separated list
         property("sonar.sources", listOf(
             "androidApp/src/main/java",
             "shared/contract/src/commonMain/kotlin",

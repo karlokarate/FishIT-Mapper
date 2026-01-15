@@ -70,9 +70,7 @@ sonar {
 
 ### Änderungen in `.github/workflows/sonarqube-analysis.yml`
 
-Die dynamisch berechneten Sources werden derzeit nicht verwendet, da standardmäßig alle Module analysiert werden. Das Build-Source-Paths-Step bleibt für zukünftige Erweiterungen erhalten, wird aber momentan nicht genutzt.
-
-Die SonarQube-Konfiguration in `build.gradle.kts` definiert bereits alle zu analysierenden Quellen.
+Keine Änderungen am Workflow erforderlich. Der Workflow behält die "Build Source Paths" Logik für zukünftige Erweiterungen, verwendet sie aber aktuell nicht. Standardmäßig werden alle Module analysiert, wie in `build.gradle.kts` definiert.
 
 ## 🎯 Warum die letzten 5 Commits das Problem nicht beheben konnten
 
