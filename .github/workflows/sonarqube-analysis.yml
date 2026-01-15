@@ -71,7 +71,7 @@ jobs:
             -Dsonar.organization=${{ github.repository_owner }} \
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
             -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
-            -Dsonar.sources=androidApp/src/main,shared/contract/src,shared/engine/src,tools/codegen-contract/src \
+            -Dsonar.sources=androidApp/src/main,shared/contract/src/commonMain,shared/contract/src/androidMain,shared/engine/src,tools/codegen-contract/src \
             -Dsonar.java.binaries=**/build/classes \
             -Dsonar.kotlin.detekt.reportPaths=**/build/reports/detekt/*.xml \
             -Dsonar.coverage.jacoco.xmlReportPaths=**/build/reports/jacoco/**/*.xml \
