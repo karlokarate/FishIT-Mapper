@@ -9,7 +9,6 @@ on:
 
 env:
   JAVA_VERSION: '17'
-  GRADLE_VERSION: '8.5'
 
 jobs:
   sonarqube-analysis:
