@@ -1,4 +1,4 @@
-pugins {
+plugins {
     // Keep plugin versions centralized in gradle/libs.versions.toml
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.android.library) apply false
