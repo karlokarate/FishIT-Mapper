@@ -36,6 +36,13 @@ sonar {
         // === Scan All Files (including non-JVM files in root) ===
         property("sonar.gradle.scanAll", "true")
         
+        // === Android Lint Report Paths ===
+        property("sonar.androidLint.reportPaths",
+            "androidApp/build/reports/lint-results-debug.xml," +
+            "shared/contract/build/reports/lint-results-debug.xml," +
+            "shared/engine/build/reports/lint-results-debug.xml"
+        )
+        
         // === Exclusions ===
         property("sonar.exclusions",
             "**/build/**," +
