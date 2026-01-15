@@ -64,18 +64,18 @@ object RedirectDetector {
             if (startNode.id !in visited && startNode.id in redirectMap) {
                 val chain = mutableListOf<NodeId>()
                 val seenInChain = mutableSetOf<NodeId>()
-                var current = startNode.id
+                var current: NodeId? = startNode.id
                 
                 // Follow redirect chain, stop on cycle or dead end
-                while (current in redirectMap && current !in seenInChain) {
+                while (current != null && current in redirectMap && current !in seenInChain) {
                     chain.add(current)
                     seenInChain.add(current)
                     visited.add(current)
-                    current = redirectMap[current]!!
+                    current = redirectMap[current]
                 }
                 
                 // Add final destination if it's not already in chain (not a cycle)
-                if (current !in seenInChain) {
+                if (current != null && current !in seenInChain) {
                     chain.add(current)
                     visited.add(current)
                 }

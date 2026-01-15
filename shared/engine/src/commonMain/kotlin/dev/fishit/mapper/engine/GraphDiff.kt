@@ -117,8 +117,10 @@ object GraphDiff {
             changes.add("title: ${before.title} → ${after.title}")
         }
         if (before.tags != after.tags) {
-            val added = after.tags - before.tags.toSet()
-            val removed = before.tags - after.tags.toSet()
+            val beforeTagsSet = before.tags.toSet()
+            val afterTagsSet = after.tags.toSet()
+            val added = afterTagsSet - beforeTagsSet
+            val removed = beforeTagsSet - afterTagsSet
             if (added.isNotEmpty()) changes.add("tags added: ${added.joinToString()}")
             if (removed.isNotEmpty()) changes.add("tags removed: ${removed.joinToString()}")
         }

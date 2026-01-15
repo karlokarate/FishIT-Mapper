@@ -151,7 +151,11 @@ object HubDetector {
             while (stack.isNotEmpty()) {
                 val w = stack.removeLast()
                 predecessors[w]?.forEach { v ->
-                    val factor = (paths[v]?.toDouble() ?: 0.0) / (paths[w]?.toDouble() ?: 1.0)
+                    // paths[w] defaults to 1.0 to avoid division by zero
+                    // This is safe because nodes with 0 paths won't be in predecessors
+                    val pathsW = paths[w]?.toDouble() ?: 1.0
+                    val pathsV = paths[v]?.toDouble() ?: 0.0
+                    val factor = pathsV / pathsW
                     delta[v] = (delta[v] ?: 0.0) + factor * (1.0 + (delta[w] ?: 0.0))
                 }
                 if (w != source.id) {
