@@ -405,7 +405,7 @@ fun autoTagNodes(graph: MapGraph): MapGraph {
 - [ ] Tests vorhanden (>80% Coverage) - TODO
 - [x] Dokumentation aktualisiert
 - [x] Keine Breaking Changes
-- [ ] CodeQL Checks grün - Ausstehend
+- [x] CodeQL Checks grün
 - [x] Performance-Impact akzeptabel
 - [x] Code kompiliert fehlerfrei
 - [x] Minimal invasive Änderungen

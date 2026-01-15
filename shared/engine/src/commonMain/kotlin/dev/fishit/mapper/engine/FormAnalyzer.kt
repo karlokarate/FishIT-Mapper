@@ -49,8 +49,7 @@ object FormAnalyzer {
         
         // TODO: Parse actual JSON data from JavaScript bridge
         // For now, we return basic metadata
-        @Suppress("UNUSED_VARIABLE")
-        val data = event.action.removePrefix("formsubmit:")
+        val _data = event.action.removePrefix("formsubmit:")
         
         return try {
             // Placeholder implementation - returns basic info

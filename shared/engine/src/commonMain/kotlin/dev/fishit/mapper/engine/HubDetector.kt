@@ -12,6 +12,16 @@ import dev.fishit.mapper.contract.*
  */
 object HubDetector {
     
+    // Hub score calculation weights
+    private const val CONNECTIVITY_WEIGHT = 0.4
+    private const val BETWEENNESS_WEIGHT = 0.3
+    private const val BALANCE_WEIGHT = 0.3
+    
+    // Hub detection thresholds
+    private const val DEFAULT_HUB_THRESHOLD = 5.0
+    private const val NAVIGATION_HUB_MIN_DEGREE = 5
+    private const val DEGREE_RATIO_THRESHOLD = 2
+    
     data class NodeMetrics(
         val nodeId: NodeId,
         val inDegree: Int,
@@ -75,10 +85,10 @@ object HubDetector {
         betweenness: Double
     ): Double {
         // Base score from connectivity
-        val connectivityScore = (inDegree + outDegree) * 0.4
+        val connectivityScore = (inDegree + outDegree) * CONNECTIVITY_WEIGHT
         
         // Betweenness contribution (nodes that are on many shortest paths)
-        val betweennessScore = betweenness * 0.3
+        val betweennessScore = betweenness * BETWEENNESS_WEIGHT
         
         // Kind-based weighting
         val kindWeight = when (nodeKind) {
@@ -95,7 +105,7 @@ object HubDetector {
         } else {
             0.0
         }
-        val balanceScore = balance * 0.3
+        val balanceScore = balance * BALANCE_WEIGHT
         
         return (connectivityScore + betweennessScore + balanceScore) * kindWeight
     }
@@ -120,16 +130,16 @@ object HubDetector {
             val distance = mutableMapOf<NodeId, Int>()
             val paths = mutableMapOf<NodeId, Int>()
             val predecessors = mutableMapOf<NodeId, MutableList<NodeId>>()
-            val queue = mutableListOf<NodeId>()
+            val queue = ArrayDeque<NodeId>()
             
             distance[source.id] = 0
             paths[source.id] = 1
-            queue.add(source.id)
+            queue.addLast(source.id)
             
             val stack = mutableListOf<NodeId>()
             
             while (queue.isNotEmpty()) {
-                val v = queue.removeAt(0)
+                val v = queue.removeFirst()
                 stack.add(v)
                 
                 adjacency[v]?.forEach { w ->
@@ -151,13 +161,17 @@ object HubDetector {
             while (stack.isNotEmpty()) {
                 val w = stack.removeLast()
                 predecessors[w]?.forEach { v ->
-                    // Note: paths[w] should never be null or 0 for nodes in predecessors,
-                    // as they were reached via BFS. Default to 1.0 as safe fallback.
-                    // This is mathematically correct since a node with 1 path contributes
-                    // its full delta value to its predecessor.
-                    val pathsW = paths[w]?.toDouble() ?: 1.0
-                    val pathsV = paths[v]?.toDouble() ?: 0.0
-                    val factor = pathsV / pathsW
+                    // In Brandes' algorithm, paths[w] and paths[v] should be > 0
+                    // for all predecessor relationships, as they were reached via BFS.
+                    // We check this defensively to avoid division by zero and
+                    // mathematically implausible states.
+                    val pathsWInt = paths[w] ?: 0
+                    val pathsVInt = paths[v] ?: 0
+                    if (pathsWInt <= 0 || pathsVInt <= 0) {
+                        // Inconsistent state: skip this contribution
+                        return@forEach
+                    }
+                    val factor = pathsVInt.toDouble() / pathsWInt.toDouble()
                     delta[v] = (delta[v] ?: 0.0) + factor * (1.0 + (delta[w] ?: 0.0))
                 }
                 if (w != source.id) {
@@ -173,16 +187,16 @@ object HubDetector {
      * Tags nodes that are identified as hubs.
      * Returns a new graph with hub tags applied.
      */
-    fun tagHubs(graph: MapGraph, threshold: Double = 5.0): MapGraph {
+    fun tagHubs(graph: MapGraph, threshold: Double = DEFAULT_HUB_THRESHOLD): MapGraph {
         val metrics = analyzeGraph(graph)
         
         val updatedNodes = graph.nodes.map { node ->
             val metric = metrics[node.id]
             if (metric != null && metric.hubScore >= threshold) {
                 val hubTag = when {
-                    metric.outDegree > metric.inDegree * 2 -> "hub:homepage"
-                    metric.inDegree > 5 && metric.outDegree > 5 -> "hub:navigation"
-                    metric.inDegree > metric.outDegree * 2 -> "hub:important"
+                    metric.outDegree > metric.inDegree * DEGREE_RATIO_THRESHOLD -> "hub:homepage"
+                    metric.inDegree > NAVIGATION_HUB_MIN_DEGREE && metric.outDegree > NAVIGATION_HUB_MIN_DEGREE -> "hub:navigation"
+                    metric.inDegree > metric.outDegree * DEGREE_RATIO_THRESHOLD -> "hub:important"
                     else -> "hub"
                 }
                 

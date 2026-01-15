@@ -17,6 +17,9 @@ object RedirectDetector {
     // Threshold for considering a navigation as a redirect
     private const val REDIRECT_THRESHOLD_MS = 800L
     
+    // Threshold for same-domain redirects (common for auth flows)
+    private const val SAME_DOMAIN_REDIRECT_THRESHOLD_MS = 2000L
+    
     /**
      * Analyzes a sequence of navigation events to detect likely redirects.
      */
@@ -108,7 +111,7 @@ object RedirectDetector {
         }
         
         // Same domain redirect pattern (common for auth flows)
-        if (isSameDomainRedirect(current.url, next.url) && timeDiffMs <= 2000) {
+        if (isSameDomainRedirect(current.url, next.url) && timeDiffMs <= SAME_DOMAIN_REDIRECT_THRESHOLD_MS) {
             return true
         }
         

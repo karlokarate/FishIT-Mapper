@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dev.fishit.mapper.android.data.AndroidProjectStore
 import dev.fishit.mapper.android.export.ExportManager
 import dev.fishit.mapper.contract.*
+import dev.fishit.mapper.engine.HubDetector
 import dev.fishit.mapper.engine.IdGenerator
 import dev.fishit.mapper.engine.MappingEngine
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -175,7 +176,7 @@ class ProjectViewModel(
         viewModelScope.launch {
             runCatching {
                 val currentGraph = store.loadGraph(projectId)
-                val hubDetectedGraph = dev.fishit.mapper.engine.HubDetector.tagHubs(currentGraph, threshold)
+                val hubDetectedGraph = HubDetector.tagHubs(currentGraph, threshold)
                 store.saveGraph(projectId, hubDetectedGraph)
                 hubDetectedGraph
             }.onSuccess { updatedGraph ->
