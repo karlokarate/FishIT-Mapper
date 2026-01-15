@@ -115,6 +115,14 @@ fun SettingsScreen(
                         )
                     }
                     
+                    // Status aktualisieren
+                    OutlinedButton(
+                        onClick = { viewModel.refreshCertificateStatus() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Status aktualisieren")
+                    }
+                    
                     // Zertifikat generieren
                     Button(
                         onClick = { viewModel.generateCertificate() },
@@ -237,6 +245,35 @@ fun SettingsScreen(
                         }
                     }
                     
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "⚠️ VPN-Einschränkung",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                "Die aktuelle VPN-Implementierung ist vereinfacht und funktioniert NICHT für system-weiten Traffic. " +
+                                "Für vollständige Traffic-Erfassung wird ein kompletter TCP/IP-Stack benötigt.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                "✅ Empfehlung: Verwenden Sie den integrierten Browser im Project-Tab für vollständige Traffic-Erfassung.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                    
                     Text(
                         "⚠️ Hinweis: Das CA-Zertifikat muss installiert sein, damit HTTPS-Entschlüsselung funktioniert.",
                         style = MaterialTheme.typography.bodySmall,
@@ -261,17 +298,30 @@ fun SettingsScreen(
                     )
                     
                     Text(
+                        "Empfohlener Workflow:",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    
+                    Text(
                         "1. Zertifikat generieren\n" +
                         "2. Zertifikat exportieren\n" +
-                        "3. Zertifikat installieren (oder manuell über Einstellungen)\n" +
-                        "4. VPN starten\n" +
-                        "5. Traffic wird nun entschlüsselt erfasst",
+                        "3. Zertifikat im System installieren\n" +
+                        "4. Status aktualisieren und prüfen\n" +
+                        "5. Projekt öffnen und Browser-Tab verwenden\n" +
+                        "6. URLs im integrierten Browser aufrufen",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     
                     Text(
-                        "Manuelle Installation:\n" +
-                        "Einstellungen → Sicherheit → Verschlüsselung & Anmeldedaten → Zertifikat installieren → CA-Zertifikat",
+                        "Manuelle Zertifikat-Installation:",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    
+                    Text(
+                        "Einstellungen → Sicherheit → Verschlüsselung & Anmeldedaten → Zertifikat installieren → CA-Zertifikat\n\n" +
+                        "Nach Installation: Status aktualisieren, um zu prüfen, ob das Zertifikat erkannt wurde.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -312,6 +362,49 @@ private fun CertificateInfoCard(info: CertificateInfo) {
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.primary
         )
+        
+        // Installation Status
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Status:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (info.isInstalledInSystem) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = "Installiert",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        "Im System installiert",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = "Nicht installiert",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        "Nicht installiert",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
         
         InfoRow("Subject:", info.subject)
         InfoRow("Gültig von:", dateFormat.format(info.notBefore))
@@ -374,6 +467,10 @@ class SettingsViewModel(
             }
             _state.value = _state.value.copy(certificateInfo = info)
         }
+    }
+    
+    fun refreshCertificateStatus() {
+        loadCertificateInfo()
     }
     
     fun generateCertificate() {

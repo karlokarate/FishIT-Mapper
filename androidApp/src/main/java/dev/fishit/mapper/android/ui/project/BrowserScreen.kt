@@ -3,8 +3,10 @@ package dev.fishit.mapper.android.ui.project
 import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -41,6 +43,8 @@ import dev.fishit.mapper.contract.ResourceKind
 import dev.fishit.mapper.contract.ResourceRequestEvent
 import dev.fishit.mapper.engine.IdGenerator
 import kotlinx.datetime.Clock
+
+private const val TAG = "BrowserScreen"
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -106,6 +110,19 @@ fun BrowserScreen(
                     settings.domStorageEnabled = true
                     settings.loadsImagesAutomatically = true
                     settings.userAgentString = settings.userAgentString + " FishIT-Mapper/0.1"
+                    
+                    // Enable debugging for WebView
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
+                        WebView.setWebContentsDebuggingEnabled(true)
+                    }
+                    
+                    // Additional settings for better compatibility
+                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                    settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+                    
+                    // Enable zoom controls (can help with debugging)
+                    settings.builtInZoomControls = true
+                    settings.displayZoomControls = false
 
                     val mainHandler = Handler(Looper.getMainLooper())
 
@@ -115,9 +132,19 @@ fun BrowserScreen(
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                             return false
                         }
+                        
+                        override fun onReceivedError(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                            error: WebResourceError?
+                        ) {
+                            super.onReceivedError(view, request, error)
+                            Log.e(TAG, "WebView error: ${error?.description} for ${request?.url}")
+                        }
 
                         override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                             super.onPageStarted(view, url, favicon)
+                            Log.d(TAG, "Page started loading: $url")
                             val u = url ?: return
                             if (!recordingState) {
                                 lastUrl = u
@@ -138,6 +165,7 @@ fun BrowserScreen(
                         
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
+                            Log.d(TAG, "Page finished loading: $url")
                             // Always inject tracking script so it's available when recording starts mid-session
                             if (view != null) {
                                 view.evaluateJavascript(TrackingScript.getScript(), null)
