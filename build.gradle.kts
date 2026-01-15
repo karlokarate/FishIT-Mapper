@@ -33,6 +33,9 @@ sonar {
         property("sonar.java.source", "17")
         property("sonar.java.target", "17")
         
+        // === Scan All Files (including non-JVM files in root) ===
+        property("sonar.gradle.scanAll", "true")
+        
         // === Exclusions ===
         property("sonar.exclusions",
             "**/build/**," +
@@ -52,7 +55,8 @@ sonar {
             "**/contract/src/generated/**"
         )
         
-        // === Java Binaries (for bytecode analysis) ===
-        property("sonar.java.binaries", "**/build/classes")
+        // === Java Binaries ===
+        // Removed explicit sonar.java.binaries configuration to let Gradle plugin
+        // use its defaults, which correctly handle Android intermediates and Kotlin classes
     }
 }
