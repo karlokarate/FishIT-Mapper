@@ -99,7 +99,7 @@ jobs:
         continue-on-error: true
         run: |
           echo "🔍 Running Android Lint (needed for SonarQube import)..."
-          ./gradlew lintDebug --no-daemon || echo "⚠️  Lint completed with warnings"
+          ./gradlew :androidApp:lintDebug :shared:contract:lintDebug :shared:engine:lintDebug --no-daemon || echo "⚠️  Lint completed with warnings"
           echo "✅ Lint analysis complete"
 
       - name: Build and Analyze with SonarQube
