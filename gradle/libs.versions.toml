@@ -26,6 +26,7 @@ androidx-documentfile = "1.0.1"
 # Security & Networking
 bouncycastle = "1.70"
 okhttp = "4.12.0"
+tun2socks = "2.5.2"
 
 [libraries]
 # KotlinX
@@ -60,6 +61,7 @@ bouncycastle-bcprov = { module = "org.bouncycastle:bcprov-jdk15on", version.ref 
 bouncycastle-bcpkix = { module = "org.bouncycastle:bcpkix-jdk15on", version.ref = "bouncycastle" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-logging = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp" }
+tun2socks = { module = "com.github.shadowsocks:tun2socks", version.ref = "tun2socks" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

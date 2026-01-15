@@ -107,4 +107,7 @@ dependencies {
     implementation(libs.bouncycastle.bcpkix)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+    
+    // VPN & Traffic Capture
+    implementation(libs.tun2socks)
 }
