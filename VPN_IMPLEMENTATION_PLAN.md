@@ -248,7 +248,7 @@ class MitmProxyServer(
     fun start() {
         socksServer = SocksServer(port) { request ->
             // Intercept and analyze traffic
-            analyzeTra ffic(request)
+            analyzeTraffic(request)
             
             // Forward to destination
             forwardRequest(request)

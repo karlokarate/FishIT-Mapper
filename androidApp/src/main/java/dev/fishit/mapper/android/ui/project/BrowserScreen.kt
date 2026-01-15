@@ -44,6 +44,8 @@ import dev.fishit.mapper.contract.ResourceRequestEvent
 import dev.fishit.mapper.engine.IdGenerator
 import kotlinx.datetime.Clock
 
+private const val TAG = "BrowserScreen"
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun BrowserScreen(
@@ -57,10 +59,6 @@ fun BrowserScreen(
     val context = LocalContext.current
     val recordingState by rememberUpdatedState(isRecording)
     val onRecorderEventState by rememberUpdatedState(onRecorderEvent)
-    
-    companion object {
-        private const val TAG = "BrowserScreen"
-    }
 
     var urlText by remember(projectMeta?.id?.value) { mutableStateOf(projectMeta?.startUrl ?: "https://") }
 

@@ -289,7 +289,8 @@ class CertificateManager(private val context: Context) {
                 if (trustManager is javax.net.ssl.X509TrustManager) {
                     val acceptedIssuers = trustManager.acceptedIssuers
                     // Prüfe, ob unser CA-Zertifikat in den akzeptierten Zertifikaten ist
-                    if (acceptedIssuers.any { it.equals(certificate) }) {
+                    // Verwende encoded-Vergleich für robustere Erkennung
+                    if (acceptedIssuers.any { it.encoded.contentEquals(certificate.encoded) }) {
                         Log.i(TAG, "CA certificate is installed in system")
                         return true
                     }
