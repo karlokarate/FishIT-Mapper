@@ -159,4 +159,61 @@ suspend fun saveSession(projectId: ProjectId, session: RecordingSession) = withC
     private fun graphFile(projectId: ProjectId): File = File(projectDir(projectId), "graph.json")
     private fun chainsFile(projectId: ProjectId): File = File(projectDir(projectId), "chains.json")
     private fun sessionsDir(projectId: ProjectId): File = File(projectDir(projectId), "sessions")
+    private fun credentialsFile(projectId: ProjectId): File = File(projectDir(projectId), "credentials.json")
+    private fun timelineFile(projectId: ProjectId, sessionId: SessionId): File = 
+        File(sessionsDir(projectId), "${sessionId.value}_timeline.json")
+    
+    // === Credential Storage ===
+    
+    suspend fun saveCredentials(projectId: ProjectId, credentials: List<StoredCredential>) = withContext(Dispatchers.IO) {
+        credentialsFile(projectId).parentFile?.mkdirs()
+        credentialsFile(projectId).writeText(
+            FishitJson.encodeToString(ListSerializer(StoredCredential.serializer()), credentials),
+            Charsets.UTF_8
+        )
+    }
+    
+    suspend fun loadCredentials(projectId: ProjectId): List<StoredCredential> = withContext(Dispatchers.IO) {
+        val file = credentialsFile(projectId)
+        if (!file.exists()) return@withContext emptyList()
+        runCatching {
+            FishitJson.decodeFromString(ListSerializer(StoredCredential.serializer()), file.readText(Charsets.UTF_8))
+        }.getOrElse { emptyList() }
+    }
+    
+    suspend fun addCredential(projectId: ProjectId, credential: StoredCredential) = withContext(Dispatchers.IO) {
+        val current = loadCredentials(projectId).toMutableList()
+        // Remove duplicate if exists (by id)
+        current.removeAll { it.id == credential.id }
+        current.add(credential)
+        saveCredentials(projectId, current)
+    }
+    
+    suspend fun deleteCredential(projectId: ProjectId, credentialId: CredentialId) = withContext(Dispatchers.IO) {
+        val current = loadCredentials(projectId).filterNot { it.id == credentialId }
+        saveCredentials(projectId, current)
+    }
+    
+    // === Timeline Storage ===
+    
+    suspend fun saveTimeline(projectId: ProjectId, timeline: UnifiedTimeline) = withContext(Dispatchers.IO) {
+        val file = timelineFile(projectId, timeline.sessionId)
+        file.parentFile?.mkdirs()
+        file.writeText(
+            FishitJson.encodeToString(UnifiedTimeline.serializer(), timeline),
+            Charsets.UTF_8
+        )
+    }
+    
+    suspend fun loadTimeline(projectId: ProjectId, sessionId: SessionId): UnifiedTimeline? = withContext(Dispatchers.IO) {
+        val file = timelineFile(projectId, sessionId)
+        if (!file.exists()) return@withContext null
+        runCatching {
+            FishitJson.decodeFromString(UnifiedTimeline.serializer(), file.readText(Charsets.UTF_8))
+        }.getOrNull()
+    }
+    
+    suspend fun deleteTimeline(projectId: ProjectId, sessionId: SessionId) = withContext(Dispatchers.IO) {
+        timelineFile(projectId, sessionId).delete()
+    }
 }
