@@ -55,7 +55,7 @@ fun SessionDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Session ${'$'}sessionId") },
+                title = { Text("Session $sessionId") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -72,7 +72,7 @@ fun SessionDetailScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (error != null) {
-                Text("Error: ${'$'}error")
+                Text("Error: $error")
                 return@Column
             }
 

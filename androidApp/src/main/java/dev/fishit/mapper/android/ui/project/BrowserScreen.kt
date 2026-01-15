@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.fishit.mapper.android.webview.JavaScriptBridge
+import dev.fishit.mapper.android.webview.TrackingScript
 import dev.fishit.mapper.contract.ConsoleLevel
 import dev.fishit.mapper.contract.ConsoleMessageEvent
 import dev.fishit.mapper.contract.NavigationEvent
@@ -92,7 +93,7 @@ fun BrowserScreen(
                 Text(if (isRecording) "Stop" else "Record")
             }
 
-            Text("Events: ${'$'}{liveEvents.size}")
+            Text("Events: ${liveEvents.size}")
         }
 
         Spacer(Modifier.height(4.dp))
@@ -107,23 +108,6 @@ fun BrowserScreen(
                     settings.userAgentString = settings.userAgentString + " FishIT-Mapper/0.1"
 
                     val mainHandler = Handler(Looper.getMainLooper())
-                    
-                    // Load tracking JavaScript from assets
-                    val trackingScript = try {
-                        context.assets.open("tracking.js").bufferedReader().use { it.readText() }
-                    } catch (e: Exception) {
-                        null
-                    }
-                    
-                    // Add JavaScript bridge for user action tracking
-                    addJavascriptInterface(
-                        JavaScriptBridge { event ->
-                            if (recordingState) {
-                                mainHandler.post { onRecorderEventState(event) }
-                            }
-                        },
-                        "FishITMapper"
-                    )
 
                     webViewClient = object : WebViewClient() {
                         private var lastUrl: String? = null
@@ -154,9 +138,9 @@ fun BrowserScreen(
                         
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
-                            // Inject tracking script when recording is active
-                            if (recordingState && trackingScript != null) {
-                                view?.evaluateJavascript(trackingScript, null)
+                            // Always inject tracking script so it's available when recording starts mid-session
+                            if (view != null) {
+                                view.evaluateJavascript(TrackingScript.getScript(), null)
                             }
                         }
 
@@ -209,6 +193,17 @@ fun BrowserScreen(
                             return true
                         }
                     }
+
+                    // Add JavaScript bridge for user action tracking
+                    addJavascriptInterface(
+                        JavaScriptBridge(
+                            isRecording = { recordingState },
+                            onUserAction = { event ->
+                                mainHandler.post { onRecorderEventState(event) }
+                            }
+                        ),
+                        "FishITMapper"
+                    )
 
                     loadUrl(urlText.trim())
                     webViewHolder[0] = this

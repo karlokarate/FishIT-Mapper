@@ -10,8 +10,12 @@ import kotlinx.datetime.Clock
  * 
  * This bridge is exposed to JavaScript via `addJavascriptInterface()` and allows tracking
  * of user interactions like clicks, scrolls, form submissions, etc.
+ * 
+ * Includes input validation and dynamic recording state checking to ensure only valid data
+ * is processed and only when recording is active.
  */
 class JavaScriptBridge(
+    private val isRecording: () -> Boolean,
     private val onUserAction: (UserActionEvent) -> Unit
 ) {
     
@@ -26,11 +30,16 @@ class JavaScriptBridge(
      */
     @JavascriptInterface
     fun recordClick(targetSelector: String, targetText: String, x: Int, y: Int) {
+        if (!isRecording()) return
+        
+        val sanitizedSelector = sanitizeInput(targetSelector, MAX_SELECTOR_LENGTH)
+        val sanitizedText = sanitizeInput(targetText, MAX_TEXT_LENGTH)
+        
         val event = UserActionEvent(
             id = IdGenerator.newEventId(),
             at = Clock.System.now(),
-            action = "click:$targetSelector:$targetText:x=$x,y=$y",
-            target = targetSelector.takeIf { it.isNotBlank() }
+            action = "click",
+            target = buildTargetString(sanitizedSelector, sanitizedText, mapOf("x" to x.toString(), "y" to y.toString()))
         )
         onUserAction(event)
     }
@@ -39,16 +48,18 @@ class JavaScriptBridge(
      * Records a scroll event from JavaScript.
      * Called when user scrolls the page.
      * 
-     * @param scrollX Horizontal scroll position
-     * @param scrollY Vertical scroll position
+     * @param scrollY Vertical scroll position in pixels
+     * @param scrollX Horizontal scroll position in pixels
      */
     @JavascriptInterface
-    fun recordScroll(scrollX: Int, scrollY: Int) {
+    fun recordScroll(scrollY: Int, scrollX: Int) {
+        if (!isRecording()) return
+        
         val event = UserActionEvent(
             id = IdGenerator.newEventId(),
             at = Clock.System.now(),
-            action = "scroll:x=$scrollX,y=$scrollY",
-            target = null
+            action = "scroll",
+            target = "scrollY=$scrollY, scrollX=$scrollX"
         )
         onUserAction(event)
     }
@@ -59,35 +70,78 @@ class JavaScriptBridge(
      * 
      * @param formAction The form's action URL
      * @param formMethod The form's method (GET/POST)
-     * @param formId The form's ID attribute
+     * @param fieldNames JSON array of form field names (NOT values for privacy)
      */
     @JavascriptInterface
-    fun recordFormSubmit(formAction: String, formMethod: String, formId: String) {
+    fun recordFormSubmit(formAction: String, formMethod: String, fieldNames: String) {
+        if (!isRecording()) return
+        
+        val sanitizedAction = sanitizeInput(formAction, MAX_URL_LENGTH)
+        val sanitizedMethod = sanitizeInput(formMethod, MAX_METHOD_LENGTH)
+        val sanitizedFieldNames = sanitizeInput(fieldNames, MAX_FIELD_NAMES_LENGTH)
+        
         val event = UserActionEvent(
             id = IdGenerator.newEventId(),
             at = Clock.System.now(),
-            action = "form_submit:$formMethod:$formAction",
-            target = formId.takeIf { it.isNotBlank() }
+            action = "formSubmit",
+            target = "action=$sanitizedAction, method=$sanitizedMethod, fields=$sanitizedFieldNames"
         )
         onUserAction(event)
     }
     
     /**
-     * Records a generic input event from JavaScript.
-     * Called when user interacts with form inputs.
+     * Records an input/change event on a form field.
      * 
-     * @param inputType Type of input (text, checkbox, etc.)
-     * @param inputName Name attribute of the input
-     * @param action Action performed (focus, blur, change)
+     * @param fieldName Name or ID of the field
+     * @param fieldType Type of the field (text, email, etc.)
      */
     @JavascriptInterface
-    fun recordInput(inputType: String, inputName: String, action: String) {
+    fun recordFieldChange(fieldName: String, fieldType: String) {
+        if (!isRecording()) return
+        
+        val sanitizedFieldName = sanitizeInput(fieldName, MAX_FIELD_NAME_LENGTH)
+        val sanitizedFieldType = sanitizeInput(fieldType, MAX_FIELD_TYPE_LENGTH)
+        
         val event = UserActionEvent(
             id = IdGenerator.newEventId(),
             at = Clock.System.now(),
-            action = "input:$action:$inputType",
-            target = inputName.takeIf { it.isNotBlank() }
+            action = "fieldChange",
+            target = "field=$sanitizedFieldName, type=$sanitizedFieldType"
         )
         onUserAction(event)
+    }
+    
+    /**
+     * Builds a compact target string from selector, text, and metadata.
+     */
+    private fun buildTargetString(selector: String, text: String, metadata: Map<String, String>): String {
+        val truncatedText = if (text.length > 100) text.take(97) + "..." else text
+        val metaStr = metadata.entries.joinToString(", ") { "${it.key}=${it.value}" }
+        return "$selector | $truncatedText | $metaStr"
+    }
+    
+    /**
+     * Sanitizes input by limiting length and removing potentially malicious characters.
+     */
+    private fun sanitizeInput(input: String, maxLength: Int): String {
+        // Limit length
+        val truncated = if (input.length > maxLength) {
+            input.take(maxLength)
+        } else {
+            input
+        }
+        
+        // Remove control characters and null bytes
+        return truncated.replace(Regex("[\\x00-\\x1F\\x7F]"), "")
+    }
+    
+    companion object {
+        private const val MAX_SELECTOR_LENGTH = 500
+        private const val MAX_TEXT_LENGTH = 1000
+        private const val MAX_URL_LENGTH = 2000
+        private const val MAX_METHOD_LENGTH = 10
+        private const val MAX_FIELD_NAMES_LENGTH = 5000
+        private const val MAX_FIELD_NAME_LENGTH = 200
+        private const val MAX_FIELD_TYPE_LENGTH = 50
     }
 }
