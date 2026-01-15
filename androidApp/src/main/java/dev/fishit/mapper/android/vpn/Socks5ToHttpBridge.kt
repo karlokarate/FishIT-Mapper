@@ -3,9 +3,6 @@ package dev.fishit.mapper.android.vpn
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
@@ -54,10 +51,6 @@ class Socks5ToHttpBridge(
     private var serverSocket: ServerSocket? = null
     @Volatile
     private var isRunning = false
-    
-    private val httpClient = OkHttpClient.Builder()
-        .followRedirects(false)
-        .build()
     
     /**
      * Startet den SOCKS5 Server.

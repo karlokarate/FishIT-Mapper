@@ -13,10 +13,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.nio.ByteBuffer
-import java.nio.channels.DatagramChannel
-import java.nio.channels.Selector
 
 /**
  * VPN Service für System-weite Netzwerk-Traffic-Erfassung.
@@ -105,14 +103,16 @@ class TrafficCaptureVpnService : VpnService() {
             socksServer = Socks5ToHttpBridge(SOCKS_PORT, PROXY_PORT)
             socksJob = serviceScope?.launch {
                 try {
+                    // Give SOCKS5 server time to bind the port
+                    delay(500)
                     socksServer?.start()
                 } catch (e: Exception) {
                     Log.e(TAG, "SOCKS5 server error", e)
                 }
             }
             
-            // Give SOCKS5 server time to start
-            Thread.sleep(500)
+            // Brief wait for SOCKS5 server to start binding
+            Thread.sleep(100)
             
             // Erstelle VPN-Interface mit optimierter Konfiguration
             val builder = Builder()
@@ -187,9 +187,8 @@ class TrafficCaptureVpnService : VpnService() {
             Log.i(TAG, "HTTP Proxy: $PROXY_ADDRESS:$PROXY_PORT")
             Log.i(TAG, "======================================")
             
-            // Create input/output streams for TUN interface
+            // Create input stream for TUN interface
             val inputStream = ParcelFileDescriptor.AutoCloseInputStream(vpnInterface)
-            val outputStream = ParcelFileDescriptor.AutoCloseOutputStream(vpnInterface)
             
             val packet = ByteArray(VPN_MTU)
             
