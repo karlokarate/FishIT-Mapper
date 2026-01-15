@@ -55,7 +55,7 @@ fun SessionDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Session ${'$'}sessionId") },
+                title = { Text("Session $sessionId") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -72,7 +72,7 @@ fun SessionDetailScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (error != null) {
-                Text("Error: ${'$'}error")
+                Text("Error: $error")
                 return@Column
             }
 
@@ -82,11 +82,11 @@ fun SessionDetailScreen(
                 return@Column
             }
 
-            Text("Started: ${'$'}{s.startedAt}")
-            Text("Ended: ${'$'}{s.endedAt ?: "-"}")
-            Text("Initial: ${'$'}{s.initialUrl}")
-            if (s.finalUrl != null) Text("Final: ${'$'}{s.finalUrl}")
-            Text("Events: ${'$'}{s.events.size}")
+            Text("Started: ${s.startedAt}")
+            Text("Ended: ${s.endedAt ?: "-"}")
+            Text("Initial: ${s.initialUrl}")
+            if (s.finalUrl != null) Text("Final: ${s.finalUrl}")
+            Text("Events: ${s.events.size}")
 
             Spacer(Modifier.height(8.dp))
 
@@ -107,25 +107,25 @@ private fun EventRow(e: RecorderEvent) {
     Column(modifier = Modifier.fillMaxWidth()) {
         when (e) {
             is NavigationEvent -> {
-                Text("NAV  ${'$'}{e.at}")
+                Text("NAV  ${e.at}")
                 Text(e.url)
-                if (e.fromUrl != null) Text("from: ${'$'}{e.fromUrl}")
+                if (e.fromUrl != null) Text("from: ${e.fromUrl}")
             }
             is ResourceRequestEvent -> {
-                Text("REQ  ${'$'}{e.at}  ${'$'}{e.method ?: ""}  ${'$'}{e.resourceKind ?: ResourceKind.Other}")
+                Text("REQ  ${e.at}  ${e.method ?: ""}  ${e.resourceKind ?: ResourceKind.Other}")
                 Text(e.url)
-                if (e.initiatorUrl != null) Text("init: ${'$'}{e.initiatorUrl}")
+                if (e.initiatorUrl != null) Text("init: ${e.initiatorUrl}")
             }
             is ConsoleMessageEvent -> {
-                Text("CONSOLE  ${'$'}{e.at}  ${'$'}{e.level}")
+                Text("CONSOLE  ${e.at}  ${e.level}")
                 Text(e.message)
             }
             is UserActionEvent -> {
-                Text("ACTION  ${'$'}{e.at}  ${'$'}{e.action}")
-                if (e.target != null) Text("target: ${'$'}{e.target}")
+                Text("ACTION  ${e.at}  ${e.action}")
+                if (e.target != null) Text("target: ${e.target}")
             }
             is CustomEvent -> {
-                Text("CUSTOM  ${'$'}{e.at}  ${'$'}{e.name}")
+                Text("CUSTOM  ${e.at}  ${e.name}")
                 if (e.payload.isNotEmpty()) Text(e.payload.toString())
             }
         }

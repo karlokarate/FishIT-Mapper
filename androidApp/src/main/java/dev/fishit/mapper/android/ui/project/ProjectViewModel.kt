@@ -147,5 +147,4 @@ class ProjectViewModel(
      * Small helper to avoid pulling in a tuple library just for MVP.
      */
     private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
-    private fun <A, B, C, D> Quad(a: A, b: B, c: C, d: D) = Quad(a, b, c, d)
 }

@@ -85,12 +85,12 @@ object TrackingScript {
                     const formAction = form.action || window.location.href;
                     const formMethod = (form.method || 'GET').toUpperCase();
                     
-                    // Collect field names (NOT values for privacy)
+                    // Collect field names (NOT values for privacy) as JSON array
                     const inputs = form.querySelectorAll('input, select, textarea');
-                    const fieldNames = Array.from(inputs)
+                    const fieldNamesArray = Array.from(inputs)
                         .map(function(input) { return input.name || input.id || 'unnamed'; })
-                        .filter(function(name) { return name !== 'unnamed'; })
-                        .join(',');
+                        .filter(function(name) { return name !== 'unnamed'; });
+                    const fieldNames = JSON.stringify(fieldNamesArray);
                     
                     if (window.FishITMapper && window.FishITMapper.recordFormSubmit) {
                         window.FishITMapper.recordFormSubmit(formAction, formMethod, fieldNames);
@@ -100,9 +100,30 @@ object TrackingScript {
                 }
             }, true);
             
-            // Track field changes (debounced)
-            let fieldChangeTimeouts = {};
+            // Track field changes (debounced with memory management)
+            let fieldChangeTimeouts = new Map();
             const fieldChangeDebounceMs = 500;
+            const MAX_TRACKED_FIELDS = 100; // Limit to prevent unbounded growth
+            
+            // Generate unique key for field tracking
+            function getFieldKey(field) {
+                return (field.name || '') + '_' + (field.id || '') + '_' + (field.type || '');
+            }
+            
+            // Cleanup old timeouts periodically
+            function cleanupFieldTimeouts() {
+                if (fieldChangeTimeouts.size > MAX_TRACKED_FIELDS) {
+                    // Remove half of tracked fields in Map iteration order
+                    const toRemove = Math.floor(fieldChangeTimeouts.size / 2);
+                    let removed = 0;
+                    for (let key of fieldChangeTimeouts.keys()) {
+                        clearTimeout(fieldChangeTimeouts.get(key));
+                        fieldChangeTimeouts.delete(key);
+                        removed++;
+                        if (removed >= toRemove) break;
+                    }
+                }
+            }
             
             document.addEventListener('input', function(e) {
                 try {
@@ -110,14 +131,22 @@ object TrackingScript {
                     if (field.tagName === 'INPUT' || field.tagName === 'TEXTAREA' || field.tagName === 'SELECT') {
                         const fieldName = field.name || field.id || field.type || 'unnamed';
                         const fieldType = field.type || 'text';
+                        const fieldKey = getFieldKey(field);
+                        
+                        // Cleanup if needed
+                        if (fieldChangeTimeouts.size >= MAX_TRACKED_FIELDS) {
+                            cleanupFieldTimeouts();
+                        }
                         
                         // Debounce per field
-                        clearTimeout(fieldChangeTimeouts[fieldName]);
-                        fieldChangeTimeouts[fieldName] = setTimeout(function() {
+                        clearTimeout(fieldChangeTimeouts.get(fieldKey));
+                        fieldChangeTimeouts.set(fieldKey, setTimeout(function() {
                             if (window.FishITMapper && window.FishITMapper.recordFieldChange) {
                                 window.FishITMapper.recordFieldChange(fieldName, fieldType);
                             }
-                        }, fieldChangeDebounceMs);
+                            // Remove timeout after firing
+                            fieldChangeTimeouts.delete(fieldKey);
+                        }, fieldChangeDebounceMs));
                     }
                 } catch (err) {
                     console.error('[FishIT-Mapper] Field change tracking error:', err);
