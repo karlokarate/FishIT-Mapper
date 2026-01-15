@@ -2,70 +2,34 @@ name: SonarQube Analysis
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      analyze_android:
-        description: '📱 Android App analysieren'
-        type: boolean
-        default: true
-      analyze_contract:
-        description: '📄 Contract Module analysieren'
-        type: boolean
-        default: true
-      analyze_engine:
-        description: '⚙️ Engine Module analysieren'
-        type: boolean
-        default: true
-      analyze_codegen:
-        description: '🛠️ Codegen Tools analysieren'
-        type: boolean
-        default: true
-      enable_duplications:
-        description: '🔄 Duplikat-Erkennung aktivieren'
-        type: boolean
-        default: true
-      verbose_mode:
-        description: '🔍 Verbose Output'
-        type: boolean
-        default: false
+    types: [opened, synchronize, reopened]
 
 env:
-  JAVA_VERSION: '21'
+  JAVA_VERSION: '17'
 
 jobs:
-  sonarqube-analysis:
-    name: SonarQube Code Analysis
+  build:
+    name: Build and analyze
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
 
-      - name: Setup Java
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
+          distribution: 'zulu'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
           accept-android-sdk-licenses: true
-
-      - name: Cache Gradle packages
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
 
       - name: Cache SonarQube packages
         uses: actions/cache@v4
@@ -74,8 +38,12 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
+          restore-keys: ${{ runner.os }}-gradle
 
       - name: Generate Contract Code
         run: |
@@ -83,74 +51,14 @@ jobs:
           ./gradlew :shared:contract:generateFishitContract
           echo "✅ Contract generation complete"
 
-      - name: Build Project
-        run: |
-          echo "🔨 Building all modules..."
-          ./gradlew assemble --no-daemon
-          echo "✅ Build complete"
-
-      - name: Run Tests
-        continue-on-error: true
-        run: |
-          echo "🧪 Running tests..."
-          ./gradlew test --no-daemon --continue || true
-
       - name: Run Android Lint
         continue-on-error: true
         run: |
-          echo "🔍 Running Android Lint (needed for SonarQube import)..."
-          ./gradlew :androidApp:lintDebug :shared:contract:lintDebug :shared:engine:lintDebug --no-daemon || echo "⚠️  Lint completed with warnings"
+          echo "🔍 Running Android Lint (generates XML reports for SonarQube)..."
+          ./gradlew :androidApp:lintDebug :shared:contract:lintDebug :shared:engine:lintDebug || echo "⚠️  Lint completed with warnings"
           echo "✅ Lint analysis complete"
 
-      - name: Build and Analyze with SonarQube
+      - name: Build and analyze
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
-          echo "🔍 Starting SonarQube Analysis..."
-          echo "📁 Sources will be auto-detected by SonarQube plugin"
-          
-          GRADLE_ARGS=(
-            "-Dsonar.gradle.skipCompile=true"
-            "-Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}"
-            "-Dsonar.token=${{ secrets.SONAR_TOKEN }}"
-            "-Dsonar.organization=${{ github.repository_owner }}"
-          )
-
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ inputs.enable_duplications }}" == "false" ]]; then
-            GRADLE_ARGS+=("-Dsonar.cpd.exclusions=**/*")
-          fi
-          
-          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]] || [[ "${{ inputs.verbose_mode }}" == "true" ]]; then
-            GRADLE_ARGS+=("-Dsonar.verbose=true")
-          fi
-          
-          echo "🔧 Gradle Arguments: ${GRADLE_ARGS[*]}"
-          
-          ./gradlew sonar --no-daemon "${GRADLE_ARGS[@]}"
-
-      - name: Generate Analysis Summary
-        if: always()
-        run: |
-          echo "=============================================="
-          echo "🔍 SONARQUBE ANALYSIS SUMMARY"
-          echo "=============================================="
-          echo ""
-          echo "📅 Timestamp: $(date)"
-          echo "📁 Repository: ${{ github.repository }}"
-          echo "🔀 Event: ${{ github.event_name }} | Ref: ${{ github.ref }}"
-          echo ""
-          echo "📊 Configuration:"
-          echo "   Sources: Auto-detected by SonarQube plugin"
-          echo "   Skip Compile: true (explicit build step used)"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo ""
-            echo "📋 Input Settings:"
-            echo "   Android App: ${{ inputs.analyze_android }}"
-            echo "   Contract Module: ${{ inputs.analyze_contract }}"
-            echo "   Engine Module: ${{ inputs.analyze_engine }}"
-            echo "   Codegen Tools: ${{ inputs.analyze_codegen }}"
-            echo "   Duplications: ${{ inputs.enable_duplications }}"
-            echo "   Verbose: ${{ inputs.verbose_mode }}"
-          fi
-          echo "=============================================="
+        run: ./gradlew build sonar --info

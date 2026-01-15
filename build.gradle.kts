@@ -24,6 +24,7 @@ sonar {
     properties {
         // === Project Identification ===
         property("sonar.projectKey", "karlokarate_FishIT-Mapper")
+        property("sonar.organization", "karlokarate")
         property("sonar.projectName", "FishIT-Mapper")
         property("sonar.projectVersion", "0.1.0")
         
