@@ -43,11 +43,11 @@ jobs:
       
       - name: Build Unsigned Release APK
         if: inputs.build_type == 'unsigned-release'
-        run: ./gradlew :androidApp:assembleRelease --stacktrace
+        run: ./gradlew :shared:contract:generateFishitContract :androidApp:assembleRelease --stacktrace
       
       - name: Build Unsigned Release Bundle
         if: inputs.build_type == 'unsigned-release'
-        run: ./gradlew :androidApp:bundleRelease --stacktrace
+        run: ./gradlew :shared:contract:generateFishitContract :androidApp:bundleRelease --stacktrace
       
       - name: Upload Debug APK
         if: inputs.build_type == 'debug'
