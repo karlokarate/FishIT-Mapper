@@ -24,11 +24,11 @@ on:
         type: boolean
         default: true
       enable_coverage:
-        description: '📊 Code Coverage aktivieren (benötigt JaCoCo)'
+        description: '📊 Code Coverage aktivieren ( aktivieren'
         type: boolean
-        default: false
-      enable_duplications:
-        description: '🔄 Output'
+        default: true
+      verbose_mode:
+        description: '🔍 Verbose Output'
         type: boolean
         default: false
 
@@ -64,7 +64,14 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Cache SonarQube packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
       - name: Grant execute permission for gradlew
@@ -105,7 +112,12 @@ jobs:
           fi
           
           echo "SONAR_SOURCES=$SOURCES" >> $GITHUB_OUTPUT
-          echo "📁 Sources to analyze: $SOURCES"
+          echo "📁ile) ---
+      - name: Build Project
+        run: |
+          echo "🔨 Building all modules..."
+          ./gradlew assemble --no-daemon
+          echo "✅ Build complete"
 
       # --- Optional: Tests mit Coverage ---
       - name: Run Tests with Coverage
@@ -113,7 +125,7 @@ jobs:
         continue-on-error: true
         run: |
           echo "🧪 Running tests..."
-          ./gradlew test --continue || true
+          ./gradlew test --no-daemon --continue || true
 
       # --- SonarQube Analyse ---
       - name: Build and Analyze with SonarQube
@@ -126,6 +138,7 @@ jobs:
           
           # Argumente als Array für korrekte Übergabe an Gradle
           GRADLE_ARGS=(
+            "-Dsonar.gradle.skipCompile=true"
             "-Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}"
             "-Dsonar.token=${{ secrets.SONAR_TOKEN }}"
             "-Dsonar.organization=${{ github.repository_owner }}"
@@ -153,8 +166,8 @@ jobs:
           
           echo "🔧 Gradle Arguments: ${GRADLE_ARGS[*]}"
           
-          # Korrekte Übergabe als separate Argumente (behebt den String-to-Collection Cast-Fehler)
-          ./gradlew sonar "${GRADLE_ARGS[@]}"
+          # Korrekte Übergabe als separate Argumente
+          ./gradlew sonar --no-daemon "${GRADLE_ARGS[@]}"
 
       - name: Generate Analysis Summary
         if: always()
@@ -170,6 +183,7 @@ jobs:
           echo ""
           echo "📊 Configuration:"
           echo "   Sources: ${{ steps.sources.outputs.SONAR_SOURCES }}"
+          echo "   Skip Compile: true (explicit build step used)"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo ""
             echo "📋 Input Settings:"
