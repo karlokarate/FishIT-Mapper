@@ -31,13 +31,13 @@ sonar {
         // HINWEIS: sonar.sources wird dynamisch über Workflow gesetzt
         // Default-Wert nur als Fallback (falls lokal ausgeführt)
         if (!project.hasProperty("sonar.sources")) {
-            property("sonar.sources",
-                "androidApp/src/main/java," +
-                "shared/contract/src/commonMain/kotlin," +
-                "shared/contract/src/generated/kotlin," +
-                "shared/engine/src/commonMain/kotlin," +
+            property("sonar.sources", listOf(
+                "androidApp/src/main/java",
+                "shared/contract/src/commonMain/kotlin",
+                "shared/contract/src/generated/kotlin",
+                "shared/engine/src/commonMain/kotlin",
                 "tools/codegen-contract/src/main/kotlin"
-            )
+            ))
         }
         
         // === Language Configuration ===
@@ -48,24 +48,24 @@ sonar {
         
         // === Exclusions ===
         // Exclude build artifacts, tests, and non-code files from analysis
-        property("sonar.exclusions",
-            "**/build/**," +
-            "**/test/**," +
-            "**/androidTest/**," +
-            "**/*.json," +
-            "**/*.xml," +
-            "**/R.java," +
-            "**/R\$*.java," +
-            "**/BuildConfig.java," +
+        property("sonar.exclusions", listOf(
+            "**/build/**",
+            "**/test/**",
+            "**/androidTest/**",
+            "**/*.json",
+            "**/*.xml",
+            "**/R.java",
+            "**/R\$*.java",
+            "**/BuildConfig.java",
             "**/Manifest.java"
-        )
+        ))
         
         // === Duplicate Code Detection ===
         // Exclude generated code from duplication check (it's expected to have patterns)
-        property("sonar.cpd.exclusions",
-            "**/generated/**," +
+        property("sonar.cpd.exclusions", listOf(
+            "**/generated/**",
             "**/contract/src/generated/**"
-        )
+        ))
         
         // === Android Lint Integration (if lint reports exist) ===
         property("sonar.android.lint.report", "androidApp/build/reports/lint-results-debug.xml")
