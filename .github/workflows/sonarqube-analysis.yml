@@ -33,7 +33,7 @@ on:
         default: false
 
 env:
-  JAVA_VERSION: '17'
+  JAVA_VERSION: '21'
 
 jobs:
   sonarqube-analysis:
@@ -94,6 +94,13 @@ jobs:
         run: |
           echo "🧪 Running tests..."
           ./gradlew test --no-daemon --continue || true
+
+      - name: Run Android Lint
+        continue-on-error: true
+        run: |
+          echo "🔍 Running Android Lint (needed for SonarQube import)..."
+          ./gradlew :androidApp:lintDebug :shared:contract:lintDebug :shared:engine:lintDebug --no-daemon || echo "⚠️  Lint completed with warnings"
+          echo "✅ Lint analysis complete"
 
       - name: Build and Analyze with SonarQube
         env:
