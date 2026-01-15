@@ -15,9 +15,7 @@ tasks.register("clean", Delete::class) {
 
 // =============================================================================
 // SonarQube Configuration for Comprehensive Code Analysis
-// =============================================================================
-// Analyzes: Bugs, Vulnerabilities, Security Hotspots, Code Smells, Duplications
-// Documentation: https://docs.sonarsource.com/sonarqube-server/analyzing-source-code/scanners/sonarscanner-for-gradle/
+// =============================================================================: https://docs.sonarsource.com/sonarqube-server/analyzing-source-code/scanners/sonarscanner-for-gradle/
 // =============================================================================
 
 sonar {
@@ -28,43 +26,54 @@ sonar {
         property("sonar.projectVersion", "0.1.0")
         
         // === Source Configuration ===
-        // All Kotlin source directories to analyze
-        property("sonar.sources", listOf(
-            "androidApp/src/main/java",
-            "shared/contract/src/commonMain/kotlin",
-            "shared/contract/src/generated/kotlin",
-            "shared/engine/src/commonMain/kotlin",
-            "tools/codegen-contract/src/main/kotlin"
-        ).joinToString(","))
+        // CLI-Parameter (-Dsonar.sources=...) haben Vorrang für dynamische Modul-Auswahl
+        // Default: Alle Module analysieren
+        if (System.getProperty("sonar.sources") == null) {
+            property("sonar.sources", 
+                "androidApp/src/main/java," +
+                "shared/contract/src/commonMain/kotlin," +
+                "shared/contract/src/generated/kotlin," +
+                "shared/engine/src/commonMain/kotlin," +
+                "tools/codegen-contract/src/main/kotlin"
+            )
+        }
         
         // === Language Configuration ===
         property("sonar.sourceEncoding", "UTF-8")
-        property("sonar.kotlin.source.version", "1.9")
-        property("sonar.java.source", "17")
+        property
         property("sonar.java.target", "17")
         
         // === Exclusions ===
         // Exclude build artifacts, tests, and non-code files from analysis
-        property("sonar.exclusions", listOf(
-            "**/build/**",
-            "**/test/**",
-            "**/androidTest/**",
-            "**/*.json",
-            "**/*.xml",
-            "**/R.java",
-            "**/R$*.java",
-            "**/BuildConfig.java",
-            "**/Manifest.java"
-        ).joinToString(","))
+        // CLI-Parameter haben Vorrang
+        if (System.getProperty("sonar.exclusions") == null) {
+            property("sonar.exclusions",
+                "**/build/**," +
+                "**/test/**," +
+                "**/androidTest/**," +
+                "**/*.json," +
+                "**/*.xml," +
+                "**/R.java," +
+                "**/R\$*.java," +
+                "**/BuildConfig.java," +
+                "**/Manifest.java"
+            )
+        }
         
         // === Duplicate Code Detection ===
         // Exclude generated code from duplication check (it's expected to have patterns)
-        property("sonar.cpd.exclusions", listOf(
-            "**/generated/**",
-            "**/contract/src/generated/**"
-        ).joinToString(","))
+        // CLI-Parameter haben Vorrang (für workflow_dispatch: enable_duplications=false)
+        if (System.getProperty("sonar.cpd.exclusions") == null) {
+            property("sonar.cpd.exclusions",
+                "**/generated/**," +
+                "**/contract/src/generated/**"
+            )
+        }
         
         // === Android Lint Integration (if lint reports exist) ===
         property("sonar.android.lint.report", "androidApp/build/reports/lint-results-debug.xml")
+        
+        // === Java Binaries (für Bytecode-Analyse) ===
+        property("sonar.java.binaries", "**/build/classes")
     }
 }
