@@ -282,7 +282,7 @@ class CertificateManager(private val context: Context) {
             val trustManagerFactory = javax.net.ssl.TrustManagerFactory.getInstance(
                 javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm()
             )
-            trustManagerFactory.init(null) // Verwendet System-Keystore
+            trustManagerFactory.init(null as java.security.KeyStore?) // Verwendet System-Keystore
             
             val trustManagers = trustManagerFactory.trustManagers
             for (trustManager in trustManagers) {
