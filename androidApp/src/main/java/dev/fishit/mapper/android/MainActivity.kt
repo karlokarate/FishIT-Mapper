@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
                     Log.i(TAG, "WebView Provider Version Name: ${packageInfo.versionName}")
                     // versionCode is deprecated but still functional on API < 28
                     // For API 28+, could use PackageInfoCompat.getLongVersionCode() but adds dependency
-                    @Suppress("DEPRECATION")
+                    @Suppress("DEPRECATION") // versionCode deprecated but functional on API < 28
                     Log.i(TAG, "WebView Provider Version Code: ${packageInfo.versionCode}")
                     
                     // Compare with known device state: Android System WebView 143.0.7499.192
@@ -47,7 +47,7 @@ class MainActivity : ComponentActivity() {
                     
                     if (packageInfo.versionName != EXPECTED_WEBVIEW_VERSION) {
                         Log.w(TAG, "⚠️ WebView version mismatch detected!")
-                        Log.w(TAG, "   Device reports: $EXPECTED_WEBVIEW_VERSION")
+                        Log.w(TAG, "   Expected reports: $EXPECTED_WEBVIEW_VERSION")
                         Log.w(TAG, "   Runtime reports: ${packageInfo.versionName}")
                     } else {
                         Log.i(TAG, "✓ WebView version matches device-reported version")
