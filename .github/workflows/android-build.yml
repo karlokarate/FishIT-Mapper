@@ -24,9 +24,16 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     
-    - name: Decode Keystore
-      if: ${{ secrets.KEYSTORE_BASE64 != '' }}
-      run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./androidApp/keystore.jks
+    - name: Decode Keystore (if available)
+      env:
+        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      run: |
+        if [ -n "$KEYSTORE_BASE64" ]; then
+          echo "$KEYSTORE_BASE64" | base64 -d > ./androidApp/keystore.jks
+          echo "Keystore decoded successfully"
+        else
+          echo "No keystore available, will build without signing"
+        fi
     
     - name: Generate contract
       run: ./gradlew :shared:contract:generateFishitContract --no-daemon
