@@ -4,13 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.fishit.mapper.android.data.AndroidProjectStore
 import dev.fishit.mapper.android.export.ExportManager
-import dev.fishit.mapper.android.proxy.ProxyCaptureManager
-import dev.fishit.mapper.android.webview.WebViewProxyController
 import dev.fishit.mapper.contract.*
 import dev.fishit.mapper.engine.HubDetector
 import dev.fishit.mapper.engine.IdGenerator
 import dev.fishit.mapper.engine.MappingEngine
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -30,12 +27,18 @@ data class ProjectUiState(
         val liveUrl: String? = null
 )
 
+/**
+ * ViewModel for project detail screen.
+ *
+ * Note: No internal traffic capture (proxy/MITM) - traffic is captured externally
+ * by HttpCanary and imported via ZIP files. Recording only captures user actions
+ * and navigation events from the WebView.
+ */
 class ProjectViewModel(
         private val projectId: ProjectId,
         private val store: AndroidProjectStore,
         private val mappingEngine: MappingEngine,
-        private val exportManager: ExportManager,
-        private val proxyCaptureManager: ProxyCaptureManager? = null
+        private val exportManager: ExportManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ProjectUiState())
@@ -44,7 +47,6 @@ class ProjectViewModel(
     private var liveSessionId: SessionId? = null
     private var liveSessionStartedAt = Clock.System.now()
     private var liveInitialUrl: String = ""
-    private var proxyEventCollectorJob: Job? = null
 
     init {
         refresh()
@@ -88,15 +90,10 @@ class ProjectViewModel(
                         liveEvents = emptyList(),
                         liveUrl = initialUrl
                 )
-
-        // Start proxy capture and enable WebView proxy routing
-        startProxyCapture()
+        // Note: No internal proxy capture - traffic is captured externally by HttpCanary
     }
 
     fun stopRecording(finalUrl: String? = null) {
-        // Stop proxy capture first
-        stopProxyCapture()
-
         val sessionId = liveSessionId ?: return
         val startedAt = liveSessionStartedAt
         val endedAt = Clock.System.now()
@@ -196,45 +193,6 @@ class ProjectViewModel(
                     }
                     .onFailure { t -> _state.value = _state.value.copy(error = t.message) }
         }
-    }
-
-    // ============================================================================
-    // Proxy Capture Management
-    // ============================================================================
-
-    /** Starts the MITM proxy and routes WebView traffic through it. */
-    private fun startProxyCapture() {
-        val manager = proxyCaptureManager ?: return
-
-        // Start the proxy server
-        manager.startCapture()
-
-        // Enable WebView proxy routing (Android 14+)
-        if (WebViewProxyController.isProxySupported()) {
-            WebViewProxyController.enableProxy(
-                    proxyHost = ProxyCaptureManager.PROXY_HOST,
-                    proxyPort = ProxyCaptureManager.PROXY_PORT
-            )
-        }
-
-        // Collect proxy events and route to onRecorderEvent
-        proxyEventCollectorJob =
-                viewModelScope.launch { manager.events.collect { event -> onRecorderEvent(event) } }
-    }
-
-    /** Stops the MITM proxy and disables WebView proxy routing. */
-    private fun stopProxyCapture() {
-        // Cancel event collection
-        proxyEventCollectorJob?.cancel()
-        proxyEventCollectorJob = null
-
-        // Disable WebView proxy
-        if (WebViewProxyController.isProxyEnabled()) {
-            WebViewProxyController.disableProxy()
-        }
-
-        // Stop the proxy server
-        proxyCaptureManager?.stopCapture()
     }
 
     /** Small helper to avoid pulling in a tuple library just for MVP. */

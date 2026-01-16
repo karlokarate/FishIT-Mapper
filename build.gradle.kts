@@ -27,23 +27,23 @@ sonar {
         property("sonar.organization", "karlokarate")
         property("sonar.projectName", "FishIT-Mapper")
         property("sonar.projectVersion", "0.1.0")
-        
+
         // === Language Configuration ===
         property("sonar.sourceEncoding", "UTF-8")
         property("sonar.kotlin.source.version", "1.9")
         property("sonar.java.source", "17")
         property("sonar.java.target", "17")
-        
+
         // === Scan All Files (including non-JVM files in root) ===
         property("sonar.gradle.scanAll", "true")
-        
+
         // === Android Lint Report Paths ===
         property("sonar.androidLint.reportPaths",
             "androidApp/build/reports/lint-results-debug.xml," +
             "shared/contract/build/reports/lint-results-debug.xml," +
             "shared/engine/build/reports/lint-results-debug.xml"
         )
-        
+
         // === Exclusions ===
         property("sonar.exclusions",
             "**/build/**," +
@@ -56,15 +56,30 @@ sonar {
             "**/BuildConfig.java," +
             "**/Manifest.java"
         )
-        
+
         // === Duplicate Code Detection ===
         property("sonar.cpd.exclusions",
             "**/generated/**," +
             "**/contract/src/generated/**"
         )
-        
+
         // === Java Binaries ===
         // Removed explicit sonar.java.binaries configuration to let Gradle plugin
         // use its defaults, which correctly handle Android intermediates and Kotlin classes
+    }
+}
+
+// =============================================================================
+// Force consistent BouncyCastle versions to avoid NoClassDefFoundError
+// AGP uses BouncyCastle internally for signing - version conflicts cause issues
+// =============================================================================
+allprojects {
+    configurations.all {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "org.bouncycastle") {
+                useVersion("1.79")
+                because("Force consistent BouncyCastle version for AGP signing compatibility")
+            }
+        }
     }
 }

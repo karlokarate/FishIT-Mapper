@@ -99,9 +99,6 @@ dependencies {
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.documentfile)
 
-    // Security & Networking
-    implementation(libs.bouncycastle.bcprov)
-    implementation(libs.bouncycastle.bcpkix)
-    implementation(libs.okhttp)
-    implementation(libs.okhttp.logging)
+    // Note: BouncyCastle and OkHttp removed - no longer needed without internal MITM proxy
+    // Traffic capture is handled externally by HttpCanary
 }

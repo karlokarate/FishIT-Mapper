@@ -1,55 +1,30 @@
 package dev.fishit.mapper.android.ui.settings
 
 import android.content.Intent
-import android.provider.Settings
-import android.util.Log
+import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
-import dev.fishit.mapper.android.cert.CertificateInfo
-import dev.fishit.mapper.android.cert.CertificateManager
-import dev.fishit.mapper.android.ui.common.SimpleVmFactory
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
- * Settings-Screen für Zertifikats-Management.
+ * Settings-Screen für FishIT-Mapper.
  *
- * Fokus auf Browser-only Traffic Capture (Android 14+).
+ * Da Traffic-Capture jetzt extern über HttpCanary erfolgt,
+ * zeigt dieser Screen Anleitungen zur Verwendung von HttpCanary.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-
-    val viewModel: SettingsViewModel =
-            viewModel(
-                    factory =
-                            SimpleVmFactory {
-                                SettingsViewModel(certificateManager = CertificateManager(context))
-                            }
-            )
-
-    val state by viewModel.state.collectAsState()
 
     Scaffold(
             topBar = {
@@ -71,91 +46,23 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Zertifikats-Management Section
+            // HttpCanary Info Section
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("CA-Zertifikat", style = MaterialTheme.typography.titleLarge)
-
-                    // Zertifikats-Status
-                    if (state.certificateInfo != null) {
-                        CertificateInfoCard(state.certificateInfo!!)
-                    } else {
-                        Text(
-                                "Kein Zertifikat vorhanden",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
-                        )
-                    }
-
-                    // Status aktualisieren
-                    OutlinedButton(
-                            onClick = { viewModel.refreshCertificateStatus() },
-                            modifier = Modifier.fillMaxWidth()
-                    ) { Text("Status aktualisieren") }
-
-                    // Zertifikat generieren
-                    Button(
-                            onClick = { viewModel.generateCertificate() },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = !state.isGenerating
+                    Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (state.isGenerating) {
-                            CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                            )
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        Text(
-                                if (state.certificateInfo != null) "Neu generieren"
-                                else "Zertifikat generieren"
+                        Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
                         )
+                        Text("Traffic Capture", style = MaterialTheme.typography.titleLarge)
                     }
-
-                    // Zertifikat exportieren
-                    Button(
-                            onClick = { viewModel.exportCertificate(context) },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = state.certificateInfo != null && !state.isExporting
-                    ) {
-                        if (state.isExporting) {
-                            CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                            )
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        Text("Zertifikat exportieren")
-                    }
-
-                    // Zertifikat installieren
-                    Button(
-                            onClick = { viewModel.openCertificateInstallation(context) },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled =
-                                    state.certificateInfo != null && state.exportedCertPath != null
-                    ) { Text("Zertifikat installieren") }
-
-                    if (state.exportedCertPath != null) {
-                        Text(
-                                "Exportiert nach:\n${state.exportedCertPath}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-
-            // Browser Traffic Capture Info
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("Traffic Capture", style = MaterialTheme.typography.titleLarge)
 
                     Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -170,290 +77,135 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                    "✅ Browser-only Capture",
+                                    "📱 HttpCanary Integration",
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                    "FishIT-Mapper erfasst Traffic nur im integrierten Browser. " +
-                                            "Dies ermöglicht vollständige HTTPS-Entschlüsselung ohne VPN.",
+                                    "FishIT-Mapper verwendet HttpCanary für die Netzwerk-Analyse. " +
+                                            "HttpCanary erfasst den Traffic, FishIT-Mapper korreliert " +
+                                            "ihn mit deinen Aktionen.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
                     }
 
-                    Text(
-                            "⚠️ Das CA-Zertifikat muss installiert sein, damit HTTPS-Entschlüsselung funktioniert.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                    )
+                    // HttpCanary installieren
+                    Button(
+                            onClick = {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                        data = Uri.parse("market://details?id=com.guoshi.httpcanary")
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                        data = Uri.parse("https://play.google.com/store/apps/details?id=com.guoshi.httpcanary")
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("HttpCanary im Play Store öffnen")
+                    }
                 }
             }
 
-            // Anleitung
+            // Workflow Anleitung
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Anleitung", style = MaterialTheme.typography.titleLarge)
+                    Text("Workflow", style = MaterialTheme.typography.titleLarge)
 
                     Text(
-                            "Empfohlener Workflow:",
+                            "So verwendest du FishIT-Mapper mit HttpCanary:",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary
                     )
 
                     Text(
-                            "1. Zertifikat generieren\n" +
-                                    "2. Zertifikat exportieren\n" +
-                                    "3. Zertifikat im System installieren\n" +
-                                    "4. Status aktualisieren und prüfen\n" +
-                                    "5. Projekt öffnen und Browser-Tab verwenden\n" +
-                                    "6. URLs im integrierten Browser aufrufen",
+                            """
+                            1. HttpCanary installieren und einrichten
+                            2. HttpCanary VPN starten
+                            3. In FishIT-Mapper: Recording starten
+                            4. Website im Browser navigieren
+                            5. Recording stoppen
+                            6. In HttpCanary: Traffic als ZIP exportieren
+                            7. ZIP in FishIT-Mapper importieren
+                            8. WebsiteMap wird automatisch generiert
+                            """.trimIndent(),
+                            style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            // HttpCanary Setup
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("HttpCanary Setup", style = MaterialTheme.typography.titleLarge)
+
+                    Text(
+                            "Einmalige Einrichtung:",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Text(
+                            """
+                            1. HttpCanary öffnen
+                            2. HTTPS-Zertifikat installieren (Settings → SSL)
+                            3. VPN-Berechtigung erteilen
+                            4. Optional: Filter für Browser-App setzen
+                            """.trimIndent(),
                             style = MaterialTheme.typography.bodyMedium
                     )
 
                     Text(
-                            "Manuelle Zertifikat-Installation:",
+                            "Export-Format:",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary
                     )
 
                     Text(
-                            "Einstellungen → Sicherheit → Verschlüsselung & Anmeldedaten → Zertifikat installieren → CA-Zertifikat\n\n" +
-                                    "Nach Installation: Status aktualisieren, um zu prüfen, ob das Zertifikat erkannt wurde.",
+                            """
+                            • Wähle die Requests die du exportieren willst
+                            • Tippe auf "Save" → "Save as ZIP"
+                            • Importiere das ZIP in FishIT-Mapper
+                            """.trimIndent(),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // Status-Meldungen
-            if (state.statusMessage != null) {
-                Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors =
-                                CardDefaults.cardColors(
-                                        containerColor =
-                                                if (state.isError)
-                                                        MaterialTheme.colorScheme.errorContainer
-                                                else MaterialTheme.colorScheme.primaryContainer
-                                )
+            // App Info
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    Text("Über FishIT-Mapper", style = MaterialTheme.typography.titleLarge)
+
                     Text(
-                            text = state.statusMessage!!,
-                            modifier = Modifier.padding(16.dp),
+                            "Version: 0.1.0 (MVP)",
                             style = MaterialTheme.typography.bodyMedium
                     )
-                }
-            }
-        }
-    }
-}
 
-@Composable
-private fun CertificateInfoCard(info: CertificateInfo) {
-    val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
-
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-                "Zertifikats-Informationen",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary
-        )
-
-        // Installation Status
-        Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                    "Status:",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (info.isInstalledInSystem) {
-                    Icon(
-                            Icons.Default.Check,
-                            contentDescription = "Installiert",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                    )
                     Text(
-                            "Im System installiert",
+                            "FishIT-Mapper hilft bei der Analyse von Websites durch " +
+                            "Korrelation von User-Aktionen mit HTTP-Traffic.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                    )
-                } else {
-                    Icon(
-                            Icons.Default.Warning,
-                            contentDescription = "Nicht installiert",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                            "Nicht installiert",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-        }
-
-        InfoRow("Subject:", info.subject)
-        InfoRow("Gültig von:", dateFormat.format(info.notBefore))
-        InfoRow("Gültig bis:", dateFormat.format(info.notAfter))
-        InfoRow("Seriennummer:", info.serialNumber)
-    }
-}
-
-@Composable
-private fun InfoRow(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(
-                label,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(value, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-    }
-}
-
-/** ViewModel für Settings-Screen. */
-class SettingsViewModel(private val certificateManager: CertificateManager) : ViewModel() {
-
-    companion object {
-        private const val TAG = "SettingsViewModel"
-    }
-
-    data class State(
-            val certificateInfo: CertificateInfo? = null,
-            val isGenerating: Boolean = false,
-            val isExporting: Boolean = false,
-            val exportedCertPath: String? = null,
-            val statusMessage: String? = null,
-            val isError: Boolean = false
-    )
-
-    private val _state = MutableStateFlow(State())
-    val state = _state.asStateFlow()
-
-    init {
-        loadCertificateInfo()
-    }
-
-    private fun loadCertificateInfo() {
-        viewModelScope.launch {
-            val info = withContext(Dispatchers.IO) { certificateManager.getCACertificateInfo() }
-            _state.value = _state.value.copy(certificateInfo = info)
-        }
-    }
-
-    fun refreshCertificateStatus() {
-        loadCertificateInfo()
-    }
-
-    fun generateCertificate() {
-        viewModelScope.launch {
-            _state.value = _state.value.copy(isGenerating = true, statusMessage = null)
-
-            try {
-                withContext(Dispatchers.IO) {
-                    if (certificateManager.hasCACertificate()) {
-                        certificateManager.deleteCACertificate()
-                    }
-                    certificateManager.getOrCreateCACertificate()
-                }
-
-                loadCertificateInfo()
-                _state.value =
-                        _state.value.copy(
-                                isGenerating = false,
-                                statusMessage = "Zertifikat erfolgreich generiert",
-                                isError = false
-                        )
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to generate certificate", e)
-                _state.value =
-                        _state.value.copy(
-                                isGenerating = false,
-                                statusMessage = "Fehler beim Generieren: ${e.message}",
-                                isError = true
-                        )
-            }
-        }
-    }
-
-    fun exportCertificate(context: android.content.Context) {
-        viewModelScope.launch {
-            _state.value = _state.value.copy(isExporting = true, statusMessage = null)
-
-            try {
-                val exportDir = File(context.getExternalFilesDir(null), "certificates")
-                if (!exportDir.exists()) {
-                    exportDir.mkdirs()
-                }
-
-                val certFile = File(exportDir, "fishit-mapper-ca.pem")
-
-                val success =
-                        withContext(Dispatchers.IO) {
-                            certificateManager.exportCACertificate(certFile)
-                        }
-
-                if (success) {
-                    _state.value =
-                            _state.value.copy(
-                                    isExporting = false,
-                                    exportedCertPath = certFile.absolutePath,
-                                    statusMessage = "Zertifikat erfolgreich exportiert",
-                                    isError = false
-                            )
-                } else {
-                    _state.value =
-                            _state.value.copy(
-                                    isExporting = false,
-                                    statusMessage = "Fehler beim Exportieren",
-                                    isError = true
-                            )
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to export certificate", e)
-                _state.value =
-                        _state.value.copy(
-                                isExporting = false,
-                                statusMessage = "Fehler beim Exportieren: ${e.message}",
-                                isError = true
-                        )
-            }
-        }
-    }
-
-    fun openCertificateInstallation(context: android.content.Context) {
-        try {
-            val intent = Intent(Settings.ACTION_SECURITY_SETTINGS)
-            context.startActivity(intent)
-
-            _state.value =
-                    _state.value.copy(
-                            statusMessage =
-                                    "Bitte installiere das Zertifikat manuell unter 'Verschlüsselung & Anmeldedaten'",
-                            isError = false
-                    )
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to open security settings", e)
-            _state.value =
-                    _state.value.copy(
-                            statusMessage = "Konnte Einstellungen nicht öffnen: ${e.message}",
-                            isError = true
-                    )
         }
     }
 }

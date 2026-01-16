@@ -110,16 +110,16 @@ fun BrowserScreen(
                     settings.domStorageEnabled = true
                     settings.loadsImagesAutomatically = true
                     settings.userAgentString = settings.userAgentString + " FishIT-Mapper/0.1"
-                    
+
                     // Enable debugging for WebView
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
                         WebView.setWebContentsDebuggingEnabled(true)
                     }
-                    
+
                     // Additional settings for better compatibility
                     settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
-                    
+
                     // Enable zoom controls (can help with debugging)
                     settings.builtInZoomControls = true
                     settings.displayZoomControls = false
@@ -132,7 +132,7 @@ fun BrowserScreen(
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                             return false
                         }
-                        
+
                         override fun onReceivedError(
                             view: WebView?,
                             request: WebResourceRequest?,
@@ -162,7 +162,7 @@ fun BrowserScreen(
                             lastUrl = u
                             mainHandler.post { onRecorderEventState(event) }
                         }
-                        
+
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             Log.d(TAG, "Page finished loading: $url")
@@ -172,21 +172,20 @@ fun BrowserScreen(
                             }
                         }
 
-                        override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): android.webkit.WebResourceResponse? {
+                        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): android.webkit.WebResourceResponse? {
                             if (!recordingState) return super.shouldInterceptRequest(view, request)
-                            val r = request ?: return super.shouldInterceptRequest(view, request)
 
-                            val urlStr = r.url?.toString() ?: return super.shouldInterceptRequest(view, request)
-                            val initiator = view?.url
+                            val urlStr = request.url?.toString() ?: return super.shouldInterceptRequest(view, request)
+                            val initiator = view.url
 
-                            val kind = guessResourceKind(urlStr, r.isForMainFrame)
+                            val kind = guessResourceKind(urlStr, request.isForMainFrame)
 
                             val event = ResourceRequestEvent(
                                 id = IdGenerator.newEventId(),
                                 at = Clock.System.now(),
                                 url = urlStr,
                                 initiatorUrl = initiator,
-                                method = r.method,
+                                method = request.method,
                                 resourceKind = kind
                             )
 
