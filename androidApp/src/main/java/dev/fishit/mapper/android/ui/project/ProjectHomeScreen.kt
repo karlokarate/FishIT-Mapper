@@ -109,35 +109,42 @@ fun ProjectHomeScreen(
         ) {
             if (state.error != null) {
                 Text(
-                    text = "Error: ${'$'}{state.error}",
+                    text = "Error: ${state.error}",
                     modifier = Modifier.padding(16.dp)
                 )
-            }
+            } else if (state.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) {
+                    Text("Loading project...")
+                }
+            } else {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when (tab) {
+                        ProjectTab.Browser -> BrowserScreen(
+                            projectMeta = state.meta,
+                            isRecording = state.isRecording,
+                            liveEvents = state.liveEvents,
+                            onStartRecording = { url -> vm.startRecording(url) },
+                            onStopRecording = { finalUrl -> vm.stopRecording(finalUrl) },
+                            onRecorderEvent = { event -> vm.onRecorderEvent(event) }
+                        )
 
-            Box(modifier = Modifier.fillMaxSize()) {
-                when (tab) {
-                    ProjectTab.Browser -> BrowserScreen(
-                        projectMeta = state.meta,
-                        isRecording = state.isRecording,
-                        liveEvents = state.liveEvents,
-                        onStartRecording = { url -> vm.startRecording(url) },
-                        onStopRecording = { finalUrl -> vm.stopRecording(finalUrl) },
-                        onRecorderEvent = { event -> vm.onRecorderEvent(event) }
-                    )
+                        ProjectTab.Graph -> GraphScreen(
+                            graph = state.graph,
+                            onNodeTagsChanged = { nodeId, tags ->
+                                vm.updateNodeTags(nodeId, tags)
+                            }
+                        )
 
-                    ProjectTab.Graph -> GraphScreen(
-                        graph = state.graph,
-                        onNodeTagsChanged = { nodeId, tags ->
-                            vm.updateNodeTags(nodeId, tags)
-                        }
-                    )
+                        ProjectTab.Sessions -> SessionsScreen(
+                            sessions = state.sessions,
+                            onOpenSession = { onOpenSession(it) }
+                        )
 
-                    ProjectTab.Sessions -> SessionsScreen(
-                        sessions = state.sessions,
-                        onOpenSession = { onOpenSession(it) }
-                    )
-
-                    ProjectTab.Chains -> ChainsScreen(chainsFile = state.chains)
+                        ProjectTab.Chains -> ChainsScreen(chainsFile = state.chains)
+                    }
                 }
             }
         }

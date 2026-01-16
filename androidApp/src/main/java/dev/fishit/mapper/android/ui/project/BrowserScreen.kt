@@ -60,7 +60,9 @@ fun BrowserScreen(
     val recordingState by rememberUpdatedState(isRecording)
     val onRecorderEventState by rememberUpdatedState(onRecorderEvent)
 
-    var urlText by remember(projectMeta?.id?.value) { mutableStateOf(projectMeta?.startUrl ?: "https://") }
+    // Use project start URL or a sensible default
+    val defaultUrl = projectMeta?.startUrl?.takeIf { it.isNotBlank() } ?: "https://www.google.com"
+    var urlText by remember(projectMeta?.id?.value) { mutableStateOf(defaultUrl) }
 
     // Keep a stable WebView instance across recompositions
     val webViewHolder = remember { arrayOfNulls<WebView>(1) }
