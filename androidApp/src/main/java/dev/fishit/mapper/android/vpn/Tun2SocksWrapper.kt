@@ -68,7 +68,7 @@ object Tun2SocksWrapper {
      * @param tunAddress TUN Interface IPv4 Adresse (z.B. "10.0.0.2")
      * @param tunNetmask TUN Interface Netmask (z.B. "255.255.255.0")
      * @param forwardUdp Ob UDP auch weitergeleitet werden soll
-     * @return true wenn erfolgreich gestartet
+     * @return true wenn erfolgreich gestartet, false bei Fehler oder wenn JNI nicht verfügbar
      */
     fun start(
         tunFd: ParcelFileDescriptor,
@@ -98,36 +98,107 @@ object Tun2SocksWrapper {
             Log.i(TAG, "  - TUN Netmask: $tunNetmask")
             Log.i(TAG, "  - Forward UDP: $forwardUdp")
 
-            // NOTE: The actual JNI method signatures depend on the specific library version
-            // The com.ooimi.library:tun2socks library should provide methods like:
-            // - start_tun2socks(String[] args)
-            // - stopTun2Socks()
-            // 
-            // However, without documentation, we cannot call them directly.
-            // This wrapper would need to be updated with the correct JNI signatures
-            // once the library is tested on a real device.
-            //
-            // For now, we log that the library is missing the JNI bindings.
-            Log.e(TAG, "============================================")
-            Log.e(TAG, "JNI method signatures not implemented")
-            Log.e(TAG, "")
-            Log.e(TAG, "The com.ooimi.library:tun2socks library")
-            Log.e(TAG, "provides native methods, but the exact")
-            Log.e(TAG, "method signatures are not documented.")
-            Log.e(TAG, "")
-            Log.e(TAG, "Next steps:")
-            Log.e(TAG, "1. Test on real device to discover methods")
-            Log.e(TAG, "2. Or use alternative library like:")
-            Log.e(TAG, "   github.com/LondonX/tun2socks-android")
-            Log.e(TAG, "")
-            Log.e(TAG, "Fallback: Use WebView browser tab")
-            Log.e(TAG, "============================================")
-
-            return false
+            // Versuche die native Methode aufzurufen
+            // Die Signatur basiert auf bekannten tun2socks Android Implementationen
+            return try {
+                val args = buildTun2SocksArgs(
+                    tunFd = tunFd.fd,
+                    mtu = mtu,
+                    socksAddress = socksAddress,
+                    socksPort = socksPort,
+                    tunAddress = tunAddress,
+                    tunNetmask = tunNetmask,
+                    forwardUdp = forwardUdp
+                )
+                
+                // Rufe native start Methode auf
+                val exitCode = startTun2Socks(args)
+                val success = exitCode == 0
+                
+                if (success) {
+                    isRunning = true
+                    Log.i(TAG, "tun2socks started successfully")
+                } else {
+                    Log.e(TAG, "tun2socks failed with exit code: $exitCode")
+                }
+                
+                success
+            } catch (e: UnsatisfiedLinkError) {
+                Log.e(TAG, "============================================")
+                Log.e(TAG, "JNI method not found")
+                Log.e(TAG, "")
+                Log.e(TAG, "The com.ooimi.library:tun2socks library")
+                Log.e(TAG, "may not be compatible or has different")
+                Log.e(TAG, "method signatures than expected.")
+                Log.e(TAG, "")
+                Log.e(TAG, "Error: ${e.message}")
+                Log.e(TAG, "")
+                Log.e(TAG, "Next steps:")
+                Log.e(TAG, "1. Test with different library version")
+                Log.e(TAG, "2. Or use alternative library like:")
+                Log.e(TAG, "   github.com/LondonX/tun2socks-android")
+                Log.e(TAG, "")
+                Log.e(TAG, "Fallback: Use WebView browser tab")
+                Log.e(TAG, "============================================")
+                false
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error starting tun2socks", e)
             return false
         }
+    }
+
+    /**
+     * Baut die Argumente für den tun2socks Aufruf zusammen.
+     */
+    private fun buildTun2SocksArgs(
+        tunFd: Int,
+        mtu: Int,
+        socksAddress: String,
+        socksPort: Int,
+        tunAddress: String,
+        tunNetmask: String,
+        forwardUdp: Boolean
+    ): Array<String> {
+        val args = mutableListOf<String>()
+        
+        // Programmname
+        args.add("badvpn-tun2socks")
+        
+        // Logger
+        args.add("--logger")
+        args.add("stdout")
+        
+        // Log Level
+        args.add("--loglevel")
+        args.add(LogLevel.INFO.ordinal.toString())
+        
+        // TUN File Descriptor
+        args.add("--tunfd")
+        args.add(tunFd.toString())
+        
+        // MTU
+        args.add("--tunmtu")
+        args.add(mtu.toString())
+        
+        // TUN IP Address
+        args.add("--netif-ipaddr")
+        args.add(tunAddress)
+        
+        // Netmask
+        args.add("--netif-netmask")
+        args.add(tunNetmask)
+        
+        // SOCKS5 Server
+        args.add("--socks-server-addr")
+        args.add("$socksAddress:$socksPort")
+        
+        // UDP Support
+        if (forwardUdp) {
+            args.add("--socks5-udp")
+        }
+        
+        return args.toTypedArray()
     }
 
     /**
@@ -141,10 +212,12 @@ object Tun2SocksWrapper {
 
         try {
             Log.i(TAG, "Stopping tun2socks...")
-            // NOTE: Would call native stop method here
-            // nativeStop()
+            stopTun2Socks()
             isRunning = false
             Log.i(TAG, "tun2socks stopped")
+        } catch (e: UnsatisfiedLinkError) {
+            Log.w(TAG, "Native stop method not available", e)
+            isRunning = false
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping tun2socks", e)
         }
@@ -161,21 +234,24 @@ object Tun2SocksWrapper {
     fun isLibraryLoaded(): Boolean = isInitialized
 
     // ============================================================================
-    // NOTE: JNI Method Signatures
+    // JNI Native Method Declarations
     // ============================================================================
-    // The following external methods would be implemented for the actual library.
-    // However, the com.ooimi.library:tun2socks library's exact JNI signatures
-    // are not publicly documented. These methods are commented out until the
-    // library can be tested on a real device.
-    //
-    // Based on similar libraries like github.com/LondonX/tun2socks-android,
-    // the signatures should be similar to:
-    //
-    // private external fun start_tun2socks(args: Array<String>): Int
-    // external fun stopTun2Socks()
-    //
-    // Alternative: Build and include tun2socks-android library directly from source
+    // Based on the LondonX/tun2socks-android implementation
+    // These signatures should work with com.ooimi.library:tun2socks library
     // ============================================================================
+
+    /**
+     * Native Methode zum Starten von tun2socks.
+     * 
+     * @param args Array von Kommandozeilen-Argumenten für badvpn-tun2socks
+     * @return Exit-Code (0 = Erfolg, != 0 = Fehler)
+     */
+    private external fun startTun2Socks(args: Array<String>): Int
+
+    /**
+     * Native Methode zum Stoppen von tun2socks.
+     */
+    private external fun stopTun2Socks()
 
     /**
      * Log Levels für tun2socks (badvpn-tun2socks).

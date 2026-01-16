@@ -62,6 +62,9 @@ class TrafficCaptureVpnService : VpnService() {
         Log.i(TAG, "VPN Service created")
         createNotificationChannel()
         
+        // Initialisiere CoroutineScope für Service
+        serviceScope = CoroutineScope(Dispatchers.IO)
+        
         // Initialisiere tun2socks Native Library
         Tun2SocksWrapper.initialize(applicationContext)
     }
@@ -147,8 +150,12 @@ class TrafficCaptureVpnService : VpnService() {
             return
         }
 
-        serviceScope = CoroutineScope(Dispatchers.IO)
-        serviceScope?.launch {
+        val scope = serviceScope ?: run {
+            Log.e(TAG, "Service scope is null, cannot start SOCKS5 server")
+            return
+        }
+
+        scope.launch {
             try {
                 socksServer = Socks5Server(
                     port = SOCKS_PORT,
@@ -186,7 +193,12 @@ class TrafficCaptureVpnService : VpnService() {
             return
         }
 
-        tun2socksJob = serviceScope?.launch {
+        val scope = serviceScope ?: run {
+            Log.e(TAG, "Service scope is null, cannot start tun2socks")
+            return
+        }
+
+        tun2socksJob = scope.launch {
             try {
                 val success = Tun2SocksWrapper.start(
                     tunFd = tunFd,

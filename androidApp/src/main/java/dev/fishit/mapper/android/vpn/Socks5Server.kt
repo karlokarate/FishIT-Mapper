@@ -55,7 +55,7 @@ class Socks5Server(
 
     private var serverSocket: ServerSocket? = null
     private var serverJob: Job? = null
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private var scope: CoroutineScope? = null
     @Volatile private var isRunning = false
 
     /**
@@ -67,7 +67,10 @@ class Socks5Server(
             return
         }
 
-        serverJob = scope.launch {
+        // Erstelle neue Scope bei jedem Start (ermöglicht Restart nach stop())
+        scope = CoroutineScope(Dispatchers.IO)
+
+        serverJob = scope?.launch {
             try {
                 serverSocket = ServerSocket(port)
                 isRunning = true
@@ -110,7 +113,8 @@ class Socks5Server(
         }
         serverSocket = null
         
-        scope.cancel()
+        scope?.cancel()
+        scope = null
         
         Log.i(TAG, "SOCKS5 server stopped")
     }
@@ -362,25 +366,42 @@ class Socks5Server(
             // Send SOCKS5 success response
             sendSuccessResponse(clientOutput)
 
-            // Start bidirectional data forwarding and wait for completion
-            // Both directions run in parallel and terminate when either closes
-            val clientToProxyJob = scope.launch {
-                forwardData(clientInput, proxyOutput, "client->proxy")
-            }
-            val proxyToClientJob = scope.launch {
-                forwardData(proxyInput, clientOutput, "proxy->client")
-            }
+            // Erstelle connection-spezifische Scope für Forwarding
+            // Dies ermöglicht Cancellation einzelner Connections ohne Server-Stop
+            val connectionScope = CoroutineScope(Dispatchers.IO)
             
-            // Wait for both forwarding jobs to complete
-            // (they complete when connection closes or error occurs)
-            clientToProxyJob.join()
-            proxyToClientJob.join()
+            try {
+                // Start bidirectional data forwarding and wait for completion
+                // Both directions run in parallel and terminate when either closes
+                val clientToProxyJob = connectionScope.launch {
+                    forwardData(clientInput, proxyOutput, "client->proxy")
+                }
+                val proxyToClientJob = connectionScope.launch {
+                    forwardData(proxyInput, clientOutput, "proxy->client")
+                }
+                
+                // Wait for both forwarding jobs to complete
+                // (they complete when connection closes or error occurs)
+                try {
+                    clientToProxyJob.join()
+                    proxyToClientJob.join()
+                } catch (e: Exception) {
+                    // Fehler beim Daten-Forwarding protokollieren
+                    Log.e(TAG, "Error during data forwarding for $targetHost:$targetPort", e)
+                } finally {
+                    // Ensure both jobs are cancelled for cleanup
+                    clientToProxyJob.cancel()
+                    proxyToClientJob.cancel()
+                    connectionScope.cancel()
+                }
+            } finally {
+                // Ensure proxy socket is closed
+                proxySocket?.close()
+            }
 
         } catch (e: Exception) {
             Log.e(TAG, "Error connecting to HTTP proxy", e)
             sendErrorResponse(clientOutput, REP_CONNECTION_REFUSED)
-        } finally {
-            // Ensure proxy socket is closed
             proxySocket?.close()
         }
     }
