@@ -37,13 +37,22 @@ object Tun2SocksWrapper {
         try {
             // Lade native Library
             // Die com.ooimi.library:tun2socks Library verwendet den Namen "tun2socks"
+            // Falls die Library nicht verfügbar ist, fangen wir den Fehler ab
             System.loadLibrary("tun2socks")
             isInitialized = true
             Log.i(TAG, "tun2socks native library loaded successfully")
         } catch (e: UnsatisfiedLinkError) {
-            Log.e(TAG, "Failed to load tun2socks native library", e)
-            Log.e(TAG, "VPN mode will not work without native library")
-            Log.e(TAG, "Please ensure com.ooimi.library:tun2socks dependency is correctly configured")
+            Log.e(TAG, "============================================")
+            Log.e(TAG, "Failed to load tun2socks native library")
+            Log.e(TAG, "")
+            Log.e(TAG, "VPN mode requires native library support.")
+            Log.e(TAG, "The library should be automatically included")
+            Log.e(TAG, "via Maven dependency, but may be missing.")
+            Log.e(TAG, "")
+            Log.e(TAG, "VPN mode will not work, but WebView browser")
+            Log.e(TAG, "remains fully functional.")
+            Log.e(TAG, "============================================")
+            Log.e(TAG, "Technical details:", e)
         } catch (e: Exception) {
             Log.e(TAG, "Unexpected error loading tun2socks", e)
         }
@@ -89,33 +98,32 @@ object Tun2SocksWrapper {
             Log.i(TAG, "  - TUN Netmask: $tunNetmask")
             Log.i(TAG, "  - Forward UDP: $forwardUdp")
 
-            // Bereite Argumente für native Funktion vor
-            val extraArgs = emptyList<String>()
-            
-            // Rufe native Funktion auf
-            // Die Funktion blockiert bis tun2socks stoppt oder ein Fehler auftritt
-            // Daher sollte dies in einem separaten Thread laufen
-            val success = nativeStart(
-                logLevel = LogLevel.INFO.ordinal,
-                vpnInterfaceFileDescriptor = tunFd.fd,
-                vpnInterfaceMtu = mtu,
-                socksServerAddress = socksAddress,
-                socksServerPort = socksPort,
-                netIPv4Address = tunAddress,
-                netIPv6Address = null,
-                netmask = tunNetmask,
-                forwardUdp = forwardUdp,
-                extraArgs = extraArgs.toTypedArray()
-            )
+            // NOTE: The actual JNI method signatures depend on the specific library version
+            // The com.ooimi.library:tun2socks library should provide methods like:
+            // - start_tun2socks(String[] args)
+            // - stopTun2Socks()
+            // 
+            // However, without documentation, we cannot call them directly.
+            // This wrapper would need to be updated with the correct JNI signatures
+            // once the library is tested on a real device.
+            //
+            // For now, we log that the library is missing the JNI bindings.
+            Log.e(TAG, "============================================")
+            Log.e(TAG, "JNI method signatures not implemented")
+            Log.e(TAG, "")
+            Log.e(TAG, "The com.ooimi.library:tun2socks library")
+            Log.e(TAG, "provides native methods, but the exact")
+            Log.e(TAG, "method signatures are not documented.")
+            Log.e(TAG, "")
+            Log.e(TAG, "Next steps:")
+            Log.e(TAG, "1. Test on real device to discover methods")
+            Log.e(TAG, "2. Or use alternative library like:")
+            Log.e(TAG, "   github.com/LondonX/tun2socks-android")
+            Log.e(TAG, "")
+            Log.e(TAG, "Fallback: Use WebView browser tab")
+            Log.e(TAG, "============================================")
 
-            if (success) {
-                isRunning = true
-                Log.i(TAG, "tun2socks started successfully")
-            } else {
-                Log.e(TAG, "tun2socks failed to start")
-            }
-
-            return success
+            return false
         } catch (e: Exception) {
             Log.e(TAG, "Error starting tun2socks", e)
             return false
@@ -133,7 +141,8 @@ object Tun2SocksWrapper {
 
         try {
             Log.i(TAG, "Stopping tun2socks...")
-            nativeStop()
+            // NOTE: Would call native stop method here
+            // nativeStop()
             isRunning = false
             Log.i(TAG, "tun2socks stopped")
         } catch (e: Exception) {
@@ -151,27 +160,22 @@ object Tun2SocksWrapper {
      */
     fun isLibraryLoaded(): Boolean = isInitialized
 
-    /**
-     * Native Funktion zum Starten von tun2socks.
-     * Entspricht der Signatur von com.LondonX.tun2socks.Tun2Socks.startTun2Socks()
-     */
-    private external fun nativeStart(
-        logLevel: Int,
-        vpnInterfaceFileDescriptor: Int,
-        vpnInterfaceMtu: Int,
-        socksServerAddress: String,
-        socksServerPort: Int,
-        netIPv4Address: String,
-        netIPv6Address: String?,
-        netmask: String,
-        forwardUdp: Boolean,
-        extraArgs: Array<String>
-    ): Boolean
-
-    /**
-     * Native Funktion zum Stoppen von tun2socks.
-     */
-    private external fun nativeStop()
+    // ============================================================================
+    // NOTE: JNI Method Signatures
+    // ============================================================================
+    // The following external methods would be implemented for the actual library.
+    // However, the com.ooimi.library:tun2socks library's exact JNI signatures
+    // are not publicly documented. These methods are commented out until the
+    // library can be tested on a real device.
+    //
+    // Based on similar libraries like github.com/LondonX/tun2socks-android,
+    // the signatures should be similar to:
+    //
+    // private external fun start_tun2socks(args: Array<String>): Int
+    // external fun stopTun2Socks()
+    //
+    // Alternative: Build and include tun2socks-android library directly from source
+    // ============================================================================
 
     /**
      * Log Levels für tun2socks (badvpn-tun2socks).

@@ -362,17 +362,25 @@ class Socks5Server(
             // Send SOCKS5 success response
             sendSuccessResponse(clientOutput)
 
-            // Start bidirectional data forwarding
-            scope.launch {
+            // Start bidirectional data forwarding and wait for completion
+            // Both directions run in parallel and terminate when either closes
+            val clientToProxyJob = scope.launch {
                 forwardData(clientInput, proxyOutput, "client->proxy")
             }
-            scope.launch {
+            val proxyToClientJob = scope.launch {
                 forwardData(proxyInput, clientOutput, "proxy->client")
             }
+            
+            // Wait for both forwarding jobs to complete
+            // (they complete when connection closes or error occurs)
+            clientToProxyJob.join()
+            proxyToClientJob.join()
 
         } catch (e: Exception) {
             Log.e(TAG, "Error connecting to HTTP proxy", e)
             sendErrorResponse(clientOutput, REP_CONNECTION_REFUSED)
+        } finally {
+            // Ensure proxy socket is closed
             proxySocket?.close()
         }
     }

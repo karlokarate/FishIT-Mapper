@@ -174,12 +174,14 @@ class TrafficCaptureVpnService : VpnService() {
 
         if (!Tun2SocksWrapper.isLibraryLoaded()) {
             Log.e(TAG, "============================================")
-            Log.e(TAG, "tun2socks native library not loaded!")
-            Log.e(TAG, "VPN mode requires native library:")
-            Log.e(TAG, "  implementation 'com.ooimi.library:tun2socks:1.0.4'")
+            Log.e(TAG, "VPN traffic routing not available")
             Log.e(TAG, "")
-            Log.e(TAG, "Current status: Traffic routing not working")
-            Log.e(TAG, "Workaround: Use WebView Browser tab instead")
+            Log.e(TAG, "System-wide VPN traffic capture requires")
+            Log.e(TAG, "additional native library support that is")
+            Log.e(TAG, "currently not configured.")
+            Log.e(TAG, "")
+            Log.e(TAG, "Recommendation: Use WebView Browser tab")
+            Log.e(TAG, "for full traffic capture functionality.")
             Log.e(TAG, "============================================")
             return
         }
