@@ -29,20 +29,37 @@ echo "✅ Git configured"
 # Verify Java
 echo "☕ Java: $(java -version 2>&1 | head -1)"
 
-# Android SDK setup
-if [ -n "$ANDROID_HOME" ]; then
-    echo "📱 Android SDK: $ANDROID_HOME"
-    # Create local.properties for Gradle
-    echo "sdk.dir=$ANDROID_HOME" > local.properties
-    echo "✅ local.properties created"
-elif [ -d "/usr/lib/android-sdk" ]; then
-    export ANDROID_HOME="/usr/lib/android-sdk"
-    echo "sdk.dir=$ANDROID_HOME" > local.properties
-    echo "📱 Android SDK found at: $ANDROID_HOME"
+# Android SDK installation
+ANDROID_SDK_ROOT="/home/vscode/android-sdk"
+if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools" ]; then
+    echo "📱 Installing Android SDK..."
+    mkdir -p "$ANDROID_SDK_ROOT"
+    cd "$ANDROID_SDK_ROOT"
+    
+    # Download command-line tools
+    CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+    curl -sSL "$CMDLINE_TOOLS_URL" -o cmdline-tools.zip
+    unzip -q cmdline-tools.zip
+    mkdir -p cmdline-tools/latest
+    mv cmdline-tools/bin cmdline-tools/lib cmdline-tools/NOTICE.txt cmdline-tools/source.properties cmdline-tools/latest/ 2>/dev/null || mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+    rm -f cmdline-tools.zip
+    
+    # Accept licenses and install SDK components
+    export ANDROID_HOME="$ANDROID_SDK_ROOT"
+    export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin"
+    yes | sdkmanager --licenses > /dev/null 2>&1 || true
+    sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1
+    
+    cd /workspaces/FishIT-Mapper
+    echo "✅ Android SDK installed"
 else
-    echo "⚠️  ANDROID_HOME not set - Android builds may fail"
-    echo "   Run: sudo apt-get update && sudo apt-get install -y android-sdk"
+    echo "✅ Android SDK already installed"
 fi
+
+# Set ANDROID_HOME and create local.properties
+export ANDROID_HOME="$ANDROID_SDK_ROOT"
+echo "sdk.dir=$ANDROID_HOME" > local.properties
+echo "📱 Android SDK: $ANDROID_HOME"
 
 # Pre-warm Gradle daemon (background)
 if [ -f "./gradlew" ]; then
