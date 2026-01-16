@@ -18,19 +18,10 @@ on:
       - "build.gradle.kts"
       - "settings.gradle.kts"
   workflow_dispatch:
-    inputs:
-      build_type:
-        description: "Build Type"
-        required: true
-        type: choice
-        options:
-          - debug
-          - signed-release
-        default: "debug"
 
 jobs:
   build:
-    name: Build ${{ inputs.build_type || 'debug' }}
+    name: Build Debug APK
     runs-on: ubuntu-latest
 
     permissions:
@@ -61,80 +52,24 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Decode Keystore
-        if: inputs.build_type == 'signed-release'
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > $GITHUB_WORKSPACE/release.jks
-          echo "KEYSTORE_FILE=$GITHUB_WORKSPACE/release.jks" >> $GITHUB_ENV
-
       - name: Generate contract
         run: ./gradlew :shared:contract:generateFishitContract --no-daemon
 
       - name: Build Debug APK
-        if: inputs.build_type == 'debug' || inputs.build_type == ''
         run: ./gradlew :androidApp:assembleDebug --stacktrace
 
-      - name: Build Signed Release APK
-        if: inputs.build_type == 'signed-release'
-        env:
-          KEYSTORE_FILE: ${{ env.KEYSTORE_FILE }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew :androidApp:assembleRelease --stacktrace
-
-      - name: Build Signed Release Bundle
-        if: inputs.build_type == 'signed-release'
-        env:
-          KEYSTORE_FILE: ${{ env.KEYSTORE_FILE }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew :androidApp:bundleRelease --stacktrace
-
       - name: Upload Debug APK
-        if: inputs.build_type == 'debug' || inputs.build_type == ''
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: androidApp/build/outputs/apk/debug/*.apk
           retention-days: 30
 
-      - name: Upload Signed Release APK
-        if: inputs.build_type == 'signed-release'
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release-apk
-          path: androidApp/build/outputs/apk/release/*.apk
-          retention-days: 30
-
-      - name: Upload Signed Release Bundle
-        if: inputs.build_type == 'signed-release'
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release-bundle
-          path: androidApp/build/outputs/bundle/release/*.aab
-          retention-days: 30
-
-      - name: Cleanup Keystore
-        if: always() && inputs.build_type == 'signed-release'
-        run: rm -f $GITHUB_WORKSPACE/release.jks
-
       - name: Build Summary
         run: |
           echo "### Build Completed Successfully! 🎉" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Build Type:** ${{ inputs.build_type || 'debug' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Debug APK (app-debug)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ inputs.build_type }}" == "signed-release" ]; then
-            echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
-            echo "- ✅ Signed Release APK (app-release-apk) - installierbar!" >> $GITHUB_STEP_SUMMARY
-            echo "- ✅ Signed Release Bundle/AAB (app-release-bundle)" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
-            echo "- Debug APK (app-debug)" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download the artifacts from the workflow run page." >> $GITHUB_STEP_SUMMARY
+          echo "Download the artifact from the workflow run page." >> $GITHUB_STEP_SUMMARY
