@@ -1,0 +1,8 @@
+# Keystore files - NEVER commit these!
+*.jks
+*.keystore
+*.p12
+*.pfx
+
+# Keep the directory structure
+!.gitignore

@@ -25,7 +25,7 @@ on:
         type: choice
         options:
           - debug
-          - unsigned-release
+          - signed-release
         default: "debug"
 
 jobs:
@@ -61,6 +61,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Decode Keystore
+        if: inputs.build_type == 'signed-release'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > $GITHUB_WORKSPACE/release.jks
+          echo "KEYSTORE_FILE=$GITHUB_WORKSPACE/release.jks" >> $GITHUB_ENV
+
       - name: Generate contract
         run: ./gradlew :shared:contract:generateFishitContract --no-daemon
 
@@ -68,13 +76,23 @@ jobs:
         if: inputs.build_type == 'debug' || inputs.build_type == ''
         run: ./gradlew :androidApp:assembleDebug --stacktrace
 
-      - name: Build Unsigned Release APK
-        if: inputs.build_type == 'unsigned-release'
-        run: ./gradlew :shared:contract:generateFishitContract :androidApp:assembleRelease --stacktrace
+      - name: Build Signed Release APK
+        if: inputs.build_type == 'signed-release'
+        env:
+          KEYSTORE_FILE: ${{ env.KEYSTORE_FILE }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew :androidApp:assembleRelease --stacktrace
 
-      - name: Build Unsigned Release Bundle
-        if: inputs.build_type == 'unsigned-release'
-        run: ./gradlew :shared:contract:generateFishitContract :androidApp:bundleRelease --stacktrace
+      - name: Build Signed Release Bundle
+        if: inputs.build_type == 'signed-release'
+        env:
+          KEYSTORE_FILE: ${{ env.KEYSTORE_FILE }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew :androidApp:bundleRelease --stacktrace
 
       - name: Upload Debug APK
         if: inputs.build_type == 'debug' || inputs.build_type == ''
@@ -84,21 +102,25 @@ jobs:
           path: androidApp/build/outputs/apk/debug/*.apk
           retention-days: 30
 
-      - name: Upload Unsigned Release APK
-        if: inputs.build_type == 'unsigned-release'
+      - name: Upload Signed Release APK
+        if: inputs.build_type == 'signed-release'
         uses: actions/upload-artifact@v4
         with:
-          name: app-unsigned-release-apk
+          name: app-release-apk
           path: androidApp/build/outputs/apk/release/*.apk
           retention-days: 30
 
-      - name: Upload Unsigned Release Bundle
-        if: inputs.build_type == 'unsigned-release'
+      - name: Upload Signed Release Bundle
+        if: inputs.build_type == 'signed-release'
         uses: actions/upload-artifact@v4
         with:
-          name: app-unsigned-release-bundle
+          name: app-release-bundle
           path: androidApp/build/outputs/bundle/release/*.aab
           retention-days: 30
+
+      - name: Cleanup Keystore
+        if: always() && inputs.build_type == 'signed-release'
+        run: rm -f $GITHUB_WORKSPACE/release.jks
 
       - name: Build Summary
         run: |
@@ -106,10 +128,10 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Build Type:** ${{ inputs.build_type || 'debug' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ inputs.build_type }}" == "unsigned-release" ]; then
+          if [ "${{ inputs.build_type }}" == "signed-release" ]; then
             echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
-            echo "- Unsigned Release APK (app-unsigned-release-apk)" >> $GITHUB_STEP_SUMMARY
-            echo "- Unsigned Release Bundle/AAB (app-unsigned-release-bundle)" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Signed Release APK (app-release-apk) - installierbar!" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Signed Release Bundle/AAB (app-release-bundle)" >> $GITHUB_STEP_SUMMARY
           else
             echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
             echo "- Debug APK (app-debug)" >> $GITHUB_STEP_SUMMARY

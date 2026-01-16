@@ -21,10 +21,25 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            // Für CI/CD: Keystore aus Environment Variables
+            // Lokal: Keystore-Datei im Projekt (NICHT committen!)
+            val keystoreFile = System.getenv("KEYSTORE_FILE")?.let { file(it) }
+                ?: rootProject.file("keystore/release.jks").takeIf { it.exists() }
+
+            if (keystoreFile != null && keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+                keyAlias = System.getenv("KEY_ALIAS") ?: "fishit-mapper"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Debug builds werden automatisch mit Android Debug Keystore signiert
-            // Dies ist ausreichend für VPN und Zertifikat-Funktionalität
             isDebuggable = true
         }
         release {
@@ -33,8 +48,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Für Release-Build sollte ein eigener Keystore verwendet werden:
-            // signingConfig = signingConfigs.getByName("release")
+            // Signiere Release-Builds wenn Keystore verfügbar
+            val releaseConfig = signingConfigs.findByName("release")
+            if (releaseConfig?.storeFile != null) {
+                signingConfig = releaseConfig
+            }
         }
     }
 
