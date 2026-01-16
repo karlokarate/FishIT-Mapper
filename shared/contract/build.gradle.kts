@@ -57,6 +57,9 @@ android {
 // Use src/generated instead of build/generated for better reliability
 val generatedDir = projectDir.resolve("src/generated/kotlin")
 
+// Regex pattern to match all Kotlin compilation tasks
+val kotlinCompilePattern = Regex(".*[Cc]ompile.*[Kk]otlin.*")
+
 val codegenClasspath by configurations.creating {
     isCanBeResolved = true
     isCanBeConsumed = false
@@ -85,6 +88,10 @@ val generateFishitContract = tasks.register<JavaExec>("generateFishitContract") 
     }
 }
 
-tasks.matching { it.name.startsWith("compileKotlin") }.configureEach {
+// Ensure all Kotlin compilation tasks depend on code generation
+// This includes compileKotlin*, compileDebugKotlin*, compileReleaseKotlin* variants
+tasks.matching { task ->
+    task.name.matches(kotlinCompilePattern)
+}.configureEach {
     dependsOn(generateFishitContract)
 }
