@@ -87,9 +87,8 @@ val generateFishitContract = tasks.register<JavaExec>("generateFishitContract") 
 
 // Ensure all Kotlin compilation tasks depend on code generation
 // This includes compileKotlin*, compileDebugKotlin*, compileReleaseKotlin* variants
-tasks.configureEach {
-    if (name.contains("ompileKotlin", ignoreCase = true) || 
-        name.contains("ompile") && name.contains("Kotlin")) {
-        dependsOn(generateFishitContract)
-    }
+tasks.matching { task ->
+    task.name.matches(Regex(".*[Cc]ompile.*[Kk]otlin.*"))
+}.configureEach {
+    dependsOn(generateFishitContract)
 }
