@@ -4,6 +4,7 @@ import android.content.Context
 import dev.fishit.mapper.android.data.AndroidProjectStore
 import dev.fishit.mapper.android.export.ExportManager
 import dev.fishit.mapper.android.import.ImportManager
+import dev.fishit.mapper.android.proxy.ProxyCaptureManager
 import dev.fishit.mapper.engine.MappingEngine
 
 class AppContainer(context: Context) {
@@ -11,4 +12,5 @@ class AppContainer(context: Context) {
     val mappingEngine: MappingEngine = MappingEngine()
     val exportManager: ExportManager = ExportManager(context, store)
     val importManager: ImportManager = ImportManager(context, store)
+    val proxyCaptureManager: ProxyCaptureManager = ProxyCaptureManager(context)
 }
