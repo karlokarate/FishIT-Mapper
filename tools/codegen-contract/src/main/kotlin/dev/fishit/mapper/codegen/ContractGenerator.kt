@@ -1,477 +1,684 @@
-    package dev.fishit.mapper.codegen
+package dev.fishit.mapper.codegen
 
-    import com.squareup.kotlinpoet.AnnotationSpec
-    import com.squareup.kotlinpoet.ClassName
-    import com.squareup.kotlinpoet.CodeBlock
-    import com.squareup.kotlinpoet.FileSpec
-    import com.squareup.kotlinpoet.FunSpec
-    import com.squareup.kotlinpoet.KModifier
-    import com.squareup.kotlinpoet.ParameterSpec
-    import com.squareup.kotlinpoet.PropertySpec
-    import com.squareup.kotlinpoet.TypeAliasSpec
-    import com.squareup.kotlinpoet.TypeName
-    import com.squareup.kotlinpoet.TypeSpec
-    import com.squareup.kotlinpoet.asClassName
-    import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-    import java.io.File
+import com.squareup.kotlinpoet.AnnotationSpec
+import com.squareup.kotlinpoet.ClassName
+import com.squareup.kotlinpoet.CodeBlock
+import com.squareup.kotlinpoet.FileSpec
+import com.squareup.kotlinpoet.FunSpec
+import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.ParameterSpec
+import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.TypeAliasSpec
+import com.squareup.kotlinpoet.TypeName
+import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.asClassName
+import java.io.File
 
-    class ContractGenerator(
-        private val schema: ContractSchema
-    ) {
-        private val pkg = schema.packageName
+class ContractGenerator(private val schema: ContractSchema) {
+    private val pkg = schema.packageName
 
-        private val serializable = ClassName("kotlinx.serialization", "Serializable")
-        private val serialName = ClassName("kotlinx.serialization", "SerialName")
-        private val instant = ClassName("kotlinx.datetime", "Instant")
-        private val json = ClassName("kotlinx.serialization.json", "Json")
-        private val jvmInline = ClassName("kotlin.jvm", "JvmInline")
+    private val serializable = ClassName("kotlinx.serialization", "Serializable")
+    private val serialName = ClassName("kotlinx.serialization", "SerialName")
+    private val instant = ClassName("kotlinx.datetime", "Instant")
+    private val json = ClassName("kotlinx.serialization.json", "Json")
+    private val jvmInline = ClassName("kotlin.jvm", "JvmInline")
 
-        private val string = String::class.asClassName()
-        private val boolean = Boolean::class.asClassName()
-        private val int = Int::class.asClassName()
-        private val long = Long::class.asClassName()
+    private val string = String::class.asClassName()
+    private val boolean = Boolean::class.asClassName()
+    private val int = Int::class.asClassName()
+    private val long = Long::class.asClassName()
 
-        private val mapStringString = ClassName("kotlin.collections", "Map").parameterizedBy(string, string)
-        private val listString = ClassName("kotlin.collections", "List").parameterizedBy(string)
+    private val mapStringString =
+            ClassName("kotlin.collections", "Map").parameterizedBy(string, string)
+    private val listString = ClassName("kotlin.collections", "List").parameterizedBy(string)
 
-        private fun listOf(type: TypeName) = ClassName("kotlin.collections", "List").parameterizedBy(type)
+    private fun listOf(type: TypeName) =
+            ClassName("kotlin.collections", "List").parameterizedBy(type)
 
-        private fun valParam(
+    private fun valParam(
             name: String,
             type: TypeName,
             defaultValue: CodeBlock? = null
-        ): ParameterSpec {
-            val b = ParameterSpec.builder(name, type)
-            if (defaultValue != null) b.defaultValue(defaultValue)
-            return b.build()
-        }
+    ): ParameterSpec {
+        val b = ParameterSpec.builder(name, type)
+        if (defaultValue != null) b.defaultValue(defaultValue)
+        return b.build()
+    }
 
-        private fun dataClassProperty(
-            name: String,
-            type: TypeName
-        ): PropertySpec {
-            return PropertySpec.builder(name, type)
-                .initializer(name)
-                .build()
-        }
+    private fun dataClassProperty(name: String, type: TypeName): PropertySpec {
+        return PropertySpec.builder(name, type).initializer(name).build()
+    }
 
-        fun generateAll(outDir: File) {
-            val files = listOf(
-                generateContractInfo(),
-                generateEnums(),
-                generateIds(),
-                generateGraph(),
-                generateRecorder(),
-                generateChains(),
-                generateTimeline(),
-                generateCredentials(),
-                generateExport(),
-                generateContractIndex()
-            )
+    fun generateAll(outDir: File) {
+        val files =
+                listOf(
+                        generateContractInfo(),
+                        generateEnums(),
+                        generateIds(),
+                        generateGraph(),
+                        generateRecorder(),
+                        generateChains(),
+                        generateTimeline(),
+                        generateCredentials(),
+                        generateExport(),
+                        generateContractIndex()
+                )
 
-            files.forEach { it.writeTo(outDir) }
-        }
+        files.forEach { it.writeTo(outDir) }
+    }
 
-        private fun generatedFile(name: String): FileSpec.Builder =
+    private fun generatedFile(name: String): FileSpec.Builder =
             FileSpec.builder(pkg, name)
-                .addFileComment("GENERATED by FishIT-Mapper KotlinPoet generator. DO NOT EDIT.")
-                .addAnnotation(
-                    AnnotationSpec.builder(ClassName("kotlin", "Suppress"))
-                        .addMember("%S", "RedundantVisibilityModifier")
-                        .addMember("%S", "unused")
-                        .build()
-                )
+                    .addFileComment("GENERATED by FishIT-Mapper KotlinPoet generator. DO NOT EDIT.")
+                    .addAnnotation(
+                            AnnotationSpec.builder(ClassName("kotlin", "Suppress"))
+                                    .addMember("%S", "RedundantVisibilityModifier")
+                                    .addMember("%S", "unused")
+                                    .build()
+                    )
 
-        private fun generateContractInfo(): FileSpec {
-            val contractInfo = TypeSpec.objectBuilder("ContractInfo")
-                .addKdoc("Constants for the generated FishIT contract.")
-                .addProperty(
-                    PropertySpec.builder("APP_NAME", string, KModifier.CONST)
-                        .initializer("%S", schema.appName)
+    private fun generateContractInfo(): FileSpec {
+        val contractInfo =
+                TypeSpec.objectBuilder("ContractInfo")
+                        .addKdoc("Constants for the generated FishIT contract.")
+                        .addProperty(
+                                PropertySpec.builder("APP_NAME", string, KModifier.CONST)
+                                        .initializer("%S", schema.appName)
+                                        .build()
+                        )
+                        .addProperty(
+                                PropertySpec.builder("CONTRACT_VERSION", string, KModifier.CONST)
+                                        .initializer("%S", schema.contractVersion)
+                                        .build()
+                        )
+                        .addProperty(
+                                PropertySpec.builder(
+                                                "BUNDLE_FORMAT_VERSION",
+                                                string,
+                                                KModifier.CONST
+                                        )
+                                        .initializer("%S", schema.export.bundleFormatVersion)
+                                        .build()
+                        )
+                        .addProperty(
+                                PropertySpec.builder("CLASS_DISCRIMINATOR", string, KModifier.CONST)
+                                        .initializer("%S", schema.export.classDiscriminator)
+                                        .build()
+                        )
                         .build()
-                )
-                .addProperty(
-                    PropertySpec.builder("CONTRACT_VERSION", string, KModifier.CONST)
-                        .initializer("%S", schema.contractVersion)
-                        .build()
-                )
-                .addProperty(
-                    PropertySpec.builder("BUNDLE_FORMAT_VERSION", string, KModifier.CONST)
-                        .initializer("%S", schema.export.bundleFormatVersion)
-                        .build()
-                )
-                .addProperty(
-                    PropertySpec.builder("CLASS_DISCRIMINATOR", string, KModifier.CONST)
-                        .initializer("%S", schema.export.classDiscriminator)
-                        .build()
-                )
-                .build()
 
-            val fishitJson = PropertySpec.builder("FishitJson", json)
-                .addKdoc("Default Json configuration used across FishIT-Mapper.")
-                .initializer(
-                    CodeBlock.builder()
-                        .add("%T {\n", json)
-                        .indent()
-                        .add("prettyPrint = true\n")
-                        .add("ignoreUnknownKeys = true\n")
-                        .add("encodeDefaults = true\n")
-                        .add("explicitNulls = false\n")
-                        .add("classDiscriminator = %T.CLASS_DISCRIMINATOR\n", ClassName(pkg, "ContractInfo"))
-                        .unindent()
-                        .add("}")
+        val fishitJson =
+                PropertySpec.builder("FishitJson", json)
+                        .addKdoc("Default Json configuration used across FishIT-Mapper.")
+                        .initializer(
+                                CodeBlock.builder()
+                                        .add("%T {\n", json)
+                                        .indent()
+                                        .add("prettyPrint = true\n")
+                                        .add("ignoreUnknownKeys = true\n")
+                                        .add("encodeDefaults = true\n")
+                                        .add("explicitNulls = false\n")
+                                        .add(
+                                                "classDiscriminator = %T.CLASS_DISCRIMINATOR\n",
+                                                ClassName(pkg, "ContractInfo")
+                                        )
+                                        .unindent()
+                                        .add("}")
+                                        .build()
+                        )
                         .build()
-                )
-                .build()
 
-            return generatedFile("ContractInfo")
-                .addType(contractInfo)
-                .addProperty(fishitJson)
-                .build()
+        return generatedFile("ContractInfo").addType(contractInfo).addProperty(fishitJson).build()
+    }
+
+    private fun generateEnums(): FileSpec {
+        fun enumType(name: String, entries: List<String>, kdoc: String): TypeSpec {
+            val builder = TypeSpec.enumBuilder(name).addKdoc(kdoc).addAnnotation(serializable)
+            entries.forEach { e -> builder.addEnumConstant(e) }
+            return builder.build()
         }
 
-        private fun generateEnums(): FileSpec {
-            fun enumType(name: String, entries: List<String>, kdoc: String): TypeSpec {
-                val builder = TypeSpec.enumBuilder(name).addKdoc(kdoc).addAnnotation(serializable)
-                entries.forEach { e -> builder.addEnumConstant(e) }
-                return builder.build()
-            }
+        val nodeKind =
+                enumType(
+                        name = "NodeKind",
+                        entries = schema.nodeKinds,
+                        kdoc = "Kind of a node in the website map graph."
+                )
+        val edgeKind =
+                enumType(
+                        name = "EdgeKind",
+                        entries = schema.edgeKinds,
+                        kdoc = "Kind of a directed edge between nodes."
+                )
+        val resourceKind =
+                enumType(
+                        name = "ResourceKind",
+                        entries = schema.resourceKinds,
+                        kdoc = "Best-effort classification of WebView resource requests."
+                )
+        val consoleLevel =
+                enumType(
+                        name = "ConsoleLevel",
+                        entries = schema.consoleLevels,
+                        kdoc = "Log level for console events (if captured)."
+                )
 
-            val nodeKind = enumType(
-                name = "NodeKind",
-                entries = schema.nodeKinds,
-                kdoc = "Kind of a node in the website map graph."
-            )
-            val edgeKind = enumType(
-                name = "EdgeKind",
-                entries = schema.edgeKinds,
-                kdoc = "Kind of a directed edge between nodes."
-            )
-            val resourceKind = enumType(
-                name = "ResourceKind",
-                entries = schema.resourceKinds,
-                kdoc = "Best-effort classification of WebView resource requests."
-            )
-            val consoleLevel = enumType(
-                name = "ConsoleLevel",
-                entries = schema.consoleLevels,
-                kdoc = "Log level for console events (if captured)."
-            )
-
-            return generatedFile("Enums")
+        return generatedFile("Enums")
                 .addType(nodeKind)
                 .addType(edgeKind)
                 .addType(resourceKind)
                 .addType(consoleLevel)
                 .build()
-        }
+    }
 
-        private fun generateIds(): FileSpec {
-            fun idValueClass(name: String, kdoc: String): TypeSpec {
-                return TypeSpec.classBuilder(name)
+    private fun generateIds(): FileSpec {
+        fun idValueClass(name: String, kdoc: String): TypeSpec {
+            return TypeSpec.classBuilder(name)
                     .addModifiers(KModifier.VALUE)
                     .addAnnotation(jvmInline)
                     .addAnnotation(serializable)
                     .addKdoc(kdoc)
                     .primaryConstructor(
-                        FunSpec.constructorBuilder()
-                            .addParameter("value", string)
-                            .build()
+                            FunSpec.constructorBuilder().addParameter("value", string).build()
                     )
-                    .addProperty(
-                        PropertySpec.builder("value", string)
-                            .initializer("value")
-                            .build()
-                    )
+                    .addProperty(PropertySpec.builder("value", string).initializer("value").build())
                     .build()
-            }
-
-            val types = listOf(
-                idValueClass("ProjectId", "Stable identifier for a mapping project."),
-                idValueClass("SessionId", "Stable identifier for a recording session."),
-                idValueClass("EventId", "Stable identifier for a recorder event."),
-                idValueClass("NodeId", "Stable identifier for a graph node."),
-                idValueClass("EdgeId", "Stable identifier for a graph edge."),
-                idValueClass("ChainId", "Stable identifier for a record chain."),
-                idValueClass("ChainPointId", "Stable identifier for a record chain point.")
-            )
-
-            val mapAlias = TypeAliasSpec.builder("Attributes", mapStringString)
-                .addKdoc("Arbitrary key/value attributes. Keep values small and serializable.")
-                .build()
-
-            return generatedFile("Ids")
-                .addTypeAlias(mapAlias)
-                .addTypes(types)
-                .build()
         }
 
-        private fun generateGraph(): FileSpec {
-            val nodeKind = ClassName(pkg, "NodeKind")
-            val edgeKind = ClassName(pkg, "EdgeKind")
-            val nodeId = ClassName(pkg, "NodeId")
-            val edgeId = ClassName(pkg, "EdgeId")
-            val attributes = ClassName(pkg, "Attributes")
-
-            val mapNode = TypeSpec.classBuilder("MapNode")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("A node in the website map graph.")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter(valParam("id", nodeId))
-                        .addParameter(valParam("kind", nodeKind))
-                        .addParameter(valParam("url", string))
-                        .addParameter(valParam("title", string.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("tags", listOf(string), CodeBlock.of("emptyList()")))
-                        .addParameter(valParam("attributes", attributes, CodeBlock.of("emptyMap()")))
-                        .addParameter(valParam("firstSeenAt", instant.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("lastSeenAt", instant.copy(nullable = true), CodeBlock.of("null")))
-                        .build()
+        val types =
+                listOf(
+                        idValueClass("ProjectId", "Stable identifier for a mapping project."),
+                        idValueClass("SessionId", "Stable identifier for a recording session."),
+                        idValueClass("EventId", "Stable identifier for a recorder event."),
+                        idValueClass("NodeId", "Stable identifier for a graph node."),
+                        idValueClass("EdgeId", "Stable identifier for a graph edge."),
+                        idValueClass("ChainId", "Stable identifier for a record chain."),
+                        idValueClass("ChainPointId", "Stable identifier for a record chain point.")
                 )
-                .addProperty(dataClassProperty("id", nodeId))
-                .addProperty(dataClassProperty("kind", nodeKind))
-                .addProperty(dataClassProperty("url", string))
-                .addProperty(dataClassProperty("title", string.copy(nullable = true)))
-                .addProperty(dataClassProperty("tags", listOf(string)))
-                .addProperty(dataClassProperty("attributes", attributes))
-                .addProperty(dataClassProperty("firstSeenAt", instant.copy(nullable = true)))
-                .addProperty(dataClassProperty("lastSeenAt", instant.copy(nullable = true)))
-                .build()
 
-            val mapEdge = TypeSpec.classBuilder("MapEdge")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("A directed edge between two nodes.")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter(valParam("id", edgeId))
-                        .addParameter(valParam("kind", edgeKind))
-                        .addParameter(valParam("from", nodeId))
-                        .addParameter(valParam("to", nodeId))
-                        .addParameter(valParam("label", string.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("attributes", attributes, CodeBlock.of("emptyMap()")))
-                        .addParameter(valParam("firstSeenAt", instant.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("lastSeenAt", instant.copy(nullable = true), CodeBlock.of("null")))
+        val mapAlias =
+                TypeAliasSpec.builder("Attributes", mapStringString)
+                        .addKdoc(
+                                "Arbitrary key/value attributes. Keep values small and serializable."
+                        )
                         .build()
-                )
-                .addProperty(dataClassProperty("id", edgeId))
-                .addProperty(dataClassProperty("kind", edgeKind))
-                .addProperty(dataClassProperty("from", nodeId))
-                .addProperty(dataClassProperty("to", nodeId))
-                .addProperty(dataClassProperty("label", string.copy(nullable = true)))
-                .addProperty(dataClassProperty("attributes", attributes))
-                .addProperty(dataClassProperty("firstSeenAt", instant.copy(nullable = true)))
-                .addProperty(dataClassProperty("lastSeenAt", instant.copy(nullable = true)))
-                .build()
 
-            val mapGraph = TypeSpec.classBuilder("MapGraph")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("A snapshot of the full mapping graph.")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter(valParam("nodes", listOf(ClassName(pkg, "MapNode")), CodeBlock.of("emptyList()")))
-                        .addParameter(valParam("edges", listOf(ClassName(pkg, "MapEdge")), CodeBlock.of("emptyList()")))
-                        .addParameter(valParam("updatedAt", instant.copy(nullable = true), CodeBlock.of("null")))
+        return generatedFile("Ids").addTypeAlias(mapAlias).addTypes(types).build()
+    }
+
+    private fun generateGraph(): FileSpec {
+        val nodeKind = ClassName(pkg, "NodeKind")
+        val edgeKind = ClassName(pkg, "EdgeKind")
+        val nodeId = ClassName(pkg, "NodeId")
+        val edgeId = ClassName(pkg, "EdgeId")
+        val attributes = ClassName(pkg, "Attributes")
+
+        val mapNode =
+                TypeSpec.classBuilder("MapNode")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc("A node in the website map graph.")
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter(valParam("id", nodeId))
+                                        .addParameter(valParam("kind", nodeKind))
+                                        .addParameter(valParam("url", string))
+                                        .addParameter(
+                                                valParam(
+                                                        "title",
+                                                        string.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "tags",
+                                                        listOf(string),
+                                                        CodeBlock.of("emptyList()")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "attributes",
+                                                        attributes,
+                                                        CodeBlock.of("emptyMap()")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "firstSeenAt",
+                                                        instant.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "lastSeenAt",
+                                                        instant.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .addProperty(dataClassProperty("id", nodeId))
+                        .addProperty(dataClassProperty("kind", nodeKind))
+                        .addProperty(dataClassProperty("url", string))
+                        .addProperty(dataClassProperty("title", string.copy(nullable = true)))
+                        .addProperty(dataClassProperty("tags", listOf(string)))
+                        .addProperty(dataClassProperty("attributes", attributes))
+                        .addProperty(
+                                dataClassProperty("firstSeenAt", instant.copy(nullable = true))
+                        )
+                        .addProperty(dataClassProperty("lastSeenAt", instant.copy(nullable = true)))
                         .build()
-                )
-                .addProperty(dataClassProperty("nodes", listOf(ClassName(pkg, "MapNode"))))
-                .addProperty(dataClassProperty("edges", listOf(ClassName(pkg, "MapEdge"))))
-                .addProperty(dataClassProperty("updatedAt", instant.copy(nullable = true)))
-                .build()
 
-            return generatedFile("Graph")
-                .addType(mapNode)
-                .addType(mapEdge)
-                .addType(mapGraph)
-                .build()
-        }
+        val mapEdge =
+                TypeSpec.classBuilder("MapEdge")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc("A directed edge between two nodes.")
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter(valParam("id", edgeId))
+                                        .addParameter(valParam("kind", edgeKind))
+                                        .addParameter(valParam("from", nodeId))
+                                        .addParameter(valParam("to", nodeId))
+                                        .addParameter(
+                                                valParam(
+                                                        "label",
+                                                        string.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "attributes",
+                                                        attributes,
+                                                        CodeBlock.of("emptyMap()")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "firstSeenAt",
+                                                        instant.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "lastSeenAt",
+                                                        instant.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .addProperty(dataClassProperty("id", edgeId))
+                        .addProperty(dataClassProperty("kind", edgeKind))
+                        .addProperty(dataClassProperty("from", nodeId))
+                        .addProperty(dataClassProperty("to", nodeId))
+                        .addProperty(dataClassProperty("label", string.copy(nullable = true)))
+                        .addProperty(dataClassProperty("attributes", attributes))
+                        .addProperty(
+                                dataClassProperty("firstSeenAt", instant.copy(nullable = true))
+                        )
+                        .addProperty(dataClassProperty("lastSeenAt", instant.copy(nullable = true)))
+                        .build()
 
-        private fun generateRecorder(): FileSpec {
-            val projectId = ClassName(pkg, "ProjectId")
-            val sessionId = ClassName(pkg, "SessionId")
-            val eventId = ClassName(pkg, "EventId")
-            val resourceKind = ClassName(pkg, "ResourceKind")
-            val consoleLevel = ClassName(pkg, "ConsoleLevel")
+        val mapGraph =
+                TypeSpec.classBuilder("MapGraph")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc("A snapshot of the full mapping graph.")
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter(
+                                                valParam(
+                                                        "nodes",
+                                                        listOf(ClassName(pkg, "MapNode")),
+                                                        CodeBlock.of("emptyList()")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "edges",
+                                                        listOf(ClassName(pkg, "MapEdge")),
+                                                        CodeBlock.of("emptyList()")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "updatedAt",
+                                                        instant.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .addProperty(dataClassProperty("nodes", listOf(ClassName(pkg, "MapNode"))))
+                        .addProperty(dataClassProperty("edges", listOf(ClassName(pkg, "MapEdge"))))
+                        .addProperty(dataClassProperty("updatedAt", instant.copy(nullable = true)))
+                        .build()
 
-            val recorderEvent = TypeSpec.interfaceBuilder("RecorderEvent")
-                .addModifiers(KModifier.SEALED)
-                .addAnnotation(serializable)
-                .addKdoc("A recorded event during a browser mapping session.")
-                .addProperty(PropertySpec.builder("id", eventId).addModifiers(KModifier.ABSTRACT).build())
-                .addProperty(PropertySpec.builder("at", instant).addModifiers(KModifier.ABSTRACT).build())
-                .build()
+        return generatedFile("Graph").addType(mapNode).addType(mapEdge).addType(mapGraph).build()
+    }
 
-            fun dataEvent(
+    private fun generateRecorder(): FileSpec {
+        val projectId = ClassName(pkg, "ProjectId")
+        val sessionId = ClassName(pkg, "SessionId")
+        val eventId = ClassName(pkg, "EventId")
+        val resourceKind = ClassName(pkg, "ResourceKind")
+        val consoleLevel = ClassName(pkg, "ConsoleLevel")
+
+        val recorderEvent =
+                TypeSpec.interfaceBuilder("RecorderEvent")
+                        .addModifiers(KModifier.SEALED)
+                        .addAnnotation(serializable)
+                        .addKdoc("A recorded event during a browser mapping session.")
+                        .addProperty(
+                                PropertySpec.builder("id", eventId)
+                                        .addModifiers(KModifier.ABSTRACT)
+                                        .build()
+                        )
+                        .addProperty(
+                                PropertySpec.builder("at", instant)
+                                        .addModifiers(KModifier.ABSTRACT)
+                                        .build()
+                        )
+                        .build()
+
+        fun dataEvent(
                 name: String,
                 serial: String,
                 extraParams: List<ParameterSpec>,
                 kdoc: String
-            ): TypeSpec {
-                val ctor = FunSpec.constructorBuilder()
-                    .addParameter("id", eventId)
-                    .addParameter("at", instant)
+        ): TypeSpec {
+            val ctor =
+                    FunSpec.constructorBuilder()
+                            .addParameter("id", eventId)
+                            .addParameter("at", instant)
 
-                extraParams.forEach { ctor.addParameter(it) }
+            extraParams.forEach { ctor.addParameter(it) }
 
-                val builder = TypeSpec.classBuilder(name)
-                    .addModifiers(KModifier.DATA)
-                    .addAnnotation(serializable)
-                    .addAnnotation(
-                        AnnotationSpec.builder(serialName)
-                            .addMember("%S", serial)
-                            .build()
-                    )
-                    .addSuperinterface(ClassName(pkg, "RecorderEvent"))
-                    .addKdoc(kdoc)
-                    .primaryConstructor(ctor.build())
-                    .addProperty(
-                        PropertySpec.builder("id", eventId)
-                            .addModifiers(KModifier.OVERRIDE)
-                            .initializer("id")
-                            .build()
-                    )
-                    .addProperty(
-                        PropertySpec.builder("at", instant)
-                            .addModifiers(KModifier.OVERRIDE)
-                            .initializer("at")
-                            .build()
-                    )
+            val builder =
+                    TypeSpec.classBuilder(name)
+                            .addModifiers(KModifier.DATA)
+                            .addAnnotation(serializable)
+                            .addAnnotation(
+                                    AnnotationSpec.builder(serialName)
+                                            .addMember("%S", serial)
+                                            .build()
+                            )
+                            .addSuperinterface(ClassName(pkg, "RecorderEvent"))
+                            .addKdoc(kdoc)
+                            .primaryConstructor(ctor.build())
+                            .addProperty(
+                                    PropertySpec.builder("id", eventId)
+                                            .addModifiers(KModifier.OVERRIDE)
+                                            .initializer("id")
+                                            .build()
+                            )
+                            .addProperty(
+                                    PropertySpec.builder("at", instant)
+                                            .addModifiers(KModifier.OVERRIDE)
+                                            .initializer("at")
+                                            .build()
+                            )
 
-                // Add properties for extra params
-                extraParams.forEach { param ->
-                    builder.addProperty(
-                        PropertySpec.builder(param.name, param.type)
-                            .initializer(param.name)
-                            .build()
-                    )
-                }
-
-                return builder.build()
+            // Add properties for extra params
+            extraParams.forEach { param ->
+                builder.addProperty(
+                        PropertySpec.builder(param.name, param.type).initializer(param.name).build()
+                )
             }
 
-            val navEvent = dataEvent(
-                name = "NavigationEvent",
-                serial = "nav",
-                extraParams = listOf(
-                    valParam("url", string),
-                    valParam("fromUrl", string.copy(nullable = true), CodeBlock.of("null")),
-                    valParam("title", string.copy(nullable = true), CodeBlock.of("null")),
-                    valParam("isRedirect", boolean, CodeBlock.of("false"))
-                ),
-                kdoc = "Navigation to a new document URL."
-            )
+            return builder.build()
+        }
 
-            val reqEvent = dataEvent(
-                name = "ResourceRequestEvent",
-                serial = "req",
-                extraParams = listOf(
-                    valParam("url", string),
-                    valParam("initiatorUrl", string.copy(nullable = true), CodeBlock.of("null")),
-                    valParam("method", string.copy(nullable = true), CodeBlock.of("null")),
-                    valParam("resourceKind", resourceKind.copy(nullable = true), CodeBlock.of("null"))
-                ),
-                kdoc = "A resource request observed by the WebView (best effort)."
-            )
-
-            val consoleEvent = dataEvent(
-                name = "ConsoleMessageEvent",
-                serial = "console",
-                extraParams = listOf(
-                    valParam("level", consoleLevel),
-                    valParam("message", string)
-                ),
-                kdoc = "A console message captured from the page (if enabled)."
-            )
-
-            val userActionEvent = dataEvent(
-                name = "UserActionEvent",
-                serial = "action",
-                extraParams = listOf(
-                    valParam("action", string),
-                    valParam("target", string.copy(nullable = true), CodeBlock.of("null"))
-                ),
-                kdoc = "A user action captured by the app (tap/click/scroll etc., if enabled)."
-            )
-
-            val customEvent = dataEvent(
-                name = "CustomEvent",
-                serial = "custom",
-                extraParams = listOf(
-                    valParam("name", string),
-                    valParam("payload", mapStringString, CodeBlock.of("emptyMap()"))
-                ),
-                kdoc = "A custom event that allows extensions without breaking the schema."
-            )
-
-            val resEvent = dataEvent(
-                name = "ResourceResponseEvent",
-                serial = "res",
-                extraParams = listOf(
-                    valParam("requestId", eventId),
-                    valParam("url", string),
-                    valParam("statusCode", int),
-                    valParam("statusMessage", string.copy(nullable = true), CodeBlock.of("null")),
-                    valParam("headers", mapStringString, CodeBlock.of("emptyMap()")),
-                    valParam("contentType", string.copy(nullable = true), CodeBlock.of("null")),
-                    valParam("contentLength", long.copy(nullable = true), CodeBlock.of("null")),
-                    valParam("body", string.copy(nullable = true), CodeBlock.of("null")),
-                    valParam("bodyTruncated", boolean, CodeBlock.of("false")),
-                    valParam("responseTimeMs", long, CodeBlock.of("0L")),
-                    valParam("isRedirect", boolean, CodeBlock.of("false")),
-                    valParam("redirectLocation", string.copy(nullable = true), CodeBlock.of("null"))
-                ),
-                kdoc = "A resource response captured by the MITM proxy with full HTTP details."
-            )
-
-            val recordingSession = TypeSpec.classBuilder("RecordingSession")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("A recording session containing an ordered list of events.")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter(valParam("id", sessionId))
-                        .addParameter(valParam("projectId", projectId))
-                        .addParameter(valParam("startedAt", instant))
-                        .addParameter(valParam("endedAt", instant.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("initialUrl", string))
-                        .addParameter(valParam("finalUrl", string.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("events", listOf(ClassName(pkg, "RecorderEvent")), CodeBlock.of("emptyList()")))
-                        .addParameter(valParam("notes", string.copy(nullable = true), CodeBlock.of("null")))
-                        .build()
+        val navEvent =
+                dataEvent(
+                        name = "NavigationEvent",
+                        serial = "nav",
+                        extraParams =
+                                listOf(
+                                        valParam("url", string),
+                                        valParam(
+                                                "fromUrl",
+                                                string.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        valParam(
+                                                "title",
+                                                string.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        valParam("isRedirect", boolean, CodeBlock.of("false"))
+                                ),
+                        kdoc = "Navigation to a new document URL."
                 )
-                .addProperty(dataClassProperty("id", sessionId))
-                .addProperty(dataClassProperty("projectId", projectId))
-                .addProperty(dataClassProperty("startedAt", instant))
-                .addProperty(dataClassProperty("endedAt", instant.copy(nullable = true)))
-                .addProperty(dataClassProperty("initialUrl", string))
-                .addProperty(dataClassProperty("finalUrl", string.copy(nullable = true)))
-                .addProperty(dataClassProperty("events", listOf(ClassName(pkg, "RecorderEvent"))))
-                .addProperty(dataClassProperty("notes", string.copy(nullable = true)))
-                .build()
 
-            val projectMeta = TypeSpec.classBuilder("ProjectMeta")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("Metadata describing a mapping project (workspace).")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter("id", projectId)
-                        .addParameter("name", string)
-                        .addParameter("startUrl", string)
-                        .addParameter("createdAt", instant)
-                        .addParameter("updatedAt", instant)
-                        .build()
+        val reqEvent =
+                dataEvent(
+                        name = "ResourceRequestEvent",
+                        serial = "req",
+                        extraParams =
+                                listOf(
+                                        valParam("url", string),
+                                        valParam(
+                                                "initiatorUrl",
+                                                string.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        valParam(
+                                                "method",
+                                                string.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        valParam(
+                                                "resourceKind",
+                                                resourceKind.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        // Extended fields for machine-readable mapping
+                                        valParam(
+                                                "headers",
+                                                mapStringString,
+                                                CodeBlock.of("emptyMap()")
+                                        ),
+                                        valParam(
+                                                "contentType",
+                                                string.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        valParam(
+                                                "contentLength",
+                                                long.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        valParam(
+                                                "body",
+                                                string.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        valParam("bodyTruncated", boolean, CodeBlock.of("false"))
+                                ),
+                        kdoc = "A resource request observed by the WebView or MITM proxy."
                 )
-                .addProperty(dataClassProperty("id", projectId))
-                .addProperty(dataClassProperty("name", string))
-                .addProperty(dataClassProperty("startUrl", string))
-                .addProperty(dataClassProperty("createdAt", instant))
-                .addProperty(dataClassProperty("updatedAt", instant))
-                .build()
 
-            return generatedFile("Recorder")
+        val consoleEvent =
+                dataEvent(
+                        name = "ConsoleMessageEvent",
+                        serial = "console",
+                        extraParams =
+                                listOf(
+                                        valParam("level", consoleLevel),
+                                        valParam("message", string)
+                                ),
+                        kdoc = "A console message captured from the page (if enabled)."
+                )
+
+        val userActionEvent =
+                dataEvent(
+                        name = "UserActionEvent",
+                        serial = "action",
+                        extraParams =
+                                listOf(
+                                        valParam("action", string),
+                                        valParam(
+                                                "target",
+                                                string.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        // Extended payload for machine-readable click/form mapping
+                                        valParam(
+                                                "payload",
+                                                mapStringString,
+                                                CodeBlock.of("emptyMap()")
+                                        )
+                                ),
+                        kdoc =
+                                "A user action captured by the app (tap/click/scroll etc., if enabled). Payload contains structured data like href, pageUrl, selector."
+                )
+
+        val customEvent =
+                dataEvent(
+                        name = "CustomEvent",
+                        serial = "custom",
+                        extraParams =
+                                listOf(
+                                        valParam("name", string),
+                                        valParam(
+                                                "payload",
+                                                mapStringString,
+                                                CodeBlock.of("emptyMap()")
+                                        )
+                                ),
+                        kdoc = "A custom event that allows extensions without breaking the schema."
+                )
+
+        val resEvent =
+                dataEvent(
+                        name = "ResourceResponseEvent",
+                        serial = "res",
+                        extraParams =
+                                listOf(
+                                        valParam("requestId", eventId),
+                                        valParam("url", string),
+                                        valParam("statusCode", int),
+                                        valParam(
+                                                "statusMessage",
+                                                string.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        valParam(
+                                                "headers",
+                                                mapStringString,
+                                                CodeBlock.of("emptyMap()")
+                                        ),
+                                        valParam(
+                                                "contentType",
+                                                string.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        valParam(
+                                                "contentLength",
+                                                long.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        valParam(
+                                                "body",
+                                                string.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        ),
+                                        valParam("bodyTruncated", boolean, CodeBlock.of("false")),
+                                        valParam("responseTimeMs", long, CodeBlock.of("0L")),
+                                        valParam("isRedirect", boolean, CodeBlock.of("false")),
+                                        valParam(
+                                                "redirectLocation",
+                                                string.copy(nullable = true),
+                                                CodeBlock.of("null")
+                                        )
+                                ),
+                        kdoc =
+                                "A resource response captured by the MITM proxy with full HTTP details."
+                )
+
+        val recordingSession =
+                TypeSpec.classBuilder("RecordingSession")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc("A recording session containing an ordered list of events.")
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter(valParam("id", sessionId))
+                                        .addParameter(valParam("projectId", projectId))
+                                        .addParameter(valParam("startedAt", instant))
+                                        .addParameter(
+                                                valParam(
+                                                        "endedAt",
+                                                        instant.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(valParam("initialUrl", string))
+                                        .addParameter(
+                                                valParam(
+                                                        "finalUrl",
+                                                        string.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "events",
+                                                        listOf(ClassName(pkg, "RecorderEvent")),
+                                                        CodeBlock.of("emptyList()")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "notes",
+                                                        string.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .addProperty(dataClassProperty("id", sessionId))
+                        .addProperty(dataClassProperty("projectId", projectId))
+                        .addProperty(dataClassProperty("startedAt", instant))
+                        .addProperty(dataClassProperty("endedAt", instant.copy(nullable = true)))
+                        .addProperty(dataClassProperty("initialUrl", string))
+                        .addProperty(dataClassProperty("finalUrl", string.copy(nullable = true)))
+                        .addProperty(
+                                dataClassProperty("events", listOf(ClassName(pkg, "RecorderEvent")))
+                        )
+                        .addProperty(dataClassProperty("notes", string.copy(nullable = true)))
+                        .build()
+
+        val projectMeta =
+                TypeSpec.classBuilder("ProjectMeta")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc("Metadata describing a mapping project (workspace).")
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter("id", projectId)
+                                        .addParameter("name", string)
+                                        .addParameter("startUrl", string)
+                                        .addParameter("createdAt", instant)
+                                        .addParameter("updatedAt", instant)
+                                        .build()
+                        )
+                        .addProperty(dataClassProperty("id", projectId))
+                        .addProperty(dataClassProperty("name", string))
+                        .addProperty(dataClassProperty("startUrl", string))
+                        .addProperty(dataClassProperty("createdAt", instant))
+                        .addProperty(dataClassProperty("updatedAt", instant))
+                        .build()
+
+        return generatedFile("Recorder")
                 .addType(projectMeta)
                 .addType(recorderEvent)
                 .addType(navEvent)
@@ -482,300 +689,497 @@
                 .addType(customEvent)
                 .addType(recordingSession)
                 .build()
-        }
+    }
 
-        private fun generateChains(): FileSpec {
-            val chainId = ClassName(pkg, "ChainId")
-            val chainPointId = ClassName(pkg, "ChainPointId")
-            val nodeId = ClassName(pkg, "NodeId")
+    private fun generateChains(): FileSpec {
+        val chainId = ClassName(pkg, "ChainId")
+        val chainPointId = ClassName(pkg, "ChainPointId")
+        val nodeId = ClassName(pkg, "NodeId")
 
-            val chainPoint = TypeSpec.classBuilder("ChainPoint")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("A point in a record-chain. Can branch by referencing a parent point.")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter(valParam("id", chainPointId))
-                        .addParameter(valParam("label", string))
-                        .addParameter(valParam("url", string.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("nodeId", nodeId.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("parentId", chainPointId.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("notes", string.copy(nullable = true), CodeBlock.of("null")))
+        val chainPoint =
+                TypeSpec.classBuilder("ChainPoint")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc(
+                                "A point in a record-chain. Can branch by referencing a parent point."
+                        )
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter(valParam("id", chainPointId))
+                                        .addParameter(valParam("label", string))
+                                        .addParameter(
+                                                valParam(
+                                                        "url",
+                                                        string.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "nodeId",
+                                                        nodeId.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "parentId",
+                                                        chainPointId.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "notes",
+                                                        string.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .addProperty(dataClassProperty("id", chainPointId))
+                        .addProperty(dataClassProperty("label", string))
+                        .addProperty(dataClassProperty("url", string.copy(nullable = true)))
+                        .addProperty(dataClassProperty("nodeId", nodeId.copy(nullable = true)))
+                        .addProperty(
+                                dataClassProperty("parentId", chainPointId.copy(nullable = true))
+                        )
+                        .addProperty(dataClassProperty("notes", string.copy(nullable = true)))
                         .build()
-                )
-                .addProperty(dataClassProperty("id", chainPointId))
-                .addProperty(dataClassProperty("label", string))
-                .addProperty(dataClassProperty("url", string.copy(nullable = true)))
-                .addProperty(dataClassProperty("nodeId", nodeId.copy(nullable = true)))
-                .addProperty(dataClassProperty("parentId", chainPointId.copy(nullable = true)))
-                .addProperty(dataClassProperty("notes", string.copy(nullable = true)))
-                .build()
 
-            val recordChain = TypeSpec.classBuilder("RecordChain")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("A user-defined chain of points for repeatable navigation workflows.")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter(valParam("id", chainId))
-                        .addParameter(valParam("name", string))
-                        .addParameter(valParam("createdAt", instant))
-                        .addParameter(valParam("points", listOf(ClassName(pkg, "ChainPoint")), CodeBlock.of("emptyList()")))
+        val recordChain =
+                TypeSpec.classBuilder("RecordChain")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc(
+                                "A user-defined chain of points for repeatable navigation workflows."
+                        )
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter(valParam("id", chainId))
+                                        .addParameter(valParam("name", string))
+                                        .addParameter(valParam("createdAt", instant))
+                                        .addParameter(
+                                                valParam(
+                                                        "points",
+                                                        listOf(ClassName(pkg, "ChainPoint")),
+                                                        CodeBlock.of("emptyList()")
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .addProperty(dataClassProperty("id", chainId))
+                        .addProperty(dataClassProperty("name", string))
+                        .addProperty(dataClassProperty("createdAt", instant))
+                        .addProperty(
+                                dataClassProperty("points", listOf(ClassName(pkg, "ChainPoint")))
+                        )
                         .build()
-                )
-                .addProperty(dataClassProperty("id", chainId))
-                .addProperty(dataClassProperty("name", string))
-                .addProperty(dataClassProperty("createdAt", instant))
-                .addProperty(dataClassProperty("points", listOf(ClassName(pkg, "ChainPoint"))))
-                .build()
 
-            val chainsFile = TypeSpec.classBuilder("ChainsFile")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("Top-level chains container, typically stored as `chains.json`.")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter(valParam("chains", listOf(ClassName(pkg, "RecordChain")), CodeBlock.of("emptyList()")))
+        val chainsFile =
+                TypeSpec.classBuilder("ChainsFile")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc("Top-level chains container, typically stored as `chains.json`.")
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter(
+                                                valParam(
+                                                        "chains",
+                                                        listOf(ClassName(pkg, "RecordChain")),
+                                                        CodeBlock.of("emptyList()")
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .addProperty(
+                                dataClassProperty("chains", listOf(ClassName(pkg, "RecordChain")))
+                        )
                         .build()
-                )
-                .addProperty(dataClassProperty("chains", listOf(ClassName(pkg, "RecordChain"))))
-                .build()
 
-            return generatedFile("Chains")
+        return generatedFile("Chains")
                 .addType(chainPoint)
                 .addType(recordChain)
                 .addType(chainsFile)
                 .build()
-        }
+    }
 
-        private fun generateExport(): FileSpec {
-            val projectMeta = ClassName(pkg, "ProjectMeta")
+    private fun generateExport(): FileSpec {
+        val projectMeta = ClassName(pkg, "ProjectMeta")
 
-            val exportManifest = TypeSpec.classBuilder("ExportManifest")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("Manifest describing an exported FishIT bundle (zip).")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter(valParam("appName", string))
-                        .addParameter(valParam("bundleFormatVersion", string))
-                        .addParameter(valParam("contractVersion", string))
-                        .addParameter(valParam("createdAt", instant))
-                        .addParameter(valParam("project", projectMeta))
-                        .addParameter(valParam("graphPath", string, CodeBlock.of("%S", "graph.json")))
-                        .addParameter(valParam("chainsPath", string, CodeBlock.of("%S", "chains.json")))
-                        .addParameter(valParam("sessionsDir", string, CodeBlock.of("%S", "sessions")))
-                        .addParameter(valParam("sessionFiles", listOf(string), CodeBlock.of("emptyList()")))
+        val exportManifest =
+                TypeSpec.classBuilder("ExportManifest")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc("Manifest describing an exported FishIT bundle (zip).")
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter(valParam("appName", string))
+                                        .addParameter(valParam("bundleFormatVersion", string))
+                                        .addParameter(valParam("contractVersion", string))
+                                        .addParameter(valParam("createdAt", instant))
+                                        .addParameter(valParam("project", projectMeta))
+                                        .addParameter(
+                                                valParam(
+                                                        "graphPath",
+                                                        string,
+                                                        CodeBlock.of("%S", "graph.json")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "chainsPath",
+                                                        string,
+                                                        CodeBlock.of("%S", "chains.json")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "sessionsDir",
+                                                        string,
+                                                        CodeBlock.of("%S", "sessions")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "sessionFiles",
+                                                        listOf(string),
+                                                        CodeBlock.of("emptyList()")
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .addProperty(dataClassProperty("appName", string))
+                        .addProperty(dataClassProperty("bundleFormatVersion", string))
+                        .addProperty(dataClassProperty("contractVersion", string))
+                        .addProperty(dataClassProperty("createdAt", instant))
+                        .addProperty(dataClassProperty("project", projectMeta))
+                        .addProperty(dataClassProperty("graphPath", string))
+                        .addProperty(dataClassProperty("chainsPath", string))
+                        .addProperty(dataClassProperty("sessionsDir", string))
+                        .addProperty(dataClassProperty("sessionFiles", listOf(string)))
                         .build()
-                )
-                .addProperty(dataClassProperty("appName", string))
-                .addProperty(dataClassProperty("bundleFormatVersion", string))
-                .addProperty(dataClassProperty("contractVersion", string))
-                .addProperty(dataClassProperty("createdAt", instant))
-                .addProperty(dataClassProperty("project", projectMeta))
-                .addProperty(dataClassProperty("graphPath", string))
-                .addProperty(dataClassProperty("chainsPath", string))
-                .addProperty(dataClassProperty("sessionsDir", string))
-                .addProperty(dataClassProperty("sessionFiles", listOf(string)))
-                .build()
 
-            return generatedFile("Export")
-                .addType(exportManifest)
-                .build()
-        }
+        return generatedFile("Export").addType(exportManifest).build()
+    }
 
-        private fun generateTimeline(): FileSpec {
-            val eventId = ClassName(pkg, "EventId")
-            val sessionId = ClassName(pkg, "SessionId")
-            val nodeId = ClassName(pkg, "NodeId")
-            val recorderEvent = ClassName(pkg, "RecorderEvent")
+    private fun generateTimeline(): FileSpec {
+        val eventId = ClassName(pkg, "EventId")
+        val sessionId = ClassName(pkg, "SessionId")
+        val nodeId = ClassName(pkg, "NodeId")
+        val recorderEvent = ClassName(pkg, "RecorderEvent")
 
-            // TimelineEntry - represents a single event in the unified timeline
-            val timelineEntry = TypeSpec.classBuilder("TimelineEntry")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("A single entry in the unified session timeline with correlation metadata.")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter(valParam("event", recorderEvent))
-                        .addParameter(valParam("correlatedEventId", eventId.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("parentEventId", eventId.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("depth", int, CodeBlock.of("0")))
+        // TimelineEntry - represents a single event in the unified timeline
+        val timelineEntry =
+                TypeSpec.classBuilder("TimelineEntry")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc(
+                                "A single entry in the unified session timeline with correlation metadata."
+                        )
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter(valParam("event", recorderEvent))
+                                        .addParameter(
+                                                valParam(
+                                                        "correlatedEventId",
+                                                        eventId.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "parentEventId",
+                                                        eventId.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(valParam("depth", int, CodeBlock.of("0")))
+                                        .build()
+                        )
+                        .addProperty(dataClassProperty("event", recorderEvent))
+                        .addProperty(
+                                dataClassProperty(
+                                        "correlatedEventId",
+                                        eventId.copy(nullable = true)
+                                )
+                        )
+                        .addProperty(
+                                dataClassProperty("parentEventId", eventId.copy(nullable = true))
+                        )
+                        .addProperty(dataClassProperty("depth", int))
                         .build()
-                )
-                .addProperty(dataClassProperty("event", recorderEvent))
-                .addProperty(dataClassProperty("correlatedEventId", eventId.copy(nullable = true)))
-                .addProperty(dataClassProperty("parentEventId", eventId.copy(nullable = true)))
-                .addProperty(dataClassProperty("depth", int))
-                .build()
 
-            // SessionTreeNode - represents a node in the session tree hierarchy
-            val sessionTreeNode = TypeSpec.classBuilder("SessionTreeNode")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("A node in the session tree representing parent-child relationships.")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter(valParam("nodeId", nodeId))
-                        .addParameter(valParam("url", string))
-                        .addParameter(valParam("title", string.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("parentNodeId", nodeId.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("children", listOf(nodeId), CodeBlock.of("emptyList()")))
-                        .addParameter(valParam("depth", int, CodeBlock.of("0")))
-                        .addParameter(valParam("eventIds", listOf(eventId), CodeBlock.of("emptyList()")))
+        // SessionTreeNode - represents a node in the session tree hierarchy
+        val sessionTreeNode =
+                TypeSpec.classBuilder("SessionTreeNode")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc(
+                                "A node in the session tree representing parent-child relationships."
+                        )
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter(valParam("nodeId", nodeId))
+                                        .addParameter(valParam("url", string))
+                                        .addParameter(
+                                                valParam(
+                                                        "title",
+                                                        string.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "parentNodeId",
+                                                        nodeId.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "children",
+                                                        listOf(nodeId),
+                                                        CodeBlock.of("emptyList()")
+                                                )
+                                        )
+                                        .addParameter(valParam("depth", int, CodeBlock.of("0")))
+                                        .addParameter(
+                                                valParam(
+                                                        "eventIds",
+                                                        listOf(eventId),
+                                                        CodeBlock.of("emptyList()")
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .addProperty(dataClassProperty("nodeId", nodeId))
+                        .addProperty(dataClassProperty("url", string))
+                        .addProperty(dataClassProperty("title", string.copy(nullable = true)))
+                        .addProperty(
+                                dataClassProperty("parentNodeId", nodeId.copy(nullable = true))
+                        )
+                        .addProperty(dataClassProperty("children", listOf(nodeId)))
+                        .addProperty(dataClassProperty("depth", int))
+                        .addProperty(dataClassProperty("eventIds", listOf(eventId)))
                         .build()
-                )
-                .addProperty(dataClassProperty("nodeId", nodeId))
-                .addProperty(dataClassProperty("url", string))
-                .addProperty(dataClassProperty("title", string.copy(nullable = true)))
-                .addProperty(dataClassProperty("parentNodeId", nodeId.copy(nullable = true)))
-                .addProperty(dataClassProperty("children", listOf(nodeId)))
-                .addProperty(dataClassProperty("depth", int))
-                .addProperty(dataClassProperty("eventIds", listOf(eventId)))
-                .build()
 
-            // UnifiedTimeline - complete timeline with tree structure
-            val unifiedTimeline = TypeSpec.classBuilder("UnifiedTimeline")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("Unified timeline combining chronological events with tree structure.")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter(valParam("sessionId", sessionId))
-                        .addParameter(valParam("entries", listOf(ClassName(pkg, "TimelineEntry")), CodeBlock.of("emptyList()")))
-                        .addParameter(valParam("treeNodes", listOf(ClassName(pkg, "SessionTreeNode")), CodeBlock.of("emptyList()")))
-                        .addParameter(valParam("rootNodeId", nodeId.copy(nullable = true), CodeBlock.of("null")))
+        // UnifiedTimeline - complete timeline with tree structure
+        val unifiedTimeline =
+                TypeSpec.classBuilder("UnifiedTimeline")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc(
+                                "Unified timeline combining chronological events with tree structure."
+                        )
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter(valParam("sessionId", sessionId))
+                                        .addParameter(
+                                                valParam(
+                                                        "entries",
+                                                        listOf(ClassName(pkg, "TimelineEntry")),
+                                                        CodeBlock.of("emptyList()")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "treeNodes",
+                                                        listOf(ClassName(pkg, "SessionTreeNode")),
+                                                        CodeBlock.of("emptyList()")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "rootNodeId",
+                                                        nodeId.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .addProperty(dataClassProperty("sessionId", sessionId))
+                        .addProperty(
+                                dataClassProperty(
+                                        "entries",
+                                        listOf(ClassName(pkg, "TimelineEntry"))
+                                )
+                        )
+                        .addProperty(
+                                dataClassProperty(
+                                        "treeNodes",
+                                        listOf(ClassName(pkg, "SessionTreeNode"))
+                                )
+                        )
+                        .addProperty(dataClassProperty("rootNodeId", nodeId.copy(nullable = true)))
                         .build()
-                )
-                .addProperty(dataClassProperty("sessionId", sessionId))
-                .addProperty(dataClassProperty("entries", listOf(ClassName(pkg, "TimelineEntry"))))
-                .addProperty(dataClassProperty("treeNodes", listOf(ClassName(pkg, "SessionTreeNode"))))
-                .addProperty(dataClassProperty("rootNodeId", nodeId.copy(nullable = true)))
-                .build()
 
-            return generatedFile("Timeline")
+        return generatedFile("Timeline")
                 .addType(timelineEntry)
                 .addType(sessionTreeNode)
                 .addType(unifiedTimeline)
                 .build()
-        }
+    }
 
-        private fun generateCredentials(): FileSpec {
-            val credentialId = TypeAliasSpec.builder("CredentialId", string).build()
-            val sessionId = ClassName(pkg, "SessionId")
+    private fun generateCredentials(): FileSpec {
+        val credentialId = TypeAliasSpec.builder("CredentialId", string).build()
+        val sessionId = ClassName(pkg, "SessionId")
 
-            // CredentialType enum
-            val credentialType = TypeSpec.enumBuilder("CredentialType")
-                .addAnnotation(serializable)
-                .addKdoc("Type of authentication credential.")
-                .apply {
-                    listOf(
-                        "UsernamePassword" to "Username and password credentials",
-                        "Token" to "Bearer token or API key",
-                        "Cookie" to "Session cookie",
-                        "OAuth" to "OAuth token",
-                        "Header" to "Custom header-based auth",
-                        "Unknown" to "Unknown credential type"
-                    ).forEach { (name, doc) ->
-                        addEnumConstant(
-                            name,
-                            TypeSpec.anonymousClassBuilder()
-                                .addKdoc(doc)
-                                .build()
-                        )
-                    }
-                }
-                .build()
-
-            // StoredCredential - represents extracted credentials
-            val storedCredential = TypeSpec.classBuilder("StoredCredential")
-                .addModifiers(KModifier.DATA)
-                .addAnnotation(serializable)
-                .addKdoc("Extracted authentication credentials with privacy support.")
-                .primaryConstructor(
-                    FunSpec.constructorBuilder()
-                        .addParameter(valParam("id", ClassName(pkg, "CredentialId")))
-                        .addParameter(valParam("sessionId", sessionId))
-                        .addParameter(valParam("type", ClassName(pkg, "CredentialType")))
-                        .addParameter(valParam("url", string))
-                        .addParameter(valParam("username", string.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("passwordHash", string.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("token", string.copy(nullable = true), CodeBlock.of("null")))
-                        .addParameter(valParam("metadata", mapStringString, CodeBlock.of("emptyMap()")))
-                        .addParameter(valParam("capturedAt", instant))
-                        .addParameter(valParam("isEncrypted", boolean, CodeBlock.of("false")))
+        // CredentialType enum
+        val credentialType =
+                TypeSpec.enumBuilder("CredentialType")
+                        .addAnnotation(serializable)
+                        .addKdoc("Type of authentication credential.")
+                        .apply {
+                            listOf(
+                                            "UsernamePassword" to
+                                                    "Username and password credentials",
+                                            "Token" to "Bearer token or API key",
+                                            "Cookie" to "Session cookie",
+                                            "OAuth" to "OAuth token",
+                                            "Header" to "Custom header-based auth",
+                                            "Unknown" to "Unknown credential type"
+                                    )
+                                    .forEach { (name, doc) ->
+                                        addEnumConstant(
+                                                name,
+                                                TypeSpec.anonymousClassBuilder()
+                                                        .addKdoc(doc)
+                                                        .build()
+                                        )
+                                    }
+                        }
                         .build()
-                )
-                .addProperty(dataClassProperty("id", ClassName(pkg, "CredentialId")))
-                .addProperty(dataClassProperty("sessionId", sessionId))
-                .addProperty(dataClassProperty("type", ClassName(pkg, "CredentialType")))
-                .addProperty(dataClassProperty("url", string))
-                .addProperty(dataClassProperty("username", string.copy(nullable = true)))
-                .addProperty(dataClassProperty("passwordHash", string.copy(nullable = true)))
-                .addProperty(dataClassProperty("token", string.copy(nullable = true)))
-                .addProperty(dataClassProperty("metadata", mapStringString))
-                .addProperty(dataClassProperty("capturedAt", instant))
-                .addProperty(dataClassProperty("isEncrypted", boolean))
-                .build()
 
-            return generatedFile("Credentials")
+        // StoredCredential - represents extracted credentials
+        val storedCredential =
+                TypeSpec.classBuilder("StoredCredential")
+                        .addModifiers(KModifier.DATA)
+                        .addAnnotation(serializable)
+                        .addKdoc("Extracted authentication credentials with privacy support.")
+                        .primaryConstructor(
+                                FunSpec.constructorBuilder()
+                                        .addParameter(
+                                                valParam("id", ClassName(pkg, "CredentialId"))
+                                        )
+                                        .addParameter(valParam("sessionId", sessionId))
+                                        .addParameter(
+                                                valParam("type", ClassName(pkg, "CredentialType"))
+                                        )
+                                        .addParameter(valParam("url", string))
+                                        .addParameter(
+                                                valParam(
+                                                        "username",
+                                                        string.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "passwordHash",
+                                                        string.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "token",
+                                                        string.copy(nullable = true),
+                                                        CodeBlock.of("null")
+                                                )
+                                        )
+                                        .addParameter(
+                                                valParam(
+                                                        "metadata",
+                                                        mapStringString,
+                                                        CodeBlock.of("emptyMap()")
+                                                )
+                                        )
+                                        .addParameter(valParam("capturedAt", instant))
+                                        .addParameter(
+                                                valParam(
+                                                        "isEncrypted",
+                                                        boolean,
+                                                        CodeBlock.of("false")
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .addProperty(dataClassProperty("id", ClassName(pkg, "CredentialId")))
+                        .addProperty(dataClassProperty("sessionId", sessionId))
+                        .addProperty(dataClassProperty("type", ClassName(pkg, "CredentialType")))
+                        .addProperty(dataClassProperty("url", string))
+                        .addProperty(dataClassProperty("username", string.copy(nullable = true)))
+                        .addProperty(
+                                dataClassProperty("passwordHash", string.copy(nullable = true))
+                        )
+                        .addProperty(dataClassProperty("token", string.copy(nullable = true)))
+                        .addProperty(dataClassProperty("metadata", mapStringString))
+                        .addProperty(dataClassProperty("capturedAt", instant))
+                        .addProperty(dataClassProperty("isEncrypted", boolean))
+                        .build()
+
+        return generatedFile("Credentials")
                 .addTypeAlias(credentialId)
                 .addType(credentialType)
                 .addType(storedCredential)
                 .build()
-        }
-
-        private fun generateContractIndex(): FileSpec {
-            val types = listOf(
-                "ContractInfo",
-                "FishitJson",
-                "NodeKind",
-                "EdgeKind",
-                "ResourceKind",
-                "ConsoleLevel",
-                "Attributes",
-                "ProjectId",
-                "SessionId",
-                "EventId",
-                "NodeId",
-                "EdgeId",
-                "ChainId",
-                "ChainPointId",
-                "CredentialId",
-                "MapNode",
-                "MapEdge",
-                "MapGraph",
-                "ProjectMeta",
-                "RecorderEvent",
-                "NavigationEvent",
-                "ResourceRequestEvent",
-                "ResourceResponseEvent",
-                "ConsoleMessageEvent",
-                "UserActionEvent",
-                "CustomEvent",
-                "RecordingSession",
-                "ChainPoint",
-                "RecordChain",
-                "ChainsFile",
-                "TimelineEntry",
-                "SessionTreeNode",
-                "UnifiedTimeline",
-                "CredentialType",
-                "StoredCredential",
-                "ExportManifest"
-            )
-
-            val property = PropertySpec.builder("types", listString)
-                .initializer(CodeBlock.of("listOf(%L)", types.joinToString { "\"$it\"" }))
-                .build()
-
-            val contractIndex = TypeSpec.objectBuilder("ContractIndex")
-                .addKdoc("A simple index of generated types (useful for debugging and sanity checks).")
-                .addProperty(property)
-                .build()
-
-            return generatedFile("ContractIndex")
-                .addType(contractIndex)
-                .build()
-        }
     }
+
+    private fun generateContractIndex(): FileSpec {
+        val types =
+                listOf(
+                        "ContractInfo",
+                        "FishitJson",
+                        "NodeKind",
+                        "EdgeKind",
+                        "ResourceKind",
+                        "ConsoleLevel",
+                        "Attributes",
+                        "ProjectId",
+                        "SessionId",
+                        "EventId",
+                        "NodeId",
+                        "EdgeId",
+                        "ChainId",
+                        "ChainPointId",
+                        "CredentialId",
+                        "MapNode",
+                        "MapEdge",
+                        "MapGraph",
+                        "ProjectMeta",
+                        "RecorderEvent",
+                        "NavigationEvent",
+                        "ResourceRequestEvent",
+                        "ResourceResponseEvent",
+                        "ConsoleMessageEvent",
+                        "UserActionEvent",
+                        "CustomEvent",
+                        "RecordingSession",
+                        "ChainPoint",
+                        "RecordChain",
+                        "ChainsFile",
+                        "TimelineEntry",
+                        "SessionTreeNode",
+                        "UnifiedTimeline",
+                        "CredentialType",
+                        "StoredCredential",
+                        "ExportManifest"
+                )
+
+        val property =
+                PropertySpec.builder("types", listString)
+                        .initializer(CodeBlock.of("listOf(%L)", types.joinToString { "\"$it\"" }))
+                        .build()
+
+        val contractIndex =
+                TypeSpec.objectBuilder("ContractIndex")
+                        .addKdoc(
+                                "A simple index of generated types (useful for debugging and sanity checks)."
+                        )
+                        .addProperty(property)
+                        .build()
+
+        return generatedFile("ContractIndex").addType(contractIndex).build()
+    }
+}

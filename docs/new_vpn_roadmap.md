@@ -2,12 +2,12 @@ Hier ist ein **kompletter Issue-Text** (copy/paste ready), basierend auf einer T
 
 ---
 
-# Issue: Full "HttpCanary-grade" Traffic Capture + Click→Flow Website Mapping (FishIT-Mapper)
+# Issue: Full “HttpCanary-grade” Traffic Capture + Click→Flow Website Mapping (FishIT-Mapper)
 
 ## Summary
 
 FishIT-Mapper records WebView navigation and best-effort resource requests, but it does **not yet capture full HTTP/HTTPS request+response flows** like HttpCanary, and it does **not correlate user clicks to the resulting request/redirect chains** in a machine-readable way.
-Goal: For any website navigated inside the project Browser tab, generate an exportable **Website Map** that explains **Directs/Redirects** and **which requests/responses are required** per interaction (e.g., "download all course materials").
+Goal: For any website navigated inside the project Browser tab, generate an exportable **Website Map** that explains **Directs/Redirects** and **which requests/responses are required** per interaction (e.g., “download all course materials”).
 
 ## Current Gaps (as observed in repo)
 
@@ -22,7 +22,7 @@ Goal: For any website navigated inside the project Browser tab, generate an expo
 
 ### C) Proxy implementation is MVP-level and will break real sites
 
-`androidApp/.../proxy/MitmProxyServer.kt` needs to be production-capable for "any website":
+`androidApp/.../proxy/MitmProxyServer.kt` needs to be production-capable for “any website”:
 
 * Reads only **one request per connection** (no keep-alive loop).
 * Does **not forward request bodies** (POST/PUT), uses `OkHttp Request.method(method, null)`.
@@ -32,7 +32,7 @@ Goal: For any website navigated inside the project Browser tab, generate an expo
 ### D) Click events are not link-aware / not machine-readable
 
 * `TrackingScript.kt` click capture has selector/text/x/y, but **no href/target URL**, no page URL context.
-* `JavaScriptBridge.kt` stores "target" as a compact string; hard to machine-parse reliably.
+* `JavaScriptBridge.kt` stores “target” as a compact string; hard to machine-parse reliably.
 
 ### E) Request/Response correlation is weaker than available data
 
@@ -184,7 +184,7 @@ When recording in **Project → Browser tab**:
 
 * Build a deterministic map structure per session:
 
-  * For each `UserActionEvent` (click/formSubmit), define an "action window":
+  * For each `UserActionEvent` (click/formSubmit), define an “action window”:
 
     * Start = action timestamp
     * End = next action timestamp OR (action + fixed max window, e.g. 10s) whichever comes first
@@ -282,3 +282,4 @@ When recording in **Project → Browser tab**:
 ## Dependency freshness note
 
 Your current pinned versions (e.g. `androidx.webkit`, Kotlin, AGP, BouncyCastle) are very likely not the newest anymore. Before/after implementing this issue, run `./gradlew -q dependencyUpdates` and update strategically (especially `androidx.webkit` because ProxyOverride behavior improves over time).
+
