@@ -19,6 +19,16 @@ git config --global --add safe.directory /workspaces/FishIT-Mapper
 # Verify Java
 echo "☕ Java: $(java -version 2>&1 | head -1)"
 
+# Android SDK setup
+if [ -n "$ANDROID_HOME" ]; then
+    echo "📱 Android SDK: $ANDROID_HOME"
+    # Create local.properties for Gradle
+    echo "sdk.dir=$ANDROID_HOME" > local.properties
+    echo "✅ local.properties created"
+else
+    echo "⚠️  ANDROID_HOME not set - Android builds may fail"
+fi
+
 echo ""
 echo "✅ Setup complete!"
 echo ""

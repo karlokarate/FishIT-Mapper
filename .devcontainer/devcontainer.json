@@ -1,13 +1,15 @@
 {
   "name": "FishIT-Mapper Development",
-  
   "image": "mcr.microsoft.com/devcontainers/java:21-bookworm",
-  
   "features": {
     "ghcr.io/devcontainers/features/java:1": {
       "version": "21",
       "installGradle": "true",
       "gradleVersion": "8.5"
+    },
+    "ghcr.io/anthropics/devcontainer-features/android-sdk:1": {
+      "cmdLineToolsVersion": "11076708",
+      "packages": "platform-tools,platforms;android-34,build-tools;34.0.0"
     },
     "ghcr.io/devcontainers/features/node:1": {
       "version": "20"
@@ -16,7 +18,6 @@
       "version": "latest"
     }
   },
-  
   "customizations": {
     "vscode": {
       "extensions": [
@@ -44,7 +45,9 @@
         "editor.formatOnSave": true,
         "editor.tabSize": 4,
         "editor.insertSpaces": true,
-        "editor.rulers": [120],
+        "editor.rulers": [
+          120
+        ],
         "editor.inlineSuggest.enabled": true,
         "editor.bracketPairColorization.enabled": true,
         "files.trimTrailingWhitespace": true,
@@ -66,18 +69,15 @@
       }
     }
   },
-  
-  "forwardPorts": [8080],
-  
+  "forwardPorts": [
+    8080
+  ],
   "postCreateCommand": "bash .devcontainer/setup.sh",
   "postStartCommand": "echo '🚀 FishIT-Mapper ready!'",
-  
   "remoteUser": "vscode",
-  
   "mounts": [
     "source=fishit-gradle-cache,target=/home/vscode/.gradle,type=volume"
   ],
-  
   "hostRequirements": {
     "cpus": 2,
     "memory": "4gb",
