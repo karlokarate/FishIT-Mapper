@@ -23,10 +23,14 @@ android {
 
     signingConfigs {
         create("release") {
-            // Für CI/CD: Keystore aus Environment Variables
-            // Lokal: Keystore-Datei im Projekt (NICHT committen!)
-            val keystoreFile = System.getenv("KEYSTORE_FILE")?.let { file(it) }
-                ?: rootProject.file("keystore/release.jks").takeIf { it.exists() }
+            // CI/CD: Keystore aus Environment Variables
+            // Lokal: Keystore-Datei im keystore/ Ordner (NICHT committen!)
+            val envKeystoreFile = System.getenv("KEYSTORE_FILE")
+            val keystoreFile = when {
+                envKeystoreFile != null -> file(envKeystoreFile)
+                rootProject.file("keystore/release.jks").exists() -> rootProject.file("keystore/release.jks")
+                else -> null
+            }
 
             if (keystoreFile != null && keystoreFile.exists()) {
                 storeFile = keystoreFile
