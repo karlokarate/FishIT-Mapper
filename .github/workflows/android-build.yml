@@ -25,22 +25,38 @@ jobs:
       run: chmod +x gradlew
     
     - name: Decode Keystore
+      if: ${{ secrets.KEYSTORE_BASE64 != '' }}
       run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ./androidApp/keystore.jks
     
     - name: Generate contract
       run: ./gradlew :shared:contract:generateFishitContract --no-daemon
     
-    - name: Build Release APK
+    - name: Build Release APK (signed if keystore available)
       run: ./gradlew :androidApp:assembleRelease --stacktrace
       env:
         KEYSTORE_FILE: keystore.jks
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      continue-on-error: true
+      id: build-release
     
-    - name: Upload APK
+    - name: Build Debug APK (fallback if release signing fails)
+      if: steps.build-release.outcome == 'failure'
+      run: ./gradlew :androidApp:assembleDebug --stacktrace
+    
+    - name: Upload Release APK
+      if: steps.build-release.outcome == 'success'
       uses: actions/upload-artifact@v4
       with:
         name: release-apk
         path: androidApp/build/outputs/apk/release/*.apk
+        retention-days: 30
+    
+    - name: Upload Debug APK (fallback)
+      if: steps.build-release.outcome == 'failure'
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-apk-unsigned
+        path: androidApp/build/outputs/apk/debug/*.apk
         retention-days: 30
