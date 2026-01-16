@@ -1,33 +1,30 @@
 #!/bin/bash
 # Post-Create Setup Script für FishIT-Mapper Devcontainer
 
+set -e
 echo "🔧 Setting up FishIT-Mapper development environment..."
 
-# Gradle Wrapper executable machen
-chmod +x ./gradlew
+# Ensure we're in the right directory
+cd /workspaces/FishIT-Mapper || exit 1
 
-# Gradle Dependencies herunterladen (im Hintergrund)
-echo "📦 Downloading Gradle dependencies..."
-./gradlew --version
-
-# Git Config Setup
-echo "🔧 Configuring Git..."
-git config --global --add safe.directory /workspaces/FishIT-Mapper
-
-# Android SDK License akzeptieren (falls benötigt)
-if [ -d "$ANDROID_SDK_ROOT" ]; then
-    echo "📱 Accepting Android SDK licenses..."
-    yes | sdkmanager --licenses > /dev/null 2>&1 || true
+# Make Gradle wrapper executable
+if [ -f "./gradlew" ]; then
+    chmod +x ./gradlew
+    echo "✅ Gradle wrapper ready"
 fi
 
-# Projekt-Info ausgeben
+# Git safe directory
+git config --global --add safe.directory /workspaces/FishIT-Mapper
+
+# Verify Java
+echo "☕ Java: $(java -version 2>&1 | head -1)"
+
 echo ""
 echo "✅ Setup complete!"
 echo ""
-echo "📚 Useful commands:"
-echo "  ./gradlew build                                    - Build the project"
+echo "📚 Commands:"
+echo "  ./gradlew build                                    - Build project"
 echo "  ./gradlew test                                     - Run tests"
 echo "  ./gradlew :shared:contract:generateFishitContract  - Generate contract"
-echo "  ./gradlew :androidApp:assembleDebug                - Build Android APK"
 echo ""
-echo "🚀 Happy coding with GitHub Copilot!"
+echo "🚀 Happy coding!"

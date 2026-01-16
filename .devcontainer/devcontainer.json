@@ -1,174 +1,86 @@
 {
-  // Devcontainer Konfiguration für FishIT-Mapper
-  // Optimiert für Android/Kotlin Multiplatform Development mit GitHub Copilot
-  
   "name": "FishIT-Mapper Development",
-  "image": "mcr.microsoft.com/devcontainers/java:17-bullseye",
   
-  // Features für Android Development
+  "image": "mcr.microsoft.com/devcontainers/java:21-bookworm",
+  
   "features": {
-    "ghcr.io/devcontainers/features/android-sdk:1": {
-      "version": "latest"
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "21",
+      "installGradle": "true",
+      "gradleVersion": "8.5"
     },
-    "ghcr.io/devcontainers/features/gradle:1": {
-      "version": "8.5"
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
     },
-    "ghcr.io/devcontainers/features/git:1": {
+    "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "latest"
     }
   },
   
-  // VS Code Anpassungen
   "customizations": {
     "vscode": {
-      // Extensions für optimale Entwicklungserfahrung
       "extensions": [
-        // GitHub Copilot - AI-powered code completion
         "GitHub.copilot",
         "GitHub.copilot-chat",
-        
-        // Kotlin Development
         "fwcd.kotlin",
-        "mathiasfrohlich.Kotlin",
-        
-        // Android Development
         "vscjava.vscode-gradle",
-        
-        // Code Quality
+        "vscjava.vscode-java-pack",
         "EditorConfig.EditorConfig",
-        
-        // Git & GitHub
         "GitHub.vscode-pull-request-github",
         "eamodio.gitlens",
-        
-        // JSON & YAML
         "redhat.vscode-yaml",
-        "ZainChen.json",
-        
-        // Markdown Documentation
         "yzhang.markdown-all-in-one",
-        "DavidAnson.vscode-markdownlint",
-        
-        // Productivity
-        "christian-kohler.path-intellisense",
-        "wayou.vscode-todo-highlight",
-        "Gruntfuggly.todo-tree",
-        
-        // Formatting
-        "esbenp.prettier-vscode"
+        "Gruntfuggly.todo-tree"
       ],
-      
-      // Editor Settings
       "settings": {
-        // Copilot Settings
         "github.copilot.enable": {
           "*": true,
-          "yaml": true,
-          "plaintext": true,
-          "markdown": true,
           "kotlin": true,
           "java": true,
-          "json": true
+          "json": true,
+          "markdown": true,
+          "yaml": true
         },
-        "github.copilot.advanced": {
-          "debug.overrideEngine": "gpt-4",
-          "debug.useElectronFetch": true
-        },
-        
-        // Editor Settings
         "editor.formatOnSave": true,
-        "editor.formatOnPaste": true,
         "editor.tabSize": 4,
         "editor.insertSpaces": true,
-        "editor.detectIndentation": true,
         "editor.rulers": [120],
-        "editor.wordWrap": "on",
-        "editor.minimap.enabled": true,
-        "editor.suggestSelection": "first",
         "editor.inlineSuggest.enabled": true,
-        
-        // File Settings
-        "files.autoSave": "afterDelay",
-        "files.autoSaveDelay": 1000,
+        "editor.bracketPairColorization.enabled": true,
         "files.trimTrailingWhitespace": true,
         "files.insertFinalNewline": true,
         "files.exclude": {
           "**/.gradle": true,
           "**/build": true,
-          "**/.idea": true,
-          "**/*.iml": true
+          "**/.idea": true
         },
-        
-        // Kotlin Settings
         "[kotlin]": {
           "editor.tabSize": 4,
-          "editor.insertSpaces": true,
-          "editor.defaultFormatter": "fwcd.kotlin"
+          "editor.insertSpaces": true
         },
-        
-        // JSON Settings
-        "[json]": {
-          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        "[java]": {
+          "editor.tabSize": 4,
+          "editor.insertSpaces": true
         },
-        
-        // Markdown Settings
-        "[markdown]": {
-          "editor.defaultFormatter": "yzhang.markdown-all-in-one"
-        },
-        
-        // Terminal Settings
-        "terminal.integrated.defaultProfile.linux": "bash",
-        "terminal.integrated.fontSize": 14
+        "terminal.integrated.defaultProfile.linux": "bash"
       }
     }
   },
   
-  // Port Forwarding für potenzielle Server/Services
-  "forwardPorts": [
-    8080,  // Für potenzielle Backend-Services
-    3000   // Für potenzielle Web-Services
-  ],
+  "forwardPorts": [8080],
   
-  // Port Attributes
-  "portsAttributes": {
-    "8080": {
-      "label": "Backend Service",
-      "onAutoForward": "notify"
-    },
-    "3000": {
-      "label": "Web Service",
-      "onAutoForward": "notify"
-    }
-  },
-  
-  // Post-Create Command - Setup nach Container-Erstellung
   "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "echo '🚀 FishIT-Mapper ready!'",
   
-  // Post-Start Command - Nach jedem Container-Start
-  "postStartCommand": "echo '🚀 FishIT-Mapper Devcontainer is ready!'",
-  
-  // Container User
   "remoteUser": "vscode",
   
-  // Environment Variables
-  "remoteEnv": {
-    "ANDROID_SDK_ROOT": "/usr/local/android-sdk",
-    "GRADLE_USER_HOME": "/home/vscode/.gradle",
-    "JAVA_HOME": "/usr/local/sdkman/candidates/java/current"
-  },
-  
-  // Mounts für persistente Daten
   "mounts": [
-    // Gradle Cache persistent machen
-    "source=fishit-mapper-gradle,target=/home/vscode/.gradle,type=volume",
-    // Android SDK Cache
-    "source=fishit-mapper-android-sdk,target=/usr/local/android-sdk,type=volume"
+    "source=fishit-gradle-cache,target=/home/vscode/.gradle,type=volume"
   ],
   
-  // Container Host Requirements
   "hostRequirements": {
-    "cpus": 4,
-    "memory": "8gb",
-    "storage": "32gb"
+    "cpus": 2,
+    "memory": "4gb",
+    "storage": "16gb"
   }
 }
