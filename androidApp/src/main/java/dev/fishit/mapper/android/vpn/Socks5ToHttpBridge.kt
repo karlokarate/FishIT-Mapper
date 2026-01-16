@@ -1,7 +1,10 @@
 package dev.fishit.mapper.android.vpn
 
 import android.util.Log
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 import java.io.OutputStream
@@ -9,6 +12,7 @@ import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
+import java.util.concurrent.Executors
 
 /**
  * SOCKS5 zu HTTP Bridge Server.
@@ -52,12 +56,18 @@ class Socks5ToHttpBridge(
     @Volatile
     private var isRunning = false
     
+    // Thread pool für client connections (max 50 concurrent connections)
+    private val clientExecutor = Executors.newFixedThreadPool(50)
+    private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    
     /**
      * Startet den SOCKS5 Server.
+     * @param ready Optional callback when server is ready to accept connections
      */
-    suspend fun start() = withContext(Dispatchers.IO) {
+    suspend fun start(ready: CompletableDeferred<Boolean>? = null) = withContext(Dispatchers.IO) {
         if (isRunning) {
             Log.w(TAG, "SOCKS5 server already running")
+            ready?.complete(true)
             return@withContext
         }
         
@@ -68,16 +78,17 @@ class Socks5ToHttpBridge(
             isRunning = true
             
             Log.i(TAG, "SOCKS5 server started on port $socksPort")
+            ready?.complete(true)
             
             while (isRunning) {
                 try {
                     val clientSocket = serverSocket?.accept() ?: break
                     Log.d(TAG, "New SOCKS5 client connected")
                     
-                    // Handle each client in separate thread
-                    Thread {
+                    // Handle each client in thread pool statt unbounded threads
+                    clientExecutor.execute {
                         handleClient(clientSocket)
-                    }.start()
+                    }
                 } catch (e: SocketException) {
                     if (isRunning) {
                         Log.e(TAG, "Socket error", e)
@@ -87,6 +98,7 @@ class Socks5ToHttpBridge(
             }
         } catch (e: Exception) {
             Log.e(TAG, "SOCKS5 server error", e)
+            ready?.complete(false)
         } finally {
             isRunning = false
         }
@@ -100,6 +112,7 @@ class Socks5ToHttpBridge(
         try {
             serverSocket?.close()
             serverSocket = null
+            clientExecutor.shutdownNow()
             Log.i(TAG, "SOCKS5 server stopped")
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping SOCKS5 server", e)
@@ -282,10 +295,9 @@ class Socks5ToHttpBridge(
      * Leitet Daten zwischen SOCKS5 Client und HTTP Proxy weiter.
      * 
      * Für HTTP/HTTPS Requests:
-     * 1. Liest Request vom SOCKS5 client
-     * 2. Sendet an HTTP Proxy (127.0.0.1:8888)
-     * 3. Empfängt Response vom Proxy
-     * 4. Sendet Response zurück an SOCKS5 client
+     * 1. Sendet HTTP CONNECT request an proxy mit target host info
+     * 2. Leitet bidirektional zwischen SOCKS5 client und HTTP proxy
+     * 3. Proper shutdown signaling zwischen den threads
      */
     private fun forwardToHttpProxy(socksClient: Socket, request: ConnectionRequest) {
         var proxySocket: Socket? = null
@@ -298,12 +310,42 @@ class Socks5ToHttpBridge(
             
             Log.d(TAG, "Connected to HTTP proxy for ${request.host}:${request.port}")
             
-            // Create bidirectional forwarding threads
+            // Send HTTP CONNECT to proxy with target information
+            val connectRequest = "CONNECT ${request.host}:${request.port} HTTP/1.1\r\n" +
+                    "Host: ${request.host}:${request.port}\r\n" +
+                    "Proxy-Connection: keep-alive\r\n\r\n"
+            proxySocket.getOutputStream().write(connectRequest.toByteArray())
+            proxySocket.getOutputStream().flush()
+            
+            // Read CONNECT response from proxy
+            val responseBuffer = ByteArray(1024)
+            val bytesRead = proxySocket.getInputStream().read(responseBuffer)
+            val response = String(responseBuffer, 0, bytesRead)
+            
+            if (!response.startsWith("HTTP/1.1 200") && !response.startsWith("HTTP/1.0 200")) {
+                Log.w(TAG, "HTTP proxy CONNECT failed: $response")
+                return
+            }
+            
+            Log.d(TAG, "HTTP CONNECT tunnel established for ${request.host}:${request.port}")
+            
+            var running = true
+            
+            // Create bidirectional forwarding with better error handling
             val clientToProxy = Thread {
                 try {
                     socksClient.getInputStream().copyTo(proxySocket.getOutputStream())
                 } catch (e: Exception) {
-                    // Connection closed
+                    if (running) {
+                        Log.d(TAG, "Client->Proxy closed: ${e.message}")
+                    }
+                } finally {
+                    running = false
+                    try {
+                        proxySocket.shutdownOutput()
+                    } catch (e: Exception) {
+                        // Ignore
+                    }
                 }
             }
             
@@ -311,7 +353,16 @@ class Socks5ToHttpBridge(
                 try {
                     proxySocket.getInputStream().copyTo(socksClient.getOutputStream())
                 } catch (e: Exception) {
-                    // Connection closed
+                    if (running) {
+                        Log.d(TAG, "Proxy->Client closed: ${e.message}")
+                    }
+                } finally {
+                    running = false
+                    try {
+                        socksClient.shutdownOutput()
+                    } catch (e: Exception) {
+                        // Ignore
+                    }
                 }
             }
             
@@ -325,7 +376,7 @@ class Socks5ToHttpBridge(
             Log.d(TAG, "Connection closed: ${request.host}:${request.port}")
             
         } catch (e: Exception) {
-            Log.e(TAG, "Error forwarding to HTTP proxy", e)
+            Log.e(TAG, "Error forwarding to HTTP proxy: ${e.message}", e)
         } finally {
             try {
                 proxySocket?.close()
