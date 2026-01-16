@@ -108,6 +108,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     
-    // VPN & Traffic Capture - Native library with bundled binaries
-    implementation(libs.tun2socks.core)
+    // VPN & Packet Processing
+    implementation(libs.tun2socks)
+    implementation(libs.pcap4j.core)
 }
