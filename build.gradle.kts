@@ -1,3 +1,17 @@
+// =============================================================================
+// Buildscript BouncyCastle Fix for AGP Signing
+// =============================================================================
+// AGP uses BouncyCastle internally for keystore operations.
+// On some JDK configurations, version conflicts cause NoClassDefFoundError.
+// Adding explicit dependency ensures correct version is available.
+// =============================================================================
+buildscript {
+    dependencies {
+        classpath("org.bouncycastle:bcprov-jdk18on:1.79")
+        classpath("org.bouncycastle:bcpkix-jdk18on:1.79")
+    }
+}
+
 plugins {
     // Keep plugin versions centralized in gradle/libs.versions.toml
     alias(libs.plugins.android.application) apply false
