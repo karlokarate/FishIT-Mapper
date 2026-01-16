@@ -1,12 +1,8 @@
 package dev.fishit.mapper.android.ui.settings
 
-import android.app.Activity
 import android.content.Intent
-import android.net.VpnService
 import android.provider.Settings
 import android.util.Log
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,324 +21,231 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.fishit.mapper.android.cert.CertificateInfo
 import dev.fishit.mapper.android.cert.CertificateManager
-import dev.fishit.mapper.android.di.LocalAppContainer
-import dev.fishit.mapper.android.proxy.MitmProxyServer
 import dev.fishit.mapper.android.ui.common.SimpleVmFactory
-import dev.fishit.mapper.android.vpn.TrafficCaptureVpnService
-import dev.fishit.mapper.contract.RecorderEvent
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.*
 
 /**
- * Settings-Screen für Zertifikats-Management und VPN-Konfiguration.
+ * Settings-Screen für Zertifikats-Management.
+ *
+ * Fokus auf Browser-only Traffic Capture (Android 14+).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(
-    onBack: () -> Unit
-) {
+fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val container = LocalAppContainer.current
-    
-    val viewModel: SettingsViewModel = viewModel(
-        factory = SimpleVmFactory {
-            SettingsViewModel(
-                certificateManager = CertificateManager(context)
+
+    val viewModel: SettingsViewModel =
+            viewModel(
+                    factory =
+                            SimpleVmFactory {
+                                SettingsViewModel(certificateManager = CertificateManager(context))
+                            }
             )
-        }
-    )
-    
+
     val state by viewModel.state.collectAsState()
-    
-    // VPN Permission Launcher
-    val vpnPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.startVpn(context)
-        }
-    }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Einstellungen") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Zurück")
-                    }
-                }
-            )
-        }
+            topBar = {
+                TopAppBar(
+                        title = { Text("Einstellungen") },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Zurück")
+                            }
+                        }
+                )
+            }
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                modifier =
+                        Modifier.fillMaxSize()
+                                .padding(padding)
+                                .verticalScroll(rememberScrollState())
+                                .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Zertifikats-Management Section
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        "CA-Zertifikat",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    
+                    Text("CA-Zertifikat", style = MaterialTheme.typography.titleLarge)
+
                     // Zertifikats-Status
                     if (state.certificateInfo != null) {
                         CertificateInfoCard(state.certificateInfo!!)
                     } else {
                         Text(
-                            "Kein Zertifikat vorhanden",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
+                                "Kein Zertifikat vorhanden",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
                         )
                     }
-                    
+
                     // Status aktualisieren
                     OutlinedButton(
-                        onClick = { viewModel.refreshCertificateStatus() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Status aktualisieren")
-                    }
-                    
+                            onClick = { viewModel.refreshCertificateStatus() },
+                            modifier = Modifier.fillMaxWidth()
+                    ) { Text("Status aktualisieren") }
+
                     // Zertifikat generieren
                     Button(
-                        onClick = { viewModel.generateCertificate() },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !state.isGenerating
+                            onClick = { viewModel.generateCertificate() },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !state.isGenerating
                     ) {
                         if (state.isGenerating) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
                             )
                             Spacer(Modifier.width(8.dp))
                         }
-                        Text(if (state.certificateInfo != null) "Neu generieren" else "Zertifikat generieren")
+                        Text(
+                                if (state.certificateInfo != null) "Neu generieren"
+                                else "Zertifikat generieren"
+                        )
                     }
-                    
+
                     // Zertifikat exportieren
                     Button(
-                        onClick = { viewModel.exportCertificate(context) },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = state.certificateInfo != null && !state.isExporting
+                            onClick = { viewModel.exportCertificate(context) },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = state.certificateInfo != null && !state.isExporting
                     ) {
                         if (state.isExporting) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
                             )
                             Spacer(Modifier.width(8.dp))
                         }
                         Text("Zertifikat exportieren")
                     }
-                    
+
                     // Zertifikat installieren
                     Button(
-                        onClick = { viewModel.openCertificateInstallation(context) },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = state.certificateInfo != null && state.exportedCertPath != null
-                    ) {
-                        Text("Zertifikat installieren")
-                    }
-                    
+                            onClick = { viewModel.openCertificateInstallation(context) },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled =
+                                    state.certificateInfo != null && state.exportedCertPath != null
+                    ) { Text("Zertifikat installieren") }
+
                     if (state.exportedCertPath != null) {
                         Text(
-                            "Exportiert nach:\n${state.exportedCertPath}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
+                                "Exportiert nach:\n${state.exportedCertPath}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
             }
-            
-            // VPN Section
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+
+            // Browser Traffic Capture Info
+            Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        "VPN Traffic Capture",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    
-                    Text(
-                        "VPN aktivieren, um system-weiten Netzwerk-Traffic zu erfassen und HTTPS zu entschlüsseln.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("VPN Status:")
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (state.isVpnRunning) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = "Aktiv",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Text("Aktiv", color = MaterialTheme.colorScheme.primary)
-                            } else {
-                                Icon(
-                                    Icons.Default.Warning,
-                                    contentDescription = "Inaktiv",
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                                Text("Inaktiv", color = MaterialTheme.colorScheme.error)
-                            }
-                        }
-                    }
-                    
-                    if (!state.isVpnRunning) {
-                        Button(
-                            onClick = {
-                                val intent = VpnService.prepare(context)
-                                if (intent != null) {
-                                    vpnPermissionLauncher.launch(intent)
-                                } else {
-                                    viewModel.startVpn(context)
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("VPN starten")
-                        }
-                    } else {
-                        Button(
-                            onClick = { viewModel.stopVpn(context) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("VPN stoppen")
-                        }
-                    }
-                    
+                    Text("Traffic Capture", style = MaterialTheme.typography.titleLarge)
+
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
+                            modifier = Modifier.fillMaxWidth(),
+                            colors =
+                                    CardDefaults.cardColors(
+                                            containerColor =
+                                                    MaterialTheme.colorScheme.primaryContainer
+                                    )
                     ) {
                         Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                "⚠️ VPN-Einschränkung",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.error
+                                    "✅ Browser-only Capture",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                "Die aktuelle VPN-Implementierung ist vereinfacht und funktioniert NICHT für system-weiten Traffic. " +
-                                "Für vollständige Traffic-Erfassung wird ein kompletter TCP/IP-Stack benötigt.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Text(
-                                "✅ Empfehlung: Verwenden Sie den integrierten Browser im Project-Tab für vollständige Traffic-Erfassung.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
+                                    "FishIT-Mapper erfasst Traffic nur im integrierten Browser. " +
+                                            "Dies ermöglicht vollständige HTTPS-Entschlüsselung ohne VPN.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
                     }
-                    
+
                     Text(
-                        "⚠️ Hinweis: Das CA-Zertifikat muss installiert sein, damit HTTPS-Entschlüsselung funktioniert.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
+                            "⚠️ Das CA-Zertifikat muss installiert sein, damit HTTPS-Entschlüsselung funktioniert.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
                     )
                 }
             }
-            
+
             // Anleitung
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    Text("Anleitung", style = MaterialTheme.typography.titleLarge)
+
                     Text(
-                        "Anleitung",
-                        style = MaterialTheme.typography.titleLarge
+                            "Empfohlener Workflow:",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
                     )
-                    
+
                     Text(
-                        "Empfohlener Workflow:",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
+                            "1. Zertifikat generieren\n" +
+                                    "2. Zertifikat exportieren\n" +
+                                    "3. Zertifikat im System installieren\n" +
+                                    "4. Status aktualisieren und prüfen\n" +
+                                    "5. Projekt öffnen und Browser-Tab verwenden\n" +
+                                    "6. URLs im integrierten Browser aufrufen",
+                            style = MaterialTheme.typography.bodyMedium
                     )
-                    
+
                     Text(
-                        "1. Zertifikat generieren\n" +
-                        "2. Zertifikat exportieren\n" +
-                        "3. Zertifikat im System installieren\n" +
-                        "4. Status aktualisieren und prüfen\n" +
-                        "5. Projekt öffnen und Browser-Tab verwenden\n" +
-                        "6. URLs im integrierten Browser aufrufen",
-                        style = MaterialTheme.typography.bodyMedium
+                            "Manuelle Zertifikat-Installation:",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
                     )
-                    
+
                     Text(
-                        "Manuelle Zertifikat-Installation:",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    
-                    Text(
-                        "Einstellungen → Sicherheit → Verschlüsselung & Anmeldedaten → Zertifikat installieren → CA-Zertifikat\n\n" +
-                        "Nach Installation: Status aktualisieren, um zu prüfen, ob das Zertifikat erkannt wurde.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                            "Einstellungen → Sicherheit → Verschlüsselung & Anmeldedaten → Zertifikat installieren → CA-Zertifikat\n\n" +
+                                    "Nach Installation: Status aktualisieren, um zu prüfen, ob das Zertifikat erkannt wurde.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            
+
             // Status-Meldungen
             if (state.statusMessage != null) {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (state.isError) 
-                            MaterialTheme.colorScheme.errorContainer 
-                        else 
-                            MaterialTheme.colorScheme.primaryContainer
-                    )
+                        modifier = Modifier.fillMaxWidth(),
+                        colors =
+                                CardDefaults.cardColors(
+                                        containerColor =
+                                                if (state.isError)
+                                                        MaterialTheme.colorScheme.errorContainer
+                                                else MaterialTheme.colorScheme.primaryContainer
+                                )
                 ) {
                     Text(
-                        text = state.statusMessage!!,
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.bodyMedium
+                            text = state.statusMessage!!,
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
@@ -353,59 +256,57 @@ fun SettingsScreen(
 @Composable
 private fun CertificateInfoCard(info: CertificateInfo) {
     val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
-    
-    Column(
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            "Zertifikats-Informationen",
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary
+                "Zertifikats-Informationen",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
         )
-        
+
         // Installation Status
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "Status:",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                    "Status:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
             ) {
                 if (info.isInstalledInSystem) {
                     Icon(
-                        Icons.Default.Check,
-                        contentDescription = "Installiert",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
+                            Icons.Default.Check,
+                            contentDescription = "Installiert",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        "Im System installiert",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
+                            "Im System installiert",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
                     )
                 } else {
                     Icon(
-                        Icons.Default.Warning,
-                        contentDescription = "Nicht installiert",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(16.dp)
+                            Icons.Default.Warning,
+                            contentDescription = "Nicht installiert",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        "Nicht installiert",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
+                            "Nicht installiert",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
                     )
                 }
             }
         }
-        
+
         InfoRow("Subject:", info.subject)
         InfoRow("Gültig von:", dateFormat.format(info.notBefore))
         InfoRow("Gültig bis:", dateFormat.format(info.notAfter))
@@ -415,68 +316,54 @@ private fun CertificateInfoCard(info: CertificateInfo) {
 
 @Composable
 private fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Text(
-            value,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f)
-        )
+        Text(value, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
     }
 }
 
-/**
- * ViewModel für Settings-Screen.
- */
-class SettingsViewModel(
-    private val certificateManager: CertificateManager
-) : ViewModel() {
-    
+/** ViewModel für Settings-Screen. */
+class SettingsViewModel(private val certificateManager: CertificateManager) : ViewModel() {
+
     companion object {
         private const val TAG = "SettingsViewModel"
     }
-    
+
     data class State(
-        val certificateInfo: CertificateInfo? = null,
-        val isGenerating: Boolean = false,
-        val isExporting: Boolean = false,
-        val isVpnRunning: Boolean = false,
-        val exportedCertPath: String? = null,
-        val statusMessage: String? = null,
-        val isError: Boolean = false
+            val certificateInfo: CertificateInfo? = null,
+            val isGenerating: Boolean = false,
+            val isExporting: Boolean = false,
+            val exportedCertPath: String? = null,
+            val statusMessage: String? = null,
+            val isError: Boolean = false
     )
-    
+
     private val _state = MutableStateFlow(State())
     val state = _state.asStateFlow()
-    
+
     init {
         loadCertificateInfo()
     }
-    
+
     private fun loadCertificateInfo() {
         viewModelScope.launch {
-            val info = withContext(Dispatchers.IO) {
-                certificateManager.getCACertificateInfo()
-            }
+            val info = withContext(Dispatchers.IO) { certificateManager.getCACertificateInfo() }
             _state.value = _state.value.copy(certificateInfo = info)
         }
     }
-    
+
     fun refreshCertificateStatus() {
         loadCertificateInfo()
     }
-    
+
     fun generateCertificate() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isGenerating = true, statusMessage = null)
-            
+
             try {
                 withContext(Dispatchers.IO) {
                     if (certificateManager.hasCACertificate()) {
@@ -484,122 +371,89 @@ class SettingsViewModel(
                     }
                     certificateManager.getOrCreateCACertificate()
                 }
-                
+
                 loadCertificateInfo()
-                _state.value = _state.value.copy(
-                    isGenerating = false,
-                    statusMessage = "Zertifikat erfolgreich generiert",
-                    isError = false
-                )
+                _state.value =
+                        _state.value.copy(
+                                isGenerating = false,
+                                statusMessage = "Zertifikat erfolgreich generiert",
+                                isError = false
+                        )
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to generate certificate", e)
-                _state.value = _state.value.copy(
-                    isGenerating = false,
-                    statusMessage = "Fehler beim Generieren: ${e.message}",
-                    isError = true
-                )
+                _state.value =
+                        _state.value.copy(
+                                isGenerating = false,
+                                statusMessage = "Fehler beim Generieren: ${e.message}",
+                                isError = true
+                        )
             }
         }
     }
-    
+
     fun exportCertificate(context: android.content.Context) {
         viewModelScope.launch {
             _state.value = _state.value.copy(isExporting = true, statusMessage = null)
-            
+
             try {
                 val exportDir = File(context.getExternalFilesDir(null), "certificates")
                 if (!exportDir.exists()) {
                     exportDir.mkdirs()
                 }
-                
+
                 val certFile = File(exportDir, "fishit-mapper-ca.pem")
-                
-                val success = withContext(Dispatchers.IO) {
-                    certificateManager.exportCACertificate(certFile)
-                }
-                
+
+                val success =
+                        withContext(Dispatchers.IO) {
+                            certificateManager.exportCACertificate(certFile)
+                        }
+
                 if (success) {
-                    _state.value = _state.value.copy(
-                        isExporting = false,
-                        exportedCertPath = certFile.absolutePath,
-                        statusMessage = "Zertifikat erfolgreich exportiert",
-                        isError = false
-                    )
+                    _state.value =
+                            _state.value.copy(
+                                    isExporting = false,
+                                    exportedCertPath = certFile.absolutePath,
+                                    statusMessage = "Zertifikat erfolgreich exportiert",
+                                    isError = false
+                            )
                 } else {
-                    _state.value = _state.value.copy(
-                        isExporting = false,
-                        statusMessage = "Fehler beim Exportieren",
-                        isError = true
-                    )
+                    _state.value =
+                            _state.value.copy(
+                                    isExporting = false,
+                                    statusMessage = "Fehler beim Exportieren",
+                                    isError = true
+                            )
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to export certificate", e)
-                _state.value = _state.value.copy(
-                    isExporting = false,
-                    statusMessage = "Fehler beim Exportieren: ${e.message}",
-                    isError = true
-                )
+                _state.value =
+                        _state.value.copy(
+                                isExporting = false,
+                                statusMessage = "Fehler beim Exportieren: ${e.message}",
+                                isError = true
+                        )
             }
         }
     }
-    
+
     fun openCertificateInstallation(context: android.content.Context) {
         try {
             val intent = Intent(Settings.ACTION_SECURITY_SETTINGS)
             context.startActivity(intent)
-            
-            _state.value = _state.value.copy(
-                statusMessage = "Bitte installiere das Zertifikat manuell unter 'Verschlüsselung & Anmeldedaten'",
-                isError = false
-            )
+
+            _state.value =
+                    _state.value.copy(
+                            statusMessage =
+                                    "Bitte installiere das Zertifikat manuell unter 'Verschlüsselung & Anmeldedaten'",
+                            isError = false
+                    )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to open security settings", e)
-            _state.value = _state.value.copy(
-                statusMessage = "Konnte Einstellungen nicht öffnen: ${e.message}",
-                isError = true
-            )
-        }
-    }
-    
-    fun startVpn(context: android.content.Context) {
-        try {
-            val intent = Intent(context, TrafficCaptureVpnService::class.java).apply {
-                action = TrafficCaptureVpnService.ACTION_START_VPN
-            }
-            context.startService(intent)
-            
-            _state.value = _state.value.copy(
-                isVpnRunning = true,
-                statusMessage = "VPN gestartet",
-                isError = false
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start VPN", e)
-            _state.value = _state.value.copy(
-                statusMessage = "Fehler beim Starten des VPN: ${e.message}",
-                isError = true
-            )
-        }
-    }
-    
-    fun stopVpn(context: android.content.Context) {
-        try {
-            val intent = Intent(context, TrafficCaptureVpnService::class.java).apply {
-                action = TrafficCaptureVpnService.ACTION_STOP_VPN
-            }
-            context.startService(intent)
-            
-            _state.value = _state.value.copy(
-                isVpnRunning = false,
-                statusMessage = "VPN gestoppt",
-                isError = false
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to stop VPN", e)
-            _state.value = _state.value.copy(
-                statusMessage = "Fehler beim Stoppen des VPN: ${e.message}",
-                isError = true
-            )
+            _state.value =
+                    _state.value.copy(
+                            statusMessage = "Konnte Einstellungen nicht öffnen: ${e.message}",
+                            isError = true
+                    )
         }
     }
 }

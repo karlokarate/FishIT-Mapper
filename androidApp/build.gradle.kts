@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -10,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "dev.fishit.mapper.android"
-        minSdk = 26
+        minSdk = 34
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
@@ -50,10 +51,6 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
-    }
-
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -64,11 +61,11 @@ android {
         // Enable XML output for SonarQube import
         xmlReport = true
         xmlOutput = file("build/reports/lint-results-debug.xml")
-        
+
         // Also keep HTML for human-readable reports
         htmlReport = true
         htmlOutput = file("build/reports/lint-results-debug.html")
-        
+
         // Don't abort build on lint errors
         abortOnError = false
     }
@@ -107,8 +104,4 @@ dependencies {
     implementation(libs.bouncycastle.bcpkix)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
-    
-    // VPN & Packet Processing
-    implementation(libs.tun2socks)
-    implementation(libs.pcap4j.core)
 }

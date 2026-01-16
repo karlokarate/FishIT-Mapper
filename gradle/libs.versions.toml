@@ -1,35 +1,30 @@
 [versions]
-kotlin = "1.9.22"
-agp = "8.2.2"
+kotlin = "2.1.0"
+agp = "8.7.3"
 sonarqube = "7.2.2.6593"
 
 # Compose
-compose-bom = "2024.02.00"
-compose-compiler = "1.5.8"
+compose-bom = "2024.12.01"
 
 # KotlinX
-kotlinx-serialization = "1.6.2"
-kotlinx-coroutines = "1.8.0"
-kotlinx-datetime = "0.5.0"
+kotlinx-serialization = "1.7.3"
+kotlinx-coroutines = "1.9.0"
+kotlinx-datetime = "0.6.1"
 
 # Codegen
-kotlinpoet = "1.16.0"
+kotlinpoet = "2.0.0"
 
 # AndroidX
-androidx-core = "1.12.0"
-androidx-activity = "1.8.2"
-androidx-lifecycle = "2.7.0"
-androidx-navigation = "2.7.7"
-androidx-webkit = "1.10.0"
+androidx-core = "1.15.0"
+androidx-activity = "1.9.3"
+androidx-lifecycle = "2.8.7"
+androidx-navigation = "2.8.5"
+androidx-webkit = "1.12.1"
 androidx-documentfile = "1.0.1"
 
 # Security & Networking
-bouncycastle = "1.70"
+bouncycastle = "1.79"
 okhttp = "4.12.0"
-
-# VPN & Packet Processing
-tun2socks = "1.0.4"
-pcap4j = "1.8.2"
 
 [libraries]
 # KotlinX
@@ -60,14 +55,10 @@ androidx-webkit = { module = "androidx.webkit:webkit", version.ref = "androidx-w
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "androidx-documentfile" }
 
 # Security & Networking
-bouncycastle-bcprov = { module = "org.bouncycastle:bcprov-jdk15on", version.ref = "bouncycastle" }
-bouncycastle-bcpkix = { module = "org.bouncycastle:bcpkix-jdk15on", version.ref = "bouncycastle" }
+bouncycastle-bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+bouncycastle-bcpkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-logging = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp" }
-
-# VPN & Packet Processing
-tun2socks = { module = "com.ooimi.library:tun2socks", version.ref = "tun2socks" }
-pcap4j-core = { module = "org.pcap4j:pcap4j-core", version.ref = "pcap4j" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -76,4 +67,5 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 sonarqube = { id = "org.sonarqube", version.ref = "sonarqube" }

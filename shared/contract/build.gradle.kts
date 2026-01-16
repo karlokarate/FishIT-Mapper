@@ -31,7 +31,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        minSdk = 26
+        minSdk = 34
     }
 
     compileOptions {
@@ -43,11 +43,11 @@ android {
         // Enable XML output for SonarQube import
         xmlReport = true
         xmlOutput = file("build/reports/lint-results-debug.xml")
-        
+
         // Also keep HTML for human-readable reports
         htmlReport = true
         htmlOutput = file("build/reports/lint-results-debug.html")
-        
+
         // Don't abort build on lint errors
         abortOnError = false
     }
@@ -78,10 +78,10 @@ val generateFishitContract = tasks.register<JavaExec>("generateFishitContract") 
         "--schema", "${rootProject.projectDir}/schema/contract.schema.json",
         "--out", generatedDir.absolutePath
     )
-    
+
     // Declare output directory for incremental build support
     outputs.dir(generatedDir)
-    
+
     // Ensure output directory exists using Gradle file utilities
     doFirst {
         project.mkdir(generatedDir)
