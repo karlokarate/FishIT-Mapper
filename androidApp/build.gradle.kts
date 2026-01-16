@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "dev.fishit.mapper.android"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "dev.fishit.mapper.android"
