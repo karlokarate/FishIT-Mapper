@@ -17,25 +17,15 @@ import kotlinx.coroutines.launch
 
 /**
  * VPN Service für System-weite Netzwerk-Traffic-Erfassung.
- * Nutzt tun2socks via Maven artifact (io.github.nekohasekai:libcore) um Traffic zu leiten.
  * 
- * Implementation mit tun2socks Maven artifact:
- * 1. VPN Interface erstellen
- * 2. SOCKS5-to-HTTP bridge starten (Port 1080 -> 8888)
- * 3. libcore TunManager nutzt pre-built natives um TUN -> SOCKS5 zu routen
- * 4. Traffic wird im HTTP Proxy erfasst und analysiert
+ * Architektur:
+ * 1. VPN Interface (TUN) - fängt System-Traffic ab
+ * 2. tun2socks (Native) - leitet TUN→SOCKS5 Pakete weiter
+ * 3. SOCKS5 Server - bridged zu HTTP Proxy
+ * 4. HTTP Proxy (MitmProxyServer) - erfasst und analysiert Traffic
  * 
- * Vorteile Maven-basierte Implementation:
- * - Keine manuelle Native Library Kompilierung
- * - Pre-built .so files für alle ABIs
- * - Einfache Gradle dependency
- * - 2-4 Stunden statt 12-23 Stunden Aufwand
- * 
- * Status: 
- * - ✅ Maven dependency konfiguriert
- * - ✅ VPN Interface Setup
- * - ⏳ libcore TunManager Integration (siehe MAVEN_TUN2SOCKS_INTEGRATION.md)
- * - ⏳ SOCKS5-to-HTTP bridge benötigt
+ * Dependencies:
+ * - com.ooimi.library:tun2socks (Maven) - Native TUN→SOCKS5 Library
  */
 class TrafficCaptureVpnService : VpnService() {
 
@@ -47,13 +37,14 @@ class TrafficCaptureVpnService : VpnService() {
         // VPN-Konfiguration
         private const val VPN_ADDRESS = "10.0.0.2"
         private const val VPN_GATEWAY = "10.0.0.1"
+        private const val VPN_NETMASK = "255.255.255.0"
         private const val VPN_ROUTE = "0.0.0.0"
         private const val VPN_DNS = "8.8.8.8"
         private const val VPN_MTU = 1500
         
         // Proxy-Konfiguration
         const val PROXY_PORT = 8888  // HTTP Proxy Port
-        private const val SOCKS_PORT = 1080  // SOCKS5 Proxy Port (für tun2socks)
+        private const val SOCKS_PORT = 1080  // SOCKS5 Proxy Port
         private const val PROXY_ADDRESS = "127.0.0.1"
         
         // Notification
@@ -64,11 +55,15 @@ class TrafficCaptureVpnService : VpnService() {
     private var vpnInterface: ParcelFileDescriptor? = null
     private var serviceScope: CoroutineScope? = null
     private var tun2socksJob: Job? = null
+    private var socksServer: Socks5Server? = null
 
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "VPN Service created")
         createNotificationChannel()
+        
+        // Initialisiere tun2socks Native Library
+        Tun2SocksWrapper.initialize(applicationContext)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -96,7 +91,10 @@ class TrafficCaptureVpnService : VpnService() {
             // Starte Foreground Service mit Notification (required für Android O+)
             startForeground(NOTIFICATION_ID, createNotification())
             
-            // Erstelle VPN-Interface mit optimierter Konfiguration
+            // Starte SOCKS5 Server (Bridge zu HTTP Proxy)
+            startSocksServer()
+            
+            // Erstelle VPN-Interface
             val builder = Builder()
                 .setSession("FishIT-Mapper VPN")
                 .addAddress(VPN_ADDRESS, 24)
@@ -130,13 +128,10 @@ class TrafficCaptureVpnService : VpnService() {
             Log.i(TAG, "  - DNS: $VPN_DNS")
             Log.i(TAG, "  - MTU: $VPN_MTU")
 
-            // Starte tun2socks in Coroutine
-            serviceScope = CoroutineScope(Dispatchers.IO)
-            tun2socksJob = serviceScope?.launch {
-                startTun2Socks()
-            }
+            // Starte tun2socks in separatem Thread
+            startTun2Socks()
 
-            Log.i(TAG, "VPN with tun2socks integration started")
+            Log.i(TAG, "VPN service started successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start VPN", e)
             stopVpn()
@@ -144,93 +139,99 @@ class TrafficCaptureVpnService : VpnService() {
     }
 
     /**
-     * Startet tun2socks um VPN-Traffic zum SOCKS5 Proxy zu leiten.
-     * 
-     * Maven-basierte Implementation mit io.github.nekohasekai:libcore:
-     * 1. Liest IP-Pakete vom TUN device (vpnInterface)
-     * 2. Nutzt pre-built native libraries (keine Kompilierung nötig)
-     * 3. Erstellt SOCKS5 connections für TCP/UDP
-     * 4. Leitet zu lokalem SOCKS5 server (Port 1080)
-     * 5. SOCKS5 server konvertiert zu HTTP requests (Port 8888)
-     * 
-     * NEUE APPROACH: Maven artifact mit pre-built natives
-     * - ✅ Maven dependency: io.github.nekohasekai:libcore:2.5.2
-     * - ✅ Keine manuelle Kompilierung nötig
-     * - ✅ Pre-built .so files für alle ABIs enthalten
-     * - ⏳ libcore API Integration nötig
-     * - ⏳ SOCKS5-to-HTTP bridge nötig
-     * 
-     * Siehe MAVEN_TUN2SOCKS_INTEGRATION.md für vollständige Anleitung.
+     * Startet den SOCKS5 Server als Bridge zum HTTP Proxy.
+     */
+    private fun startSocksServer() {
+        if (socksServer != null && socksServer!!.isRunning()) {
+            Log.w(TAG, "SOCKS5 server already running")
+            return
+        }
+
+        serviceScope = CoroutineScope(Dispatchers.IO)
+        serviceScope?.launch {
+            try {
+                socksServer = Socks5Server(
+                    port = SOCKS_PORT,
+                    httpProxyHost = PROXY_ADDRESS,
+                    httpProxyPort = PROXY_PORT
+                )
+                socksServer?.start()
+                Log.i(TAG, "SOCKS5 server started on port $SOCKS_PORT, bridging to HTTP proxy at $PROXY_ADDRESS:$PROXY_PORT")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start SOCKS5 server", e)
+            }
+        }
+    }
+
+    /**
+     * Startet tun2socks um TUN-Traffic zum SOCKS5 Proxy zu leiten.
      */
     private fun startTun2Socks() {
-        try {
-            val vpnFd = vpnInterface ?: run {
-                Log.e(TAG, "VPN interface is null, cannot start tun2socks")
-                return
+        val tunFd = vpnInterface ?: run {
+            Log.e(TAG, "VPN interface is null, cannot start tun2socks")
+            return
+        }
+
+        if (!Tun2SocksWrapper.isLibraryLoaded()) {
+            Log.e(TAG, "============================================")
+            Log.e(TAG, "tun2socks native library not loaded!")
+            Log.e(TAG, "VPN mode requires native library:")
+            Log.e(TAG, "  implementation 'com.ooimi.library:tun2socks:1.0.4'")
+            Log.e(TAG, "")
+            Log.e(TAG, "Current status: Traffic routing not working")
+            Log.e(TAG, "Workaround: Use WebView Browser tab instead")
+            Log.e(TAG, "============================================")
+            return
+        }
+
+        tun2socksJob = serviceScope?.launch {
+            try {
+                val success = Tun2SocksWrapper.start(
+                    tunFd = tunFd,
+                    mtu = VPN_MTU,
+                    socksAddress = PROXY_ADDRESS,
+                    socksPort = SOCKS_PORT,
+                    tunAddress = VPN_ADDRESS,
+                    tunNetmask = VPN_NETMASK,
+                    forwardUdp = false // UDP not supported by HTTP proxy
+                )
+
+                if (success) {
+                    Log.i(TAG, "tun2socks started successfully - VPN is now routing traffic")
+                } else {
+                    Log.e(TAG, "tun2socks failed to start - VPN traffic routing not working")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error starting tun2socks", e)
             }
-            
-            val fd = vpnFd.fd
-            
-            Log.i(TAG, "=== tun2socks Maven Configuration ===")
-            Log.i(TAG, "Approach: Maven artifact with pre-built natives")
-            Log.i(TAG, "Library: io.github.nekohasekai:libcore:2.5.2")
-            Log.i(TAG, "TUN FD: $fd")
-            Log.i(TAG, "MTU: $VPN_MTU")
-            Log.i(TAG, "SOCKS Server: $PROXY_ADDRESS:$SOCKS_PORT")
-            Log.i(TAG, "Gateway: $VPN_GATEWAY")
-            Log.i(TAG, "DNS: $VPN_DNS")
-            Log.i(TAG, "=======================================")
-            
-            // Maven-based implementation with libcore
-            // Code example (requires libcore API integration):
-            /*
-            import io.nekohasekai.libcore.Libcore
-            import io.nekohasekai.libcore.TunManager
-            
-            Libcore.init()  // One-time initialization
-            
-            val tunManager = TunManager(
-                fd = fd,
-                mtu = VPN_MTU,
-                gateway = VPN_GATEWAY,
-                dns = VPN_DNS,
-                socksAddress = "$PROXY_ADDRESS:$SOCKS_PORT"
-            )
-            
-            tunManager.start()
-            */
-            
-            Log.i(TAG, "=== Implementation Status ===")
-            Log.i(TAG, "✅ Maven dependency configured")
-            Log.i(TAG, "✅ Native libraries available via Maven")
-            Log.i(TAG, "⏳ libcore TunManager integration pending")
-            Log.i(TAG, "⏳ SOCKS5-to-HTTP bridge pending")
-            Log.i(TAG, "")
-            Log.i(TAG, "Next steps (see MAVEN_TUN2SOCKS_INTEGRATION.md):")
-            Log.i(TAG, "  1. Import libcore classes")
-            Log.i(TAG, "  2. Initialize Libcore")
-            Log.i(TAG, "  3. Create TunManager instance")
-            Log.i(TAG, "  4. Implement SOCKS5-to-HTTP bridge")
-            Log.i(TAG, "  5. Start both services")
-            Log.i(TAG, "")
-            Log.i(TAG, "Estimated effort: 2-4 hours")
-            Log.i(TAG, "Current workaround: Use WebView browser (fully functional)")
-            Log.i(TAG, "============================")
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in tun2socks integration", e)
         }
     }
 
     private fun stopVpn() {
         Log.i(TAG, "Stopping VPN service...")
 
+        // Stoppe tun2socks
+        try {
+            Tun2SocksWrapper.stop()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping tun2socks", e)
+        }
+
         tun2socksJob?.cancel()
         tun2socksJob = null
+
+        // Stoppe SOCKS5 Server
+        try {
+            socksServer?.stop()
+            socksServer = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping SOCKS5 server", e)
+        }
 
         serviceScope?.cancel()
         serviceScope = null
 
+        // Schließe VPN Interface
         vpnInterface?.close()
         vpnInterface = null
         
