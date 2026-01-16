@@ -13,6 +13,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * SOCKS5 zu HTTP Bridge Server.
@@ -33,6 +34,9 @@ class Socks5ToHttpBridge(
 ) {
     companion object {
         private const val TAG = "Socks5Bridge"
+        
+        // Thread pool configuration
+        private const val MAX_CONCURRENT_CONNECTIONS = 50
         
         // SOCKS5 Protocol Constants
         private const val SOCKS_VERSION = 0x05.toByte()
@@ -56,8 +60,8 @@ class Socks5ToHttpBridge(
     @Volatile
     private var isRunning = false
     
-    // Thread pool für client connections (max 50 concurrent connections)
-    private val clientExecutor = Executors.newFixedThreadPool(50)
+    // Thread pool für client connections
+    private val clientExecutor = Executors.newFixedThreadPool(MAX_CONCURRENT_CONNECTIONS)
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     
     /**
@@ -329,18 +333,18 @@ class Socks5ToHttpBridge(
             
             Log.d(TAG, "HTTP CONNECT tunnel established for ${request.host}:${request.port}")
             
-            var running = true
+            val running = AtomicBoolean(true)
             
             // Create bidirectional forwarding with better error handling
             val clientToProxy = Thread {
                 try {
                     socksClient.getInputStream().copyTo(proxySocket.getOutputStream())
                 } catch (e: Exception) {
-                    if (running) {
+                    if (running.get()) {
                         Log.d(TAG, "Client->Proxy closed: ${e.message}")
                     }
                 } finally {
-                    running = false
+                    running.set(false)
                     try {
                         proxySocket.shutdownOutput()
                     } catch (e: Exception) {
@@ -353,11 +357,11 @@ class Socks5ToHttpBridge(
                 try {
                     proxySocket.getInputStream().copyTo(socksClient.getOutputStream())
                 } catch (e: Exception) {
-                    if (running) {
+                    if (running.get()) {
                         Log.d(TAG, "Proxy->Client closed: ${e.message}")
                     }
                 } finally {
-                    running = false
+                    running.set(false)
                     try {
                         socksClient.shutdownOutput()
                     } catch (e: Exception) {

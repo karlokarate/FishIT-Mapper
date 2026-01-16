@@ -58,6 +58,9 @@ class TrafficCaptureVpnService : VpnService() {
         private const val SOCKS_PORT = 1080  // SOCKS5 Proxy Port (für tun2socks)
         private const val PROXY_ADDRESS = "127.0.0.1"
         
+        // Packet Processing
+        private const val PACKET_LOG_FREQUENCY = 100  // Log every N packets
+        
         // Notification
         private const val NOTIFICATION_ID = 1
         private const val NOTIFICATION_CHANNEL_ID = "vpn_service_channel"
@@ -231,8 +234,8 @@ class TrafficCaptureVpnService : VpnService() {
                 if (parsedPacket != null) {
                     packetCount++
                     
-                    // Log packet details for monitoring (nur alle 100 packets)
-                    if (packetCount % 100 == 0) {
+                    // Log packet details for monitoring
+                    if (packetCount % PACKET_LOG_FREQUENCY == 0) {
                         packetProcessor.logPacket(parsedPacket)
                         Log.d(TAG, "Processed $packetCount packets so far")
                     }

@@ -1,15 +1,12 @@
 package dev.fishit.mapper.android.vpn
 
 import android.util.Log
-import org.pcap4j.packet.IpPacket
 import org.pcap4j.packet.IpV4Packet
 import org.pcap4j.packet.IpV6Packet
 import org.pcap4j.packet.Packet
 import org.pcap4j.packet.TcpPacket
 import org.pcap4j.packet.UdpPacket
-import org.pcap4j.packet.IcmpV4CommonPacket
 import org.pcap4j.packet.namednumber.IpNumber
-import java.nio.ByteBuffer
 
 /**
  * Packet Processor für VPN Traffic.
@@ -221,18 +218,6 @@ class PacketProcessor {
         )
     }
     
-    /**
-     * Erstellt ein response packet.
-     * Kann für ICMP echo replies oder TCP RST packets genutzt werden.
-     */
-    fun createResponsePacket(
-        originalPacket: ParsedPacket,
-        responseData: ByteArray? = null
-    ): ByteArray? {
-        // Placeholder für packet creation
-        // In voller Implementation würde hier ein vollständiges packet gebaut werden
-        return responseData
-    }
     
     /**
      * Loggt packet informationen für debugging.
