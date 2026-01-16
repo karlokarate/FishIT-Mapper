@@ -4,35 +4,38 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.fishit.mapper.android.data.AndroidProjectStore
 import dev.fishit.mapper.android.export.ExportManager
+import dev.fishit.mapper.android.proxy.ProxyCaptureManager
+import dev.fishit.mapper.android.webview.WebViewProxyController
 import dev.fishit.mapper.contract.*
 import dev.fishit.mapper.engine.HubDetector
 import dev.fishit.mapper.engine.IdGenerator
 import dev.fishit.mapper.engine.MappingEngine
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
 data class ProjectUiState(
-    val meta: ProjectMeta? = null,
-    val graph: MapGraph = MapGraph(),
-    val chains: ChainsFile = ChainsFile(),
-    val sessions: List<RecordingSession> = emptyList(),
+        val meta: ProjectMeta? = null,
+        val graph: MapGraph = MapGraph(),
+        val chains: ChainsFile = ChainsFile(),
+        val sessions: List<RecordingSession> = emptyList(),
+        val isLoading: Boolean = true,
+        val error: String? = null,
 
-    val isLoading: Boolean = true,
-    val error: String? = null,
-
-    // Recording
-    val isRecording: Boolean = false,
-    val liveEvents: List<RecorderEvent> = emptyList(),
-    val liveUrl: String? = null
+        // Recording
+        val isRecording: Boolean = false,
+        val liveEvents: List<RecorderEvent> = emptyList(),
+        val liveUrl: String? = null
 )
 
 class ProjectViewModel(
-    private val projectId: ProjectId,
-    private val store: AndroidProjectStore,
-    private val mappingEngine: MappingEngine,
-    private val exportManager: ExportManager
+        private val projectId: ProjectId,
+        private val store: AndroidProjectStore,
+        private val mappingEngine: MappingEngine,
+        private val exportManager: ExportManager,
+        private val proxyCaptureManager: ProxyCaptureManager? = null
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ProjectUiState())
@@ -41,6 +44,7 @@ class ProjectViewModel(
     private var liveSessionId: SessionId? = null
     private var liveSessionStartedAt = Clock.System.now()
     private var liveInitialUrl: String = ""
+    private var proxyEventCollectorJob: Job? = null
 
     init {
         refresh()
@@ -55,17 +59,20 @@ class ProjectViewModel(
                 val chains = store.loadChains(projectId)
                 val sessions = store.listSessions(projectId)
                 Quad(meta, graph, chains, sessions)
-            }.onSuccess { (meta, graph, chains, sessions) ->
-                _state.value = _state.value.copy(
-                    meta = meta,
-                    graph = graph,
-                    chains = chains,
-                    sessions = sessions,
-                    isLoading = false
-                )
-            }.onFailure { t ->
-                _state.value = _state.value.copy(isLoading = false, error = t.message)
             }
+                    .onSuccess { (meta, graph, chains, sessions) ->
+                        _state.value =
+                                _state.value.copy(
+                                        meta = meta,
+                                        graph = graph,
+                                        chains = chains,
+                                        sessions = sessions,
+                                        isLoading = false
+                                )
+                    }
+                    .onFailure { t ->
+                        _state.value = _state.value.copy(isLoading = false, error = t.message)
+                    }
         }
     }
 
@@ -75,28 +82,36 @@ class ProjectViewModel(
         liveSessionStartedAt = now
         liveInitialUrl = initialUrl
 
-        _state.value = _state.value.copy(
-            isRecording = true,
-            liveEvents = emptyList(),
-            liveUrl = initialUrl
-        )
+        _state.value =
+                _state.value.copy(
+                        isRecording = true,
+                        liveEvents = emptyList(),
+                        liveUrl = initialUrl
+                )
+
+        // Start proxy capture and enable WebView proxy routing
+        startProxyCapture()
     }
 
     fun stopRecording(finalUrl: String? = null) {
+        // Stop proxy capture first
+        stopProxyCapture()
+
         val sessionId = liveSessionId ?: return
         val startedAt = liveSessionStartedAt
         val endedAt = Clock.System.now()
         val events = _state.value.liveEvents
 
-        val session = RecordingSession(
-            id = sessionId,
-            projectId = projectId,
-            startedAt = startedAt,
-            endedAt = endedAt,
-            initialUrl = liveInitialUrl,
-            finalUrl = finalUrl,
-            events = events
-        )
+        val session =
+                RecordingSession(
+                        id = sessionId,
+                        projectId = projectId,
+                        startedAt = startedAt,
+                        endedAt = endedAt,
+                        initialUrl = liveInitialUrl,
+                        finalUrl = finalUrl,
+                        events = events
+                )
 
         viewModelScope.launch {
             runCatching {
@@ -111,67 +126,63 @@ class ProjectViewModel(
                 if (meta != null) {
                     store.updateProjectMeta(meta.copy(updatedAt = endedAt))
                 }
-            }.onSuccess {
-                liveSessionId = null
-                _state.value = _state.value.copy(isRecording = false, liveEvents = emptyList())
-                refresh()
-            }.onFailure { t ->
-                _state.value = _state.value.copy(error = t.message)
             }
+                    .onSuccess {
+                        liveSessionId = null
+                        _state.value =
+                                _state.value.copy(isRecording = false, liveEvents = emptyList())
+                        refresh()
+                    }
+                    .onFailure { t -> _state.value = _state.value.copy(error = t.message) }
         }
     }
 
     fun onRecorderEvent(event: RecorderEvent) {
         if (!_state.value.isRecording) return
-        _state.value = _state.value.copy(
-            liveEvents = _state.value.liveEvents + event,
-            liveUrl = when (event) {
-                is NavigationEvent -> event.url
-                else -> _state.value.liveUrl
-            }
-        )
+        _state.value =
+                _state.value.copy(
+                        liveEvents = _state.value.liveEvents + event,
+                        liveUrl =
+                                when (event) {
+                                    is NavigationEvent -> event.url
+                                    else -> _state.value.liveUrl
+                                }
+                )
     }
 
     fun exportAndShare() {
         viewModelScope.launch {
             runCatching { exportManager.exportProjectZip(projectId) }
-                .onSuccess { zip ->
-                    exportManager.shareZip(zip)
-                }
-                .onFailure { t ->
-                    _state.value = _state.value.copy(error = t.message)
-                }
+                    .onSuccess { zip -> exportManager.shareZip(zip) }
+                    .onFailure { t -> _state.value = _state.value.copy(error = t.message) }
         }
     }
 
-    /**
-     * Updates tags for a specific node and persists the change.
-     */
+    /** Updates tags for a specific node and persists the change. */
     fun updateNodeTags(nodeId: NodeId, tags: List<String>) {
         viewModelScope.launch {
             runCatching {
                 val currentGraph = store.loadGraph(projectId)
-                val updatedNodes = currentGraph.nodes.map { node ->
-                    if (node.id == nodeId) {
-                        node.copy(tags = tags)
-                    } else {
-                        node
-                    }
-                }
+                val updatedNodes =
+                        currentGraph.nodes.map { node ->
+                            if (node.id == nodeId) {
+                                node.copy(tags = tags)
+                            } else {
+                                node
+                            }
+                        }
                 val updatedGraph = currentGraph.copy(nodes = updatedNodes)
                 store.saveGraph(projectId, updatedGraph)
                 updatedGraph
-            }.onSuccess { updatedGraph ->
-                _state.value = _state.value.copy(graph = updatedGraph)
-            }.onFailure { t ->
-                _state.value = _state.value.copy(error = t.message)
             }
+                    .onSuccess { updatedGraph ->
+                        _state.value = _state.value.copy(graph = updatedGraph)
+                    }
+                    .onFailure { t -> _state.value = _state.value.copy(error = t.message) }
         }
     }
 
-    /**
-     * Applies hub detection algorithm to automatically tag important nodes.
-     */
+    /** Applies hub detection algorithm to automatically tag important nodes. */
     fun applyHubDetection(threshold: Double = 5.0) {
         viewModelScope.launch {
             runCatching {
@@ -179,16 +190,53 @@ class ProjectViewModel(
                 val hubDetectedGraph = HubDetector.tagHubs(currentGraph, threshold)
                 store.saveGraph(projectId, hubDetectedGraph)
                 hubDetectedGraph
-            }.onSuccess { updatedGraph ->
-                _state.value = _state.value.copy(graph = updatedGraph)
-            }.onFailure { t ->
-                _state.value = _state.value.copy(error = t.message)
             }
+                    .onSuccess { updatedGraph ->
+                        _state.value = _state.value.copy(graph = updatedGraph)
+                    }
+                    .onFailure { t -> _state.value = _state.value.copy(error = t.message) }
         }
     }
 
-    /**
-     * Small helper to avoid pulling in a tuple library just for MVP.
-     */
+    // ============================================================================
+    // Proxy Capture Management
+    // ============================================================================
+
+    /** Starts the MITM proxy and routes WebView traffic through it. */
+    private fun startProxyCapture() {
+        val manager = proxyCaptureManager ?: return
+
+        // Start the proxy server
+        manager.startCapture()
+
+        // Enable WebView proxy routing (Android 14+)
+        if (WebViewProxyController.isProxySupported()) {
+            WebViewProxyController.enableProxy(
+                    proxyHost = ProxyCaptureManager.PROXY_HOST,
+                    proxyPort = ProxyCaptureManager.PROXY_PORT
+            )
+        }
+
+        // Collect proxy events and route to onRecorderEvent
+        proxyEventCollectorJob =
+                viewModelScope.launch { manager.events.collect { event -> onRecorderEvent(event) } }
+    }
+
+    /** Stops the MITM proxy and disables WebView proxy routing. */
+    private fun stopProxyCapture() {
+        // Cancel event collection
+        proxyEventCollectorJob?.cancel()
+        proxyEventCollectorJob = null
+
+        // Disable WebView proxy
+        if (WebViewProxyController.isProxyEnabled()) {
+            WebViewProxyController.disableProxy()
+        }
+
+        // Stop the proxy server
+        proxyCaptureManager?.stopCapture()
+    }
+
+    /** Small helper to avoid pulling in a tuple library just for MVP. */
     private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 }
