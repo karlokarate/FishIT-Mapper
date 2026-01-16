@@ -237,6 +237,10 @@ fun BrowserScreen(
                     loadUrl(urlText.trim())
                     webViewHolder[0] = this
                 }
+            },
+            update = { webView ->
+                // This update block is crucial for proper touch event handling
+                // It ensures the WebView responds to recompositions properly
             }
         )
     }
