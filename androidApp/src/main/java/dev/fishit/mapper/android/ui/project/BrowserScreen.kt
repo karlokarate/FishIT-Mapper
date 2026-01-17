@@ -178,7 +178,16 @@ fun BrowserScreen(
                             if (!recordingState) return super.shouldInterceptRequest(view, request)
 
                             val urlStr = request.url?.toString() ?: return super.shouldInterceptRequest(view, request)
-                            val initiator = view.url
+
+                            // WICHTIG: view.url darf nicht auf einem Background-Thread aufgerufen werden!
+                            // shouldInterceptRequest läuft auf einem Worker-Thread, nicht dem UI-Thread.
+                            // Stattdessen verwenden wir die request-URL oder null als Initiator.
+                            val initiator: String? = try {
+                                // request.requestHeaders kann sicher gelesen werden
+                                request.requestHeaders?.get("Referer")
+                            } catch (e: Exception) {
+                                null
+                            }
 
                             val kind = guessResourceKind(urlStr, request.isForMainFrame)
 
