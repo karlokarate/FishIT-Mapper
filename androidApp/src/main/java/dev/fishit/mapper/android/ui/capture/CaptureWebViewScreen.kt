@@ -173,11 +173,11 @@ fun CaptureWebViewScreen(
 
                         // Export Button (wenn Session zum Exportieren vorhanden)
                         if (sessionToExport != null || (currentSession != null && !isRecording)) {
-                            IconButton(onClick = { 
+                            IconButton(onClick = {
                                 if (sessionToExport == null && currentSession != null) {
                                     sessionToExport = currentSession
                                 }
-                                showExportDialog = true 
+                                showExportDialog = true
                             }) {
                                 Icon(Icons.Default.FileDownload, "Exportieren")
                             }
@@ -1586,9 +1586,9 @@ private fun SavedSessionItem(
                     }
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(4.dp))
-            
+
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -1607,7 +1607,7 @@ private fun SavedSessionItem(
                     )
                 }
             }
-            
+
             session.targetUrl?.let { url ->
                 Text(
                     text = url,
