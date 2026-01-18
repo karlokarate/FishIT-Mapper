@@ -1,20 +1,43 @@
 # FishIT-Mapper
 
-**FishIT-Mapper** is a standalone Android-first mapping app that records website navigation + resource requests
-and builds a reusable **Map Graph** (nodes/edges) plus exportable session bundles.
+**FishIT-Mapper** ist eine Android-App für **API Reverse Engineering** - importiere HTTP-Traffic,
+korreliere ihn mit Browser-Aktionen und erstelle automatisch API-Blueprints für eigene UIs.
 
 Core design principle: the domain contract is **generated** via **KotlinPoet** from `schema/contract.schema.json`.
 
-## 🆕 New Feature: HTTPS Traffic Capture
+## 🎯 Kern-Funktionalität
 
-FishIT-Mapper now supports **vollständige HTTPS-Traffic-Erfassung** mit Entschlüsselung! 
+```
+Traffic ZIP Import → Korrelation mit Browsing → API Blueprint → Export (OpenAPI/cURL/Code)
+```
 
-✅ **Request/Response-Daten im Klartext**  
-✅ **System-weite Traffic-Erfassung via VPN**  
-✅ **Eigenes CA-Zertifikat für MITM-Proxy**  
-✅ **Einfache Installation aus der App**  
+### Was die App macht:
+1. **Traffic Import**: HttpCanary/Charles ZIP-Exporte importieren
+2. **Korrelation**: User Actions mit Network Requests verknüpfen
+3. **API Discovery**: Endpoints, Parameter und Auth-Patterns automatisch erkennen
+4. **Blueprint Export**: OpenAPI, cURL, Postman, TypeScript/Kotlin Clients generieren
 
-📖 **[Vollständige Dokumentation](docs/features/HTTPS_TRAFFIC_CAPTURE.md)**
+## 🆕 Features
+
+### ✅ Traffic Import & Analyse
+- HttpCanary ZIP-Import mit vollständiger Request/Response-Analyse
+- Automatische Endpoint-Erkennung und Parameter-Typisierung
+- Auth-Pattern Detection (Bearer, Session, API Key, OAuth2)
+
+### ✅ API Blueprint Generation
+- Automatische Path-Parameter-Erkennung (`/users/123` → `/users/{userId}`)
+- Query/Header/Body-Parameter-Analyse
+- Flow-Detection für zusammenhängende API-Sequenzen
+
+### ✅ Multi-Format Export
+- **OpenAPI 3.0** (Swagger) - Vollständige API-Spezifikation
+- **cURL Commands** - Sofort testbar
+- **Postman Collection** - Import in Postman
+- **TypeScript Client** - Fertiger API-Client
+- **Kotlin Client** - Android-ready mit Ktor
+
+📖 **[Vollständige Scope-Dokumentation](docs/SCOPE_API_REVERSE_ENGINEERING.md)**
+
 
 ## Quickstart
 
@@ -93,12 +116,12 @@ Dokumentation: [`docs/COPILOT_RULESET_IMPORT.md`](docs/COPILOT_RULESET_IMPORT.md
 
 ### Features
 
-✅ **Fully Automated**: Vom Issue bis zum Merge ohne manuelle Eingriffe  
-✅ **AI-Powered**: Copilot Agents für Implementierung, Review und Fixes  
-✅ **Time-safe**: Splits work into batches, persists progress  
-✅ **GitHub-native**: No external services required  
-✅ **State machine**: Deterministic transitions with automatic recovery  
-✅ **Free**: Runs on GitHub Actions free tier  
+✅ **Fully Automated**: Vom Issue bis zum Merge ohne manuelle Eingriffe
+✅ **AI-Powered**: Copilot Agents für Implementierung, Review und Fixes
+✅ **Time-safe**: Splits work into batches, persists progress
+✅ **GitHub-native**: No external services required
+✅ **State machine**: Deterministic transitions with automatic recovery
+✅ **Free**: Runs on GitHub Actions free tier
 
 ### Documentation
 

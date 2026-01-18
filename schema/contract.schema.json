@@ -1,5 +1,5 @@
 {
-  "contractVersion": "0.2.0",
+  "contractVersion": "0.3.0",
   "packageName": "dev.fishit.mapper.contract",
   "appName": "FishIT-Mapper",
   "nodeKinds": [
@@ -38,8 +38,40 @@
     "Warn",
     "Error"
   ],
+  "httpMethods": [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "HEAD",
+    "OPTIONS"
+  ],
+  "parameterLocations": [
+    "Path",
+    "Query",
+    "Header",
+    "Body",
+    "Cookie"
+  ],
+  "parameterTypes": [
+    "String",
+    "Integer",
+    "Number",
+    "Boolean",
+    "Array",
+    "Object"
+  ],
+  "authTypes": [
+    "None",
+    "BearerToken",
+    "SessionCookie",
+    "ApiKey",
+    "BasicAuth",
+    "OAuth2"
+  ],
   "export": {
-    "bundleFormatVersion": "0.1.0",
+    "bundleFormatVersion": "0.2.0",
     "classDiscriminator": "type"
   }
 }
