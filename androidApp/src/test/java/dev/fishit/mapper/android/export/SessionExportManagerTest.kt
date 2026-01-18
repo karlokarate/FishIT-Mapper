@@ -125,7 +125,7 @@ class SessionExportManagerTest {
     @Test
     fun allExportFormatsHaveValidExtensions() {
         ExportFormat.entries.forEach { format ->
-            assertTrue(format.extension.startsWith("."), 
+            assertTrue(format.extension.startsWith("."),
                 "Format ${format.name} extension should start with dot")
         }
     }
@@ -182,9 +182,9 @@ class SessionExportManagerTest {
             createTestExchange(id = "5", method = "PATCH", url = "https://api.example.com/users/1", requestBody = """{"status":"active"}""")
         )
         val session = createTestSession(exchanges = exchanges)
-        
+
         assertEquals(5, session.exchangeCount)
-        assertEquals(setOf("GET", "POST", "PUT", "DELETE", "PATCH"), 
+        assertEquals(setOf("GET", "POST", "PUT", "DELETE", "PATCH"),
             session.exchanges.map { it.method }.toSet())
     }
 
@@ -196,7 +196,7 @@ class SessionExportManagerTest {
             createTestExchange(id = "3", url = "https://cdn.example.com/image.png")
         )
         val session = createTestSession(exchanges = exchanges)
-        
+
         val grouped = session.groupByDomain()
         assertEquals(2, grouped.size)
         assertTrue(grouped.containsKey("https://api.example.com"))
@@ -214,7 +214,7 @@ class SessionExportManagerTest {
             createTestExchange(id = "4", method = "GET", url = "https://api.example.com/posts")
         )
         val session = createTestSession(exchanges = exchanges)
-        
+
         val endpoints = session.uniqueEndpoints()
         assertEquals(3, endpoints.size)
     }
@@ -242,7 +242,7 @@ class SessionExportManagerTest {
             )
         )
         val session = createTestSession(userActions = actions)
-        
+
         assertEquals(2, session.actionCount)
     }
 
@@ -266,7 +266,7 @@ class SessionExportManagerTest {
             )
         )
         val session = createTestSession(exchanges = exchanges, userActions = actions)
-        
+
         val correlated = session.correlate(actions.first())
         assertEquals(1, correlated.size)
         assertEquals("ex_1", correlated.first().id)
@@ -284,7 +284,7 @@ class SessionExportManagerTest {
     @Test
     fun fileNameHasCorrectExtension() {
         val session = createTestSession()
-        
+
         ExportFormat.entries.forEach { format ->
             val fileName = generateTestFileName(session, format)
             assertTrue(fileName.endsWith(format.extension),
@@ -296,7 +296,7 @@ class SessionExportManagerTest {
     fun fileNameSanitizesSpecialCharacters() {
         val session = createTestSession(name = "My/Session:Test*Name?")
         val fileName = generateTestFileName(session, ExportFormat.JSON)
-        
+
         assertFalse(fileName.contains("/"), "File name should not contain /")
         assertFalse(fileName.contains(":"), "File name should not contain :")
         assertFalse(fileName.contains("*"), "File name should not contain *")
@@ -307,7 +307,7 @@ class SessionExportManagerTest {
     fun fileNameHandlesSpacesCorrectly() {
         val session = createTestSession(name = "My Test Session")
         val fileName = generateTestFileName(session, ExportFormat.JSON)
-        
+
         // Spaces should be replaced with underscores
         assertTrue(
             fileName.contains("My_Test_Session") || fileName.contains("My Test Session"),
@@ -337,7 +337,7 @@ class SessionExportManagerTest {
             ExportFormat.MARKDOWN,
             ExportFormat.ZIP
         )
-        
+
         assertEquals(8, availableFormats.size)
         assertTrue(availableFormats.contains(ExportFormat.HAR))
         assertTrue(availableFormats.contains(ExportFormat.ZIP))

@@ -52,8 +52,8 @@ class SessionExportManager(private val context: Context) {
      * Export-Formate
      */
     enum class ExportFormat(
-        val extension: String, 
-        val mimeType: String, 
+        val extension: String,
+        val mimeType: String,
         val displayName: String,
         val description: String
     ) {
