@@ -113,11 +113,11 @@ fun BrowserScreen(
                     // WICHTIG: Focus-Handling für Tastatur
                     isFocusable = true
                     isFocusableInTouchMode = true
-                    
+
                     // KRITISCH: OnTouchListener für Tastatur-Aktivierung
                     setOnTouchListener { v, event ->
                         when (event.action) {
-                            android.view.MotionEvent.ACTION_DOWN, 
+                            android.view.MotionEvent.ACTION_DOWN,
                             android.view.MotionEvent.ACTION_UP -> {
                                 if (!v.hasFocus()) {
                                     v.requestFocus()
@@ -127,7 +127,7 @@ fun BrowserScreen(
                         // WICHTIG: false zurückgeben, damit WebView das Event verarbeitet
                         false
                     }
-                    
+
                     requestFocus()
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true

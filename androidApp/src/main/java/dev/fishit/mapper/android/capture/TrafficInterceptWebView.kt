@@ -128,11 +128,11 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         // WICHTIG: Focus-Handling für Tastatur-Input bei Eingabefeldern
         isFocusable = true
         isFocusableInTouchMode = true
-        
+
         // KRITISCH: OnTouchListener für Tastatur-Aktivierung
         setOnTouchListener { v, event ->
             when (event.action) {
-                android.view.MotionEvent.ACTION_DOWN, 
+                android.view.MotionEvent.ACTION_DOWN,
                 android.view.MotionEvent.ACTION_UP -> {
                     if (!v.hasFocus()) {
                         v.requestFocus()
@@ -298,14 +298,51 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             // Könnte für Progress-Bar verwendet werden
         }
 
-        // Window Creation (für target="_blank" Links)
+        // Window Creation (für target="_blank" Links und WebAuthn-Dialoge)
         override fun onCreateWindow(
             view: WebView?,
             isDialog: Boolean,
             isUserGesture: Boolean,
             resultMsg: android.os.Message?
         ): Boolean {
-            // Öffne in gleichem WebView statt neuem Fenster
+            android.util.Log.d(TAG, "onCreateWindow: isDialog=$isDialog, isUserGesture=$isUserGesture")
+
+            // Für WebAuthn/FIDO2-Dialoge: Erstelle ein temporäres WebView
+            if (isDialog) {
+                val newWebView = WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.setSupportMultipleWindows(false)
+
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: WebResourceRequest?
+                        ): Boolean {
+                            // WebAuthn-Callbacks werden oft als URL-Redirects gehandhabt
+                            val url = request?.url?.toString() ?: return false
+                            android.util.Log.d(TAG, "Dialog WebView URL: $url")
+
+                            // Lade die URL im Haupt-WebView
+                            this@TrafficInterceptWebView.loadUrl(url)
+                            return true
+                        }
+                    }
+
+                    webChromeClient = object : WebChromeClient() {
+                        override fun onCloseWindow(window: WebView?) {
+                            android.util.Log.d(TAG, "Dialog WebView closed")
+                        }
+                    }
+                }
+
+                val transport = resultMsg?.obj as? WebView.WebViewTransport
+                transport?.webView = newWebView
+                resultMsg?.sendToTarget()
+                return true
+            }
+
+            // Normale Links: Öffne in gleichem WebView
             view?.let { webView ->
                 val transport = resultMsg?.obj as? WebView.WebViewTransport
                 transport?.webView = webView
