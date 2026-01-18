@@ -132,8 +132,11 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
-        settings.setSupportMultipleWindows(false)
-        settings.javaScriptCanOpenWindowsAutomatically = false
+
+        // WICHTIG für WebAuthn: Multiple Windows Support aktivieren
+        // WebAuthn-Dialoge benötigen dies, sonst erscheint ein grauer Overlay
+        settings.setSupportMultipleWindows(true)
+        settings.javaScriptCanOpenWindowsAutomatically = true
 
         // WICHTIG: Mixed Content erlauben (HTTPS-Seiten mit HTTP-Ressourcen)
         settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW

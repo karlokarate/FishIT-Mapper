@@ -4,7 +4,9 @@ import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.View
 import android.webkit.ConsoleMessage
+import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -126,6 +128,14 @@ fun BrowserScreen(
                     settings.builtInZoomControls = true
                     settings.displayZoomControls = false
 
+                    // WICHTIG für WebAuthn und Dialoge:
+                    // Multiple Windows Support aktivieren, damit WebAuthn-Dialoge funktionieren
+                    settings.setSupportMultipleWindows(true)
+                    settings.javaScriptCanOpenWindowsAutomatically = true
+
+                    // Database für WebAuthn Credentials
+                    settings.databaseEnabled = true
+
                     val mainHandler = Handler(Looper.getMainLooper())
 
                     webViewClient = object : WebViewClient() {
@@ -206,6 +216,10 @@ fun BrowserScreen(
                     }
 
                     webChromeClient = object : WebChromeClient() {
+                        // Variablen für Fullscreen/Custom View Support
+                        private var customView: View? = null
+                        private var customViewCallback: CustomViewCallback? = null
+
                         override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
                             if (!recordingState) return super.onConsoleMessage(consoleMessage)
                             val msg = consoleMessage ?: return super.onConsoleMessage(consoleMessage)
@@ -229,6 +243,54 @@ fun BrowserScreen(
 
                             mainHandler.post { onRecorderEventState(event) }
                             return true
+                        }
+
+                        // WICHTIG: Permission Requests für WebAuthn, Kamera, Mikrofon etc.
+                        override fun onPermissionRequest(request: PermissionRequest?) {
+                            Log.d(TAG, "Permission request: ${request?.resources?.joinToString()}")
+                            // WebAuthn und andere Permissions erlauben
+                            mainHandler.post {
+                                request?.grant(request.resources)
+                            }
+                        }
+
+                        // Custom View Support (für WebAuthn-Dialoge und Fullscreen)
+                        override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                            Log.d(TAG, "onShowCustomView called")
+                            if (customView != null) {
+                                callback?.onCustomViewHidden()
+                                return
+                            }
+                            customView = view
+                            customViewCallback = callback
+                            // View wird angezeigt, nicht blockieren
+                        }
+
+                        override fun onHideCustomView() {
+                            Log.d(TAG, "onHideCustomView called")
+                            customViewCallback?.onCustomViewHidden()
+                            customView = null
+                            customViewCallback = null
+                        }
+
+                        // Window Management - verhindert dass neue Fenster den UI blockieren
+                        override fun onCreateWindow(
+                            view: WebView?,
+                            isDialog: Boolean,
+                            isUserGesture: Boolean,
+                            resultMsg: android.os.Message?
+                        ): Boolean {
+                            Log.d(TAG, "onCreateWindow: isDialog=$isDialog, isUserGesture=$isUserGesture")
+                            // Neue Fenster im gleichen WebView öffnen
+                            val transport = resultMsg?.obj as? WebView.WebViewTransport
+                            transport?.webView = view
+                            resultMsg?.sendToTarget()
+                            return true
+                        }
+
+                        override fun onCloseWindow(window: WebView?) {
+                            Log.d(TAG, "onCloseWindow called")
+                            super.onCloseWindow(window)
                         }
                     }
 
