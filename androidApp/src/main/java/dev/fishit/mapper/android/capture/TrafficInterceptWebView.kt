@@ -135,7 +135,33 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         settings.setSupportMultipleWindows(false)
         settings.javaScriptCanOpenWindowsAutomatically = false
 
-        // User Agent setzen (wie normaler Chrome)
+        // WICHTIG: Mixed Content erlauben (HTTPS-Seiten mit HTTP-Ressourcen)
+        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+
+        // Third-Party Cookies erlauben (für Login-Sessions)
+        android.webkit.CookieManager.getInstance().apply {
+            setAcceptCookie(true)
+            setAcceptThirdPartyCookies(this@TrafficInterceptWebView, true)
+        }
+
+        // Zoom und Viewport korrekt konfigurieren
+        settings.setSupportZoom(true)
+        settings.builtInZoomControls = true
+        settings.displayZoomControls = false
+        settings.useWideViewPort = true
+        settings.loadWithOverviewMode = true
+
+        // Media Autoplay erlauben (manche Seiten brauchen das)
+        settings.mediaPlaybackRequiresUserGesture = false
+
+        // Geolocation erlauben (falls benötigt)
+        settings.setGeolocationEnabled(true)
+
+        // File Access (für Upload-Formulare)
+        settings.allowFileAccess = true
+        settings.allowContentAccess = true
+
+        // User Agent setzen (wie normaler Chrome, NICHT als WebView erkennbar)
         settings.userAgentString = settings.userAgentString.replace("; wv", "")
 
         // JavaScript Interface für Capture
@@ -144,13 +170,156 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         // WebViewClient für Page Events
         webViewClient = InterceptingWebViewClient()
 
-        // WebChromeClient für Console Logs (Debug)
-        webChromeClient = object : WebChromeClient() {
-            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                // Debug: JS Console Messages loggen
-                return super.onConsoleMessage(consoleMessage)
+        // WebChromeClient für erweiterte Features
+        webChromeClient = FullFeaturedChromeClient()
+    }
+
+    /**
+     * Vollständiger WebChromeClient für alle Website-Features.
+     */
+    private inner class FullFeaturedChromeClient : WebChromeClient() {
+
+        // File Upload Support (Input type="file")
+        override fun onShowFileChooser(
+            webView: WebView?,
+            filePathCallback: ValueCallback<Array<android.net.Uri>>?,
+            fileChooserParams: FileChooserParams?
+        ): Boolean {
+            // Speichere Callback für späteren Aufruf
+            pendingFileCallback?.onReceiveValue(null)
+            pendingFileCallback = filePathCallback
+
+            // Öffne System File Picker
+            try {
+                val intent = fileChooserParams?.createIntent()
+                if (intent != null && context is android.app.Activity) {
+                    (context as android.app.Activity).startActivityForResult(intent, FILE_CHOOSER_REQUEST)
+                    return true
+                }
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "File chooser error: ${e.message}")
             }
+
+            filePathCallback?.onReceiveValue(null)
+            pendingFileCallback = null
+            return false
         }
+
+        // Geolocation Permission
+        override fun onGeolocationPermissionsShowPrompt(
+            origin: String?,
+            callback: GeolocationPermissions.Callback?
+        ) {
+            // Automatisch erlauben (für Standort-basierte Seiten)
+            callback?.invoke(origin, true, false)
+        }
+
+        // JavaScript Alert/Confirm/Prompt Dialogs
+        override fun onJsAlert(
+            view: WebView?,
+            url: String?,
+            message: String?,
+            result: JsResult?
+        ): Boolean {
+            android.util.Log.d(TAG, "[JS Alert] $message")
+            result?.confirm()
+            return true
+        }
+
+        override fun onJsConfirm(
+            view: WebView?,
+            url: String?,
+            message: String?,
+            result: JsResult?
+        ): Boolean {
+            android.util.Log.d(TAG, "[JS Confirm] $message")
+            result?.confirm()
+            return true
+        }
+
+        override fun onJsPrompt(
+            view: WebView?,
+            url: String?,
+            message: String?,
+            defaultValue: String?,
+            result: JsPromptResult?
+        ): Boolean {
+            android.util.Log.d(TAG, "[JS Prompt] $message")
+            result?.confirm(defaultValue ?: "")
+            return true
+        }
+
+        // Permission Request (Kamera, Mikrofon, etc.)
+        override fun onPermissionRequest(request: PermissionRequest?) {
+            // Alle Permissions erlauben (für Video-Calls, WebRTC, etc.)
+            request?.grant(request.resources)
+        }
+
+        // Console Messages für Debugging
+        override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+            val level = when (consoleMessage?.messageLevel()) {
+                ConsoleMessage.MessageLevel.ERROR -> "ERROR"
+                ConsoleMessage.MessageLevel.WARNING -> "WARN"
+                else -> "LOG"
+            }
+            android.util.Log.d(TAG, "[JS $level] ${consoleMessage?.message()}")
+            return true
+        }
+
+        // Progress Update
+        override fun onProgressChanged(view: WebView?, newProgress: Int) {
+            super.onProgressChanged(view, newProgress)
+            // Könnte für Progress-Bar verwendet werden
+        }
+
+        // Window Creation (für target="_blank" Links)
+        override fun onCreateWindow(
+            view: WebView?,
+            isDialog: Boolean,
+            isUserGesture: Boolean,
+            resultMsg: android.os.Message?
+        ): Boolean {
+            // Öffne in gleichem WebView statt neuem Fenster
+            view?.let { webView ->
+                val transport = resultMsg?.obj as? WebView.WebViewTransport
+                transport?.webView = webView
+                resultMsg?.sendToTarget()
+                return true
+            }
+            return false
+        }
+
+        // Fullscreen Support (für Videos)
+        private var customView: android.view.View? = null
+        private var customViewCallback: CustomViewCallback? = null
+
+        override fun onShowCustomView(view: android.view.View?, callback: CustomViewCallback?) {
+            customView = view
+            customViewCallback = callback
+            // Hier könnte Fullscreen-Logik implementiert werden
+        }
+
+        override fun onHideCustomView() {
+            customViewCallback?.onCustomViewHidden()
+            customView = null
+            customViewCallback = null
+        }
+    }
+
+    // File Chooser Callback
+    private var pendingFileCallback: ValueCallback<Array<android.net.Uri>>? = null
+
+    /**
+     * Muss von Activity aufgerufen werden nach File-Auswahl.
+     */
+    fun onFileChooserResult(resultCode: Int, data: android.content.Intent?) {
+        if (resultCode == android.app.Activity.RESULT_OK) {
+            val result = WebChromeClient.FileChooserParams.parseResult(resultCode, data)
+            pendingFileCallback?.onReceiveValue(result)
+        } else {
+            pendingFileCallback?.onReceiveValue(null)
+        }
+        pendingFileCallback = null
     }
 
     /**
@@ -343,6 +512,47 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         }
 
         /**
+         * SSL-Fehler behandeln - WICHTIG für manche Seiten!
+         * ACHTUNG: Im Produktionsbetrieb sollte dies dem User angezeigt werden.
+         */
+        @android.annotation.SuppressLint("WebViewClientOnReceivedSslError")
+        override fun onReceivedSslError(
+            view: WebView?,
+            handler: android.webkit.SslErrorHandler?,
+            error: android.net.http.SslError?
+        ) {
+            // SSL-Fehler loggen
+            android.util.Log.w(TAG, "SSL Error: ${error?.primaryError} for ${error?.url}")
+
+            // Im Debug-Modus: SSL-Fehler ignorieren um Traffic zu capturen
+            // HINWEIS: Für Produktion sollte hier ein User-Dialog kommen
+            handler?.proceed()
+
+            error?.url?.let { url ->
+                val event = PageEvent(
+                    url = url,
+                    title = "SSL Error: ${error.primaryError}",
+                    timestamp = Clock.System.now(),
+                    type = PageEventType.ERROR
+                )
+                _pageEvents.value = _pageEvents.value + event
+            }
+        }
+
+        /**
+         * HTTP Auth (Basic/Digest) - manche Seiten brauchen das
+         */
+        override fun onReceivedHttpAuthRequest(
+            view: WebView?,
+            handler: android.webkit.HttpAuthHandler?,
+            host: String?,
+            realm: String?
+        ) {
+            // Standard-Verhalten: Abbrechen (User muss sich im Browser einloggen)
+            handler?.cancel()
+        }
+
+        /**
          * Fängt ALLE Navigation-Requests ab (auch Redirects!).
          * Gibt false zurück damit WebView die Navigation durchführt,
          * aber wir loggen sie trotzdem.
@@ -385,16 +595,19 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         private const val TAG = "TrafficInterceptWebView"
         private const val BRIDGE_NAME = "FishIT"
         private const val MAX_BODY_SIZE = 1024 * 1024 // 1 MB
+        const val FILE_CHOOSER_REQUEST = 1001
 
         /**
          * JavaScript für VOLLSTÄNDIGE Traffic-Interception:
          * - XHR (XMLHttpRequest)
          * - Fetch API
+         * - WebSocket (Real-time Kommunikation)
          * - Redirects (durch Response-Analyse)
          * - Cookies (document.cookie Hook)
          * - sendBeacon (Analytics)
          * - Form Submissions
          * - User Actions (Click, Submit, Input)
+         * - Service Worker fetch events
          *
          * KEIN HttpCanary nötig - die App fängt ALLES selbst ab!
          */
@@ -739,7 +952,103 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         } catch(e) {}
     });
 
-    bridge.log('FishIT interceptors injected successfully - capturing ALL traffic');
+    // ==================== WebSocket Interception ====================
+    const OriginalWebSocket = window.WebSocket;
+
+    window.WebSocket = function(url, protocols) {
+        const wsId = generateId();
+        bridge.log('WebSocket connecting: ' + url);
+
+        try {
+            bridge.captureRequest(wsId, 'WEBSOCKET', url, '{}', null);
+        } catch(e) {}
+
+        const ws = protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
+
+        ws.addEventListener('open', function() {
+            try {
+                bridge.captureResponse(wsId, 101, '{"Upgrade": "websocket"}', null);
+            } catch(e) {}
+        });
+
+        ws.addEventListener('message', function(event) {
+            try {
+                const data = typeof event.data === 'string' ? event.data.substring(0, 1000) : '[Binary]';
+                bridge.captureUserAction('websocket_message', url, data);
+            } catch(e) {}
+        });
+
+        ws.addEventListener('error', function() {
+            try {
+                bridge.captureResponse(wsId, 0, '{"X-FishIT-Error": "WebSocket Error"}', null);
+            } catch(e) {}
+        });
+
+        ws.addEventListener('close', function(event) {
+            try {
+                bridge.captureUserAction('websocket_close', url, 'Code: ' + event.code);
+            } catch(e) {}
+        });
+
+        // Intercept send
+        const originalSend = ws.send;
+        ws.send = function(data) {
+            try {
+                const msg = typeof data === 'string' ? data.substring(0, 1000) : '[Binary]';
+                bridge.captureUserAction('websocket_send', url, msg);
+            } catch(e) {}
+            return originalSend.apply(ws, arguments);
+        };
+
+        return ws;
+    };
+
+    // Copy static properties
+    window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+    window.WebSocket.OPEN = OriginalWebSocket.OPEN;
+    window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
+    window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
+    window.WebSocket.prototype = OriginalWebSocket.prototype;
+
+    // ==================== EventSource (Server-Sent Events) ====================
+    if (window.EventSource) {
+        const OriginalEventSource = window.EventSource;
+
+        window.EventSource = function(url, config) {
+            const sseId = generateId();
+            bridge.log('EventSource connecting: ' + url);
+
+            try {
+                bridge.captureRequest(sseId, 'SSE', url, '{}', null);
+            } catch(e) {}
+
+            const es = new OriginalEventSource(url, config);
+
+            es.addEventListener('open', function() {
+                try {
+                    bridge.captureResponse(sseId, 200, '{"Content-Type": "text/event-stream"}', null);
+                } catch(e) {}
+            });
+
+            es.addEventListener('message', function(event) {
+                try {
+                    bridge.captureUserAction('sse_message', url, event.data.substring(0, 500));
+                } catch(e) {}
+            });
+
+            es.addEventListener('error', function() {
+                try {
+                    bridge.captureResponse(sseId, 0, '{"X-FishIT-Error": "SSE Error"}', null);
+                } catch(e) {}
+            });
+
+            return es;
+        };
+
+        window.EventSource.prototype = OriginalEventSource.prototype;
+    }
+
+    bridge.log('FishIT interceptors injected successfully - capturing ALL traffic including WebSockets');
 })();
 """
     }
