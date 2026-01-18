@@ -1,5 +1,6 @@
 package dev.fishit.mapper.android.ui.project
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -7,9 +8,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -29,7 +32,6 @@ import dev.fishit.mapper.android.ui.common.SimpleVmFactory
 import dev.fishit.mapper.contract.ProjectId
 
 private enum class ProjectTab(val label: String) {
-    Browser("Browser"),
     Capture("Capture"),
     Graph("Graph"),
     Sessions("Sessions"),
@@ -57,7 +59,7 @@ fun ProjectHomeScreen(
     )
     val state by vm.state.collectAsState()
 
-    var tab by remember { mutableStateOf(ProjectTab.Browser) }
+    var tab by remember { mutableStateOf(ProjectTab.Capture) }
 
     Scaffold(
         topBar = {
@@ -77,12 +79,6 @@ fun ProjectHomeScreen(
         },
         bottomBar = {
             NavigationBar {
-                NavigationBarItem(
-                    selected = tab == ProjectTab.Browser,
-                    onClick = { tab = ProjectTab.Browser },
-                    label = { Text(ProjectTab.Browser.label) },
-                    icon = { Text("🌍") }
-                )
                 NavigationBarItem(
                     selected = tab == ProjectTab.Capture,
                     onClick = {
@@ -136,23 +132,33 @@ fun ProjectHomeScreen(
             } else {
                 Box(modifier = Modifier.fillMaxSize()) {
                     when (tab) {
-                        ProjectTab.Browser -> BrowserScreen(
-                            projectMeta = state.meta,
-                            isRecording = state.isRecording,
-                            liveEvents = state.liveEvents,
-                            onStartRecording = { url -> vm.startRecording(url) },
-                            onStopRecording = { finalUrl -> vm.stopRecording(finalUrl) },
-                            onRecorderEvent = { event -> vm.onRecorderEvent(event) }
-                        )
-
                         ProjectTab.Capture -> {
                             // Wird über Navigation gehandhabt via onOpenCapture
-                            // Fallback: Zeige Hinweis
+                            // Fallback: Zeige Hinweis zum Öffnen
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = androidx.compose.ui.Alignment.Center
                             ) {
-                                Text("Öffne Advanced Capture...")
+                                Column(
+                                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Text("📡", style = MaterialTheme.typography.displayLarge)
+                                    Text(
+                                        "Traffic Capture",
+                                        style = MaterialTheme.typography.headlineMedium
+                                    )
+                                    Text(
+                                        "Tippe auf den Tab um den Capture-Browser zu öffnen",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (onOpenCapture != null) {
+                                        Button(onClick = { onOpenCapture(projectId) }) {
+                                            Text("Capture öffnen")
+                                        }
+                                    }
+                                }
                             }
                         }
 

@@ -73,12 +73,16 @@ fun CaptureWebViewScreen(
     var showChainpointDialog by remember { mutableStateOf(false) }
     var showSessionEditor by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var showSessionsList by remember { mutableStateOf(false) }
     var pendingRecordUrl by remember { mutableStateOf<String?>(null) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
+    // Session für Export speichern (bleibt erhalten nach Stop)
+    var sessionToExport by remember { mutableStateOf<CaptureSessionManager.CaptureSession?>(null) }
 
     // Flows sammeln
     val currentSession by sessionManager.currentSession.collectAsState()
+    val completedSessions by sessionManager.completedSessions.collectAsState()
     val isRecording by sessionManager.isRecording.collectAsState()
     val exchanges by webView.capturedExchanges.collectAsState()
     val userActions by webView.userActions.collectAsState()
@@ -156,9 +160,25 @@ fun CaptureWebViewScreen(
                             }
                         }
 
-                        // Export Button (wenn Session vorhanden)
-                        if (currentSession != null && !isRecording) {
-                            IconButton(onClick = { showExportDialog = true }) {
+                        // Sessions-Liste Button (wenn gespeicherte Sessions vorhanden)
+                        if (completedSessions.isNotEmpty()) {
+                            IconButton(onClick = { showSessionsList = true }) {
+                                BadgedBox(
+                                    badge = { Badge { Text("${completedSessions.size}") } }
+                                ) {
+                                    Icon(Icons.Default.History, "Gespeicherte Sessions")
+                                }
+                            }
+                        }
+
+                        // Export Button (wenn Session zum Exportieren vorhanden)
+                        if (sessionToExport != null || (currentSession != null && !isRecording)) {
+                            IconButton(onClick = { 
+                                if (sessionToExport == null && currentSession != null) {
+                                    sessionToExport = currentSession
+                                }
+                                showExportDialog = true 
+                            }) {
                                 Icon(Icons.Default.FileDownload, "Exportieren")
                             }
                         }
@@ -167,9 +187,11 @@ fun CaptureWebViewScreen(
                         IconButton(
                             onClick = {
                                 if (isRecording) {
-                                    // STOP Recording - zeige Export-Dialog
-                                    sessionManager.stopSession()
+                                    // STOP Recording - Session für Export speichern, dann Dialog zeigen
+                                    val stoppedSession = sessionManager.stopSession()
+                                    sessionToExport = stoppedSession
                                     showExportDialog = true
+                                    snackbarMessage = "Session '${stoppedSession.name}' gespeichert (${stoppedSession.exchangeCount} Requests)"
                                 } else {
                                     // START Recording - URL merken
                                     pendingRecordUrl = urlInput.ifBlank { currentUrl }
@@ -333,17 +355,34 @@ fun CaptureWebViewScreen(
         )
     }
 
-    // Export Dialog
-    if (showExportDialog && currentSession != null) {
+    // Export Dialog - nutzt sessionToExport statt currentSession
+    if (showExportDialog && sessionToExport != null) {
         ExportDialog(
-            session = currentSession!!,
+            session = sessionToExport!!,
             onDismiss = {
                 showExportDialog = false
-                // Optional: auch alte Callback aufrufen
-                onExportSession(currentSession!!)
+                // Callback für Navigation
+                onExportSession(sessionToExport!!)
             },
             onExportComplete = { message ->
                 snackbarMessage = message
+            }
+        )
+    }
+
+    // Sessions-Liste Dialog
+    if (showSessionsList) {
+        SavedSessionsDialog(
+            sessions = completedSessions,
+            onDismiss = { showSessionsList = false },
+            onSelectSession = { session ->
+                sessionToExport = session
+                showSessionsList = false
+                showExportDialog = true
+            },
+            onDeleteSession = { session ->
+                // TODO: Implementiere Session-Löschung
+                snackbarMessage = "Session '${session.name}' gelöscht"
             }
         )
     }
@@ -1456,4 +1495,146 @@ private fun TextEditDialog(
             }
         }
     )
+}
+
+/**
+ * Dialog zur Anzeige gespeicherter Sessions mit Export-Möglichkeit.
+ */
+@Composable
+private fun SavedSessionsDialog(
+    sessions: List<CaptureSessionManager.CaptureSession>,
+    onDismiss: () -> Unit,
+    onSelectSession: (CaptureSessionManager.CaptureSession) -> Unit,
+    onDeleteSession: (CaptureSessionManager.CaptureSession) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Gespeicherte Sessions (${sessions.size})") },
+        text = {
+            if (sessions.isEmpty()) {
+                Text("Keine gespeicherten Sessions vorhanden.")
+            } else {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(sessions.sortedByDescending { it.startedAt }) { session ->
+                        SavedSessionItem(
+                            session = session,
+                            onExport = { onSelectSession(session) },
+                            onDelete = { onDeleteSession(session) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Schließen")
+            }
+        }
+    )
+}
+
+/**
+ * Einzelnes Session-Item in der Liste.
+ */
+@Composable
+private fun SavedSessionItem(
+    session: CaptureSessionManager.CaptureSession,
+    onExport: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = session.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = formatSessionDate(session.startedAt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Row {
+                    IconButton(onClick = onExport) {
+                        Icon(
+                            Icons.Default.FileDownload,
+                            contentDescription = "Exportieren",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Löschen",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "📡 ${session.exchangeCount} Requests",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    text = "👆 ${session.actionCount} Actions",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                session.duration?.let { durationMs ->
+                    Text(
+                        text = "⏱️ ${formatDuration(durationMs)}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+            
+            session.targetUrl?.let { url ->
+                Text(
+                    text = url,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+    }
+}
+
+private fun formatSessionDate(instant: kotlinx.datetime.Instant): String {
+    // Einfaches Format ohne TimeZone-Konvertierung
+    val isoString = instant.toString() // Format: 2024-01-15T10:30:00Z
+    return isoString.take(16).replace("T", " ")
+}
+
+private fun formatDuration(durationMs: Long): String {
+    val seconds = durationMs / 1000
+    val minutes = seconds / 60
+    val hours = minutes / 60
+    return when {
+        hours > 0 -> "${hours}h ${minutes % 60}m"
+        minutes > 0 -> "${minutes}m ${seconds % 60}s"
+        else -> "${seconds}s"
+    }
 }
