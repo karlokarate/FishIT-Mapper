@@ -3,6 +3,11 @@
     <cache-path name="cache" path="." />
     <files-path name="files" path="." />
 
+    <!-- Export Temp Files (für direktes Teilen) -->
+    <cache-path
+        name="exports"
+        path="exports/" />
+
     <!-- HAR Export Files -->
     <files-path
         name="har_exports"

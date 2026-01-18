@@ -121,6 +121,9 @@ dependencies {
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.documentfile)
 
+    // Testing
+    testImplementation(kotlin("test"))
+
     // Note: BouncyCastle and OkHttp removed - no longer needed without internal MITM proxy
     // Traffic capture is handled externally by HttpCanary
 }

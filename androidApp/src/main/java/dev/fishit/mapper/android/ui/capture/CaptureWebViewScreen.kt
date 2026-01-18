@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.fishit.mapper.android.capture.CaptureSessionManager
 import dev.fishit.mapper.android.capture.TrafficInterceptWebView
+import dev.fishit.mapper.android.ui.export.ExportDialog
 import kotlinx.coroutines.launch
 
 /**
@@ -71,7 +72,10 @@ fun CaptureWebViewScreen(
     var showStatsPanel by remember { mutableStateOf(false) }
     var showChainpointDialog by remember { mutableStateOf(false) }
     var showSessionEditor by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
     var pendingRecordUrl by remember { mutableStateOf<String?>(null) }
+    var snackbarMessage by remember { mutableStateOf<String?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // Flows sammeln
     val currentSession by sessionManager.currentSession.collectAsState()
@@ -127,6 +131,7 @@ fun CaptureWebViewScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             Column {
                 // Top App Bar
@@ -151,13 +156,20 @@ fun CaptureWebViewScreen(
                             }
                         }
 
+                        // Export Button (wenn Session vorhanden)
+                        if (currentSession != null && !isRecording) {
+                            IconButton(onClick = { showExportDialog = true }) {
+                                Icon(Icons.Default.FileDownload, "Exportieren")
+                            }
+                        }
+
                         // Recording Button
                         IconButton(
                             onClick = {
                                 if (isRecording) {
-                                    // STOP Recording
-                                    val session = sessionManager.stopSession()
-                                    onExportSession(session)
+                                    // STOP Recording - zeige Export-Dialog
+                                    sessionManager.stopSession()
+                                    showExportDialog = true
                                 } else {
                                     // START Recording - URL merken
                                     pendingRecordUrl = urlInput.ifBlank { currentUrl }
@@ -319,6 +331,29 @@ fun CaptureWebViewScreen(
                 sessionManager.updateExchangeResponseBody(exchangeId, body)
             }
         )
+    }
+
+    // Export Dialog
+    if (showExportDialog && currentSession != null) {
+        ExportDialog(
+            session = currentSession!!,
+            onDismiss = {
+                showExportDialog = false
+                // Optional: auch alte Callback aufrufen
+                onExportSession(currentSession!!)
+            },
+            onExportComplete = { message ->
+                snackbarMessage = message
+            }
+        )
+    }
+
+    // Snackbar für Export-Nachrichten
+    LaunchedEffect(snackbarMessage) {
+        snackbarMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            snackbarMessage = null
+        }
     }
 }
 
