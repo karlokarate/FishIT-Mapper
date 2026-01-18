@@ -29,7 +29,7 @@ class StateGraphExporter {
      */
     fun generateSessionStateGraph(timeline: NormalizedTimeline): String {
         val sb = StringBuilder()
-        
+
         sb.appendLine("# Session State-Graph")
         sb.appendLine()
         sb.appendLine("**Session:** ${timeline.sessionName}")
@@ -38,30 +38,30 @@ class StateGraphExporter {
         sb.appendLine("**User-Actions:** ${timeline.metadata.userActionCount}")
         sb.appendLine("**States:** ${timeline.metadata.stateCount}")
         sb.appendLine()
-        
+
         // Haupt State-Graph
         sb.appendLine("## Vollständiger Session-Flow")
         sb.appendLine()
         sb.appendLine("```mermaid")
         sb.appendLine("stateDiagram-v2")
-        
+
         if (timeline.stateTransitions.isEmpty()) {
             sb.appendLine("    [*] --> no_state_changes")
             sb.appendLine("    note right of no_state_changes: Keine State-Änderungen erkannt")
         } else {
             // Initial State
             sb.appendLine("    [*] --> initial")
-            
+
             // Alle Transitions
             val uniqueStates = mutableSetOf<String>()
             timeline.stateTransitions.forEach { transition ->
                 uniqueStates.add(transition.fromState)
                 uniqueStates.add(transition.toState)
-                
+
                 val label = sanitizeLabel(transition.description).take(30)
                 sb.appendLine("    ${sanitizeStateName(transition.fromState)} --> ${sanitizeStateName(transition.toState)}: $label")
             }
-            
+
             // State Notes mit Timestamps
             timeline.stateTransitions
                 .groupBy { it.toState }
@@ -72,45 +72,45 @@ class StateGraphExporter {
                         sb.appendLine("    note right of ${sanitizeStateName(state)}: Erste Occurrence: $time")
                     }
                 }
-            
+
             // Final State (letzter State)
             val lastState = timeline.stateTransitions.lastOrNull()?.toState
             if (lastState != null) {
                 sb.appendLine("    ${sanitizeStateName(lastState)} --> [*]")
             }
         }
-        
+
         sb.appendLine("```")
         sb.appendLine()
-        
+
         return sb.toString()
     }
-    
+
     /**
      * Generiert State-Graphs gruppiert nach User-Actions.
      */
     fun generatePerActionStateGraphs(timeline: NormalizedTimeline): String {
         val sb = StringBuilder()
-        
+
         sb.appendLine("# State-Graphs pro User-Action")
         sb.appendLine()
         sb.appendLine("Jeder Abschnitt zeigt den State-Übergang für eine einzelne User-Aktion.")
         sb.appendLine()
-        
+
         // User-Actions mit ihren State-Transitions
         val userActions = timeline.getUserActions()
         val transitionsByAction = timeline.stateTransitions
             .groupBy { it.triggeredBy }
-        
+
         if (userActions.isEmpty()) {
             sb.appendLine("*Keine User-Actions in dieser Session.*")
             return sb.toString()
         }
-        
+
         userActions.forEachIndexed { index, action ->
             val transitions = transitionsByAction[action.id] ?: emptyList()
             val correlatedRequests = timeline.getCorrelatedRequests(action.id)
-            
+
             sb.appendLine("## ${index + 1}. ${action.label}")
             sb.appendLine()
             sb.appendLine("**Zeit:** ${formatTimestamp(action.timestamp)}")
@@ -118,11 +118,11 @@ class StateGraphExporter {
             action.details.selector?.let { sb.appendLine("**Element:** `$it`") }
             sb.appendLine("**Korrelierte Requests:** ${correlatedRequests.size}")
             sb.appendLine()
-            
+
             // Mini State-Graph für diese Action
             sb.appendLine("```mermaid")
             sb.appendLine("stateDiagram-v2")
-            
+
             if (transitions.isEmpty()) {
                 sb.appendLine("    [*] --> no_change: ${sanitizeLabel(action.label.take(20))}")
                 sb.appendLine("    no_change --> [*]")
@@ -131,10 +131,10 @@ class StateGraphExporter {
                     sb.appendLine("    ${sanitizeStateName(transition.fromState)} --> ${sanitizeStateName(transition.toState)}")
                 }
             }
-            
+
             sb.appendLine("```")
             sb.appendLine()
-            
+
             // Korrelierte Requests auflisten
             if (correlatedRequests.isNotEmpty()) {
                 sb.appendLine("### Ausgelöste HTTP-Requests")
@@ -143,13 +143,13 @@ class StateGraphExporter {
                     val method = request.details.method ?: "?"
                     val path = request.details.path?.take(40) ?: "?"
                     val status = timeline.events
-                        .find { 
-                            it.type == EventType.HTTP_RESPONSE && 
+                        .find {
+                            it.type == EventType.HTTP_RESPONSE &&
                             it.timestamp > request.timestamp &&
                             it.details.host == request.details.host
                         }
                         ?.details?.statusCode
-                    
+
                     val statusIcon = when {
                         status == null -> "⏳"
                         status in 200..299 -> "✅"
@@ -157,7 +157,7 @@ class StateGraphExporter {
                         status in 400..499 -> "⚠️"
                         else -> "❌"
                     }
-                    
+
                     sb.appendLine("- $statusIcon `$method` $path ${status?.let { "($it)" } ?: ""}")
                 }
                 if (correlatedRequests.size > 5) {
@@ -165,28 +165,28 @@ class StateGraphExporter {
                 }
                 sb.appendLine()
             }
-            
+
             sb.appendLine("---")
             sb.appendLine()
         }
-        
+
         return sb.toString()
     }
-    
+
     /**
      * Generiert einen kombinierten Flow mit States und HTTP-Requests.
      */
     fun generateCombinedFlowGraph(timeline: NormalizedTimeline): String {
         val sb = StringBuilder()
-        
+
         sb.appendLine("# Kombinierter Session-Flow")
         sb.appendLine()
         sb.appendLine("Zeigt States, User-Actions und HTTP-Requests in einem Diagramm.")
         sb.appendLine()
-        
+
         sb.appendLine("```mermaid")
         sb.appendLine("flowchart TD")
-        
+
         // Subgraphs für verschiedene Kategorien
         sb.appendLine("    subgraph user[\"👤 User-Actions\"]")
         timeline.getUserActions().take(10).forEachIndexed { index, action ->
@@ -196,12 +196,12 @@ class StateGraphExporter {
         }
         sb.appendLine("    end")
         sb.appendLine()
-        
+
         sb.appendLine("    subgraph states[\"🔄 States\"]")
         val uniqueStates = timeline.stateTransitions
             .flatMap { listOf(it.fromState, it.toState) }
             .distinct()
-        
+
         if (uniqueStates.isEmpty()) {
             sb.appendLine("        state_none[\"Keine States\"]")
         } else {
@@ -212,7 +212,7 @@ class StateGraphExporter {
         }
         sb.appendLine("    end")
         sb.appendLine()
-        
+
         sb.appendLine("    subgraph requests[\"🌐 HTTP-Requests\"]")
         timeline.getHttpRequests().take(8).forEachIndexed { index, request ->
             val id = "req_$index"
@@ -222,25 +222,25 @@ class StateGraphExporter {
         }
         sb.appendLine("    end")
         sb.appendLine()
-        
+
         // Verbindungen zwischen Actions und States
         timeline.stateTransitions.take(8).forEachIndexed { index, transition ->
             val actionIndex = timeline.getUserActions().indexOfFirst { it.id == transition.triggeredBy }
             if (actionIndex >= 0 && actionIndex < 10) {
                 val fromStateIndex = uniqueStates.indexOf(transition.fromState)
                 val toStateIndex = uniqueStates.indexOf(transition.toState)
-                
+
                 if (fromStateIndex >= 0 && toStateIndex >= 0) {
                     sb.appendLine("    action_$actionIndex --> state_$toStateIndex")
                 }
             }
         }
-        
+
         // Verbindungen zwischen Actions und Requests
         timeline.getUserActions().take(10).forEachIndexed { actionIndex, action ->
             val correlated = timeline.getCorrelatedRequests(action.id)
             val allRequests = timeline.getHttpRequests()
-            
+
             correlated.take(2).forEach { request ->
                 val reqIndex = allRequests.indexOf(request)
                 if (reqIndex >= 0 && reqIndex < 8) {
@@ -248,13 +248,13 @@ class StateGraphExporter {
                 }
             }
         }
-        
+
         sb.appendLine()
         sb.appendLine("    classDef userAction fill:#4CAF50,color:white")
         sb.appendLine("    classDef stateNode fill:#2196F3,color:white")
         sb.appendLine("    classDef requestNode fill:#FF9800,color:white")
         sb.appendLine()
-        
+
         timeline.getUserActions().take(10).forEachIndexed { index, _ ->
             sb.appendLine("    class action_$index userAction")
         }
@@ -264,33 +264,33 @@ class StateGraphExporter {
         timeline.getHttpRequests().take(8).forEachIndexed { index, _ ->
             sb.appendLine("    class req_$index requestNode")
         }
-        
+
         sb.appendLine("```")
         sb.appendLine()
-        
+
         return sb.toString()
     }
-    
+
     /**
      * Generiert eine Summary der State-Verteilung.
      */
     fun generateStateSummary(timeline: NormalizedTimeline): String {
         val sb = StringBuilder()
-        
+
         sb.appendLine("# State-Verteilung Summary")
         sb.appendLine()
-        
+
         val stateOccurrences = timeline.stateTransitions
             .groupingBy { it.toState }
             .eachCount()
             .toList()
             .sortedByDescending { it.second }
-        
+
         if (stateOccurrences.isEmpty()) {
             sb.appendLine("*Keine State-Übergänge in dieser Session.*")
             return sb.toString()
         }
-        
+
         // Pie Chart
         sb.appendLine("## Verteilung der States")
         sb.appendLine()
@@ -302,31 +302,31 @@ class StateGraphExporter {
         }
         sb.appendLine("```")
         sb.appendLine()
-        
+
         // Tabelle
         sb.appendLine("## State-Details")
         sb.appendLine()
         sb.appendLine("| State | Anzahl | Erste Occurrence | Letzte Occurrence |")
         sb.appendLine("|-------|--------|------------------|-------------------|")
-        
+
         stateOccurrences.forEach { (state, count) ->
             val transitions = timeline.stateTransitions.filter { it.toState == state }
             val firstTime = transitions.minByOrNull { it.timestamp }?.timestamp?.let { formatTime(it) } ?: "-"
             val lastTime = transitions.maxByOrNull { it.timestamp }?.timestamp?.let { formatTime(it) } ?: "-"
-            
+
             sb.appendLine("| $state | $count | $firstTime | $lastTime |")
         }
         sb.appendLine()
-        
+
         return sb.toString()
     }
-    
+
     /**
      * Generiert den vollständigen State-Graph Export.
      */
     fun generateFullExport(timeline: NormalizedTimeline): String {
         val sb = StringBuilder()
-        
+
         // Header
         sb.appendLine("---")
         sb.appendLine("title: State-Graph Export - ${timeline.sessionName}")
@@ -334,23 +334,23 @@ class StateGraphExporter {
         sb.appendLine("session_id: ${timeline.sessionId}")
         sb.appendLine("---")
         sb.appendLine()
-        
+
         // Alle Sections
         sb.append(generateSessionStateGraph(timeline))
         sb.append(generateStateSummary(timeline))
         sb.append(generatePerActionStateGraphs(timeline))
         sb.append(generateCombinedFlowGraph(timeline))
-        
+
         // Footer
         sb.appendLine("---")
         sb.appendLine()
         sb.appendLine("*Generiert von FishIT-Mapper State-Graph Exporter*")
-        
+
         return sb.toString()
     }
-    
+
     // === Helper Methods ===
-    
+
     private fun sanitizeStateName(name: String): String {
         return name
             .replace(Regex("[^a-zA-Z0-9_]"), "_")
@@ -358,7 +358,7 @@ class StateGraphExporter {
             .trim('_')
             .ifEmpty { "unknown" }
     }
-    
+
     private fun sanitizeLabel(label: String): String {
         return label
             .replace("\"", "'")
@@ -366,11 +366,11 @@ class StateGraphExporter {
             .replace(Regex("\\s+"), " ")
             .trim()
     }
-    
+
     private fun formatTimestamp(instant: Instant): String {
         return instant.toString().replace("T", " ").substringBefore(".")
     }
-    
+
     private fun formatTime(instant: Instant): String {
         return instant.toString().substringAfter("T").substringBefore(".")
     }

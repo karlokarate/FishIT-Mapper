@@ -64,7 +64,7 @@ data class NormalizedTimeline(
     fun getCorrelatedRequests(actionId: String, windowMs: Long = 2000): List<TimelineEvent> {
         val action = events.find { it.id == actionId } ?: return emptyList()
         val actionTime = action.timestamp.toEpochMilliseconds()
-        
+
         return events.filter { event ->
             event.type == EventType.HTTP_REQUEST &&
             event.timestamp.toEpochMilliseconds() in actionTime..(actionTime + windowMs)
@@ -119,17 +119,17 @@ data class EventDetails(
     val responseBody: String? = null,
     val headers: Map<String, String>? = null,
     val durationMs: Long? = null,
-    
+
     // Für User-Action
     val actionType: String? = null,     // click, input, submit, navigation
     val selector: String? = null,        // CSS-Selector oder Element-Beschreibung
     val value: String? = null,           // Eingegebener Wert (ohne Passwörter)
     val elementText: String? = null,     // Text des geklickten Elements
-    
+
     // Für State
     val stateName: String? = null,
     val stateData: Map<String, String>? = null,
-    
+
     // Für Fehler
     val errorMessage: String? = null,
     val errorCode: String? = null
@@ -192,10 +192,10 @@ data class TimelineMetadata(
  * Konvertiert HAR/Exchanges in eine normalisierte Timeline.
  */
 class TimelineNormalizer {
-    
+
     private var eventCounter = 0
     private var stateCounter = 0
-    
+
     /**
      * Erstellt eine normalisierte Timeline aus Exchanges und User-Actions.
      */
@@ -209,35 +209,35 @@ class TimelineNormalizer {
     ): NormalizedTimeline {
         eventCounter = 0
         stateCounter = 0
-        
+
         // Participants aus Hosts extrahieren
         val participants = buildParticipants(exchanges)
-        
+
         // Events erstellen und sortieren
         val events = mutableListOf<TimelineEvent>()
-        
+
         // User-Actions zu Events
         userActions.forEach { action ->
             events.add(userActionToEvent(action))
         }
-        
+
         // HTTP-Exchanges zu Events
         exchanges.forEach { exchange ->
             events.addAll(exchangeToEvents(exchange, participants))
         }
-        
+
         // Nach Zeit sortieren
         events.sortBy { it.timestamp }
-        
+
         // Korrelation durchführen
         val correlatedEvents = correlateEvents(events, userActions)
-        
+
         // State-Transitions aus User-Actions ableiten
         val stateTransitions = buildStateTransitions(correlatedEvents)
-        
+
         // Metadata berechnen
         val metadata = calculateMetadata(correlatedEvents, exchanges, stateTransitions)
-        
+
         return NormalizedTimeline(
             sessionId = sessionId,
             sessionName = sessionName,
@@ -249,10 +249,10 @@ class TimelineNormalizer {
             metadata = metadata
         )
     }
-    
+
     private fun buildParticipants(exchanges: List<EngineExchange>): List<Participant> {
         val participants = mutableListOf<Participant>()
-        
+
         // User und Browser sind immer dabei
         participants.add(Participant(
             id = "user",
@@ -260,20 +260,20 @@ class TimelineNormalizer {
             type = ParticipantType.USER,
             emoji = "👤"
         ))
-        
+
         participants.add(Participant(
             id = "browser",
             name = "Browser",
             type = ParticipantType.BROWSER,
             emoji = "🌐"
         ))
-        
+
         // Hosts aus Exchanges extrahieren
         val hosts = exchanges
             .mapNotNull { it.request.host }
             .distinct()
             .take(5)
-        
+
         hosts.forEachIndexed { index, host ->
             val type = classifyHost(host)
             participants.add(Participant(
@@ -284,10 +284,10 @@ class TimelineNormalizer {
                 host = host
             ))
         }
-        
+
         return participants
     }
-    
+
     private fun classifyHost(host: String): ParticipantType {
         return when {
             host.contains("auth") || host.contains("login") || host.contains("oauth") -> ParticipantType.AUTH_SERVER
@@ -298,7 +298,7 @@ class TimelineNormalizer {
             else -> ParticipantType.OTHER
         }
     }
-    
+
     private fun getHostEmoji(type: ParticipantType, host: String): String {
         return when (type) {
             ParticipantType.AUTH_SERVER -> "🔐"
@@ -309,7 +309,7 @@ class TimelineNormalizer {
             else -> "🖥️"
         }
     }
-    
+
     private fun getShortHostName(host: String): String {
         return host
             .removePrefix("www.")
@@ -318,7 +318,7 @@ class TimelineNormalizer {
             ?.take(15)
             ?: host.take(15)
     }
-    
+
     private fun userActionToEvent(action: MermaidSequenceExporter.UserActionEvent): TimelineEvent {
         val actionEmoji = when (action.type.lowercase()) {
             "click" -> "🖱️"
@@ -327,7 +327,7 @@ class TimelineNormalizer {
             "navigation" -> "🔗"
             else -> "👆"
         }
-        
+
         return TimelineEvent(
             id = "event_${++eventCounter}",
             type = EventType.USER_ACTION,
@@ -343,18 +343,18 @@ class TimelineNormalizer {
             )
         )
     }
-    
+
     private fun exchangeToEvents(
         exchange: EngineExchange,
         participants: List<Participant>
     ): List<TimelineEvent> {
         val events = mutableListOf<TimelineEvent>()
-        
+
         val host = exchange.request.host ?: "unknown"
         val serverParticipant = participants.find { it.host == host }
             ?: participants.find { it.type == ParticipantType.API_SERVER }
             ?: participants.last()
-        
+
         // Request Event
         events.add(TimelineEvent(
             id = "event_${++eventCounter}",
@@ -373,7 +373,7 @@ class TimelineNormalizer {
                 contentType = exchange.request.contentType
             )
         ))
-        
+
         // Response Event (wenn vorhanden)
         exchange.response?.let { response ->
             val statusEmoji = when {
@@ -383,11 +383,11 @@ class TimelineNormalizer {
                 response.status >= 500 -> "❌"
                 else -> "❓"
             }
-            
-            val duration = exchange.completedAt?.let { 
+
+            val duration = exchange.completedAt?.let {
                 it.toEpochMilliseconds() - exchange.startedAt.toEpochMilliseconds()
             }
-            
+
             events.add(TimelineEvent(
                 id = "event_${++eventCounter}",
                 type = EventType.HTTP_RESPONSE,
@@ -404,10 +404,10 @@ class TimelineNormalizer {
                 )
             ))
         }
-        
+
         return events
     }
-    
+
     private fun correlateEvents(
         events: List<TimelineEvent>,
         userActions: List<MermaidSequenceExporter.UserActionEvent>,
@@ -416,7 +416,7 @@ class TimelineNormalizer {
         val correlatedEvents = mutableListOf<TimelineEvent>()
         var currentActionId: String? = null
         var currentActionTime: Long? = null
-        
+
         events.forEach { event ->
             when (event.type) {
                 EventType.USER_ACTION -> {
@@ -426,8 +426,8 @@ class TimelineNormalizer {
                 }
                 EventType.HTTP_REQUEST -> {
                     val eventTime = event.timestamp.toEpochMilliseconds()
-                    val correlatedId = if (currentActionTime != null && 
-                        eventTime >= currentActionTime!! && 
+                    val correlatedId = if (currentActionTime != null &&
+                        eventTime >= currentActionTime!! &&
                         eventTime <= currentActionTime!! + windowMs) {
                         currentActionId
                     } else {
@@ -440,14 +440,14 @@ class TimelineNormalizer {
                 }
             }
         }
-        
+
         return correlatedEvents
     }
-    
+
     private fun buildStateTransitions(events: List<TimelineEvent>): List<StateTransition> {
         val transitions = mutableListOf<StateTransition>()
         var currentState = "initial"
-        
+
         events.filter { it.type == EventType.USER_ACTION }.forEach { event ->
             val newState = deriveState(event)
             if (newState != currentState) {
@@ -462,14 +462,14 @@ class TimelineNormalizer {
                 currentState = newState
             }
         }
-        
+
         return transitions
     }
-    
+
     private fun deriveState(event: TimelineEvent): String {
         val action = event.details.actionType?.lowercase() ?: ""
         val target = event.details.selector?.lowercase() ?: ""
-        
+
         return when {
             target.contains("login") || target.contains("signin") -> "authenticating"
             target.contains("logout") || target.contains("signout") -> "logged_out"
@@ -484,7 +484,7 @@ class TimelineNormalizer {
             else -> "interacting"
         }
     }
-    
+
     private fun calculateMetadata(
         events: List<TimelineEvent>,
         exchanges: List<EngineExchange>,
@@ -492,25 +492,25 @@ class TimelineNormalizer {
     ): TimelineMetadata {
         val userActions = events.count { it.type == EventType.USER_ACTION }
         val httpRequests = events.count { it.type == EventType.HTTP_REQUEST }
-        val errors = events.count { 
-            it.type == EventType.HTTP_RESPONSE && 
-            (it.details.statusCode ?: 0) >= 400 
+        val errors = events.count {
+            it.type == EventType.HTTP_RESPONSE &&
+            (it.details.statusCode ?: 0) >= 400
         }
-        
-        val correlatedPairs = events.count { 
-            it.type == EventType.HTTP_REQUEST && it.correlatedActionId != null 
+
+        val correlatedPairs = events.count {
+            it.type == EventType.HTTP_REQUEST && it.correlatedActionId != null
         }
-        
+
         val responseTimes = exchanges.mapNotNull { exchange ->
-            exchange.completedAt?.let { 
+            exchange.completedAt?.let {
                 it.toEpochMilliseconds() - exchange.startedAt.toEpochMilliseconds()
             }
         }
-        
+
         val avgResponseTime = if (responseTimes.isNotEmpty()) {
             responseTimes.average().toLong()
         } else null
-        
+
         return TimelineMetadata(
             totalEvents = events.size,
             userActionCount = userActions,
@@ -529,7 +529,7 @@ class TimelineNormalizer {
  * Extension: Timeline als JSON exportieren.
  */
 fun NormalizedTimeline.toJson(): String {
-    val json = Json { 
+    val json = Json {
         prettyPrint = true
         encodeDefaults = true
     }
