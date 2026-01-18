@@ -335,16 +335,21 @@ class SessionExportManagerTest {
             ExportFormat.CURL,
             ExportFormat.TYPESCRIPT,
             ExportFormat.MARKDOWN,
+            ExportFormat.MERMAID,
+            ExportFormat.MERMAID_CORRELATION,
+            ExportFormat.STATE_GRAPH,
+            ExportFormat.TIMELINE,
             ExportFormat.ZIP
         )
 
-        assertEquals(8, availableFormats.size)
+        assertEquals(12, availableFormats.size)
         assertTrue(availableFormats.contains(ExportFormat.HAR))
         assertTrue(availableFormats.contains(ExportFormat.ZIP))
     }
 
     @Test
     fun exportFormatEnumContainsExactly8Formats() {
-        assertEquals(8, ExportFormat.entries.size)
+        // Updated: Now 12 formats including MERMAID, MERMAID_CORRELATION, STATE_GRAPH, TIMELINE
+        assertEquals(12, ExportFormat.entries.size)
     }
 }
