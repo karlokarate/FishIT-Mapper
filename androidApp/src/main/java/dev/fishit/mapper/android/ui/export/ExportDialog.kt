@@ -314,6 +314,8 @@ private fun FormatItem(
         ExportFormat.MARKDOWN -> Icons.Default.Description
         ExportFormat.MERMAID -> Icons.Default.AccountTree
         ExportFormat.MERMAID_CORRELATION -> Icons.Default.Timeline
+        ExportFormat.STATE_GRAPH -> Icons.Default.BubbleChart
+        ExportFormat.TIMELINE -> Icons.Default.Schedule
         ExportFormat.ZIP -> Icons.Default.FolderZip
     }
 
@@ -327,6 +329,8 @@ private fun FormatItem(
         ExportFormat.MARKDOWN -> "Dokumentation mit Diagramm"
         ExportFormat.MERMAID -> "Sequenzdiagramm (Mermaid)"
         ExportFormat.MERMAID_CORRELATION -> "Actions → Requests Korrelation"
+        ExportFormat.STATE_GRAPH -> "State-Graph pro User-Aktion"
+        ExportFormat.TIMELINE -> "Normalisierte Timeline (JSON)"
         ExportFormat.ZIP -> "Alle Formate in einem Archiv"
     }
 

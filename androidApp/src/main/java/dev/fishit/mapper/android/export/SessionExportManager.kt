@@ -13,6 +13,10 @@ import dev.fishit.mapper.engine.export.ApiExporter
 import dev.fishit.mapper.engine.export.ExportOrchestrator
 import dev.fishit.mapper.engine.export.HarExporter
 import dev.fishit.mapper.engine.export.MermaidSequenceExporter
+import dev.fishit.mapper.engine.export.NormalizedTimeline
+import dev.fishit.mapper.engine.export.StateGraphExporter
+import dev.fishit.mapper.engine.export.TimelineNormalizer
+import dev.fishit.mapper.engine.export.toJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -49,6 +53,8 @@ class SessionExportManager(private val context: Context) {
     private val apiExporter = ApiExporter()
     private val harExporter = HarExporter()
     private val mermaidExporter = MermaidSequenceExporter()
+    private val stateGraphExporter = StateGraphExporter()
+    private val timelineNormalizer = TimelineNormalizer()
 
     /**
      * Export-Formate
@@ -68,6 +74,8 @@ class SessionExportManager(private val context: Context) {
         MARKDOWN(".md", "text/markdown", "Markdown", "Markdown Dokumentation"),
         MERMAID(".md", "text/markdown", "Mermaid", "Sequenzdiagramm (Mermaid)"),
         MERMAID_CORRELATION(".md", "text/markdown", "Mermaid Korrelation", "Korreliertes Sequenzdiagramm"),
+        STATE_GRAPH(".md", "text/markdown", "State-Graph", "State-Graph pro User-Aktion"),
+        TIMELINE(".json", "application/json", "Timeline", "Normalisierte Timeline (JSON)"),
         ZIP(".zip", "application/zip", "ZIP Bundle", "Alle Formate in einem ZIP-Archiv")
     }
 
@@ -226,6 +234,8 @@ class SessionExportManager(private val context: Context) {
             ExportFormat.MARKDOWN -> generateMarkdownExport(session, engineExchanges)
             ExportFormat.MERMAID -> generateMermaidExport(session, engineExchanges)
             ExportFormat.MERMAID_CORRELATION -> generateMermaidCorrelationExport(session, engineExchanges)
+            ExportFormat.STATE_GRAPH -> generateStateGraphExport(session, engineExchanges)
+            ExportFormat.TIMELINE -> generateTimelineExport(session, engineExchanges)
             ExportFormat.ZIP -> "" // ZIP wird separat behandelt
         }
     }
@@ -308,7 +318,7 @@ class SessionExportManager(private val context: Context) {
     ): String {
         // Generiere auch Mermaid-Diagramm für Markdown
         val mermaidDiagram = generateMermaidExport(session, exchanges)
-        
+
         return buildString {
             appendLine("# FishIT Session Export: ${session.name}")
             appendLine()
@@ -319,7 +329,7 @@ class SessionExportManager(private val context: Context) {
             appendLine("- **Exchanges**: ${session.exchanges.size}")
             appendLine("- **User Actions**: ${session.userActions.size}")
             appendLine()
-            
+
             // Sequenzdiagramm einbetten
             appendLine("## Sequenzdiagramm")
             appendLine()
@@ -363,7 +373,7 @@ class SessionExportManager(private val context: Context) {
             }
         }
     }
-    
+
     /**
      * Generiert ein Mermaid-Sequenzdiagramm.
      */
@@ -380,14 +390,14 @@ class SessionExportManager(private val context: Context) {
                 timestamp = action.timestamp
             )
         }
-        
+
         return mermaidExporter.generate(
             exchanges = exchanges,
             userActions = userActions,
             title = session.name
         )
     }
-    
+
     /**
      * Generiert ein korreliertes Mermaid-Sequenzdiagramm.
      * Zeigt User-Actions mit den davon ausgelösten HTTP-Requests.
@@ -405,13 +415,76 @@ class SessionExportManager(private val context: Context) {
                 timestamp = action.timestamp
             )
         }
-        
+
         return mermaidExporter.generateCorrelationDiagram(
             exchanges = exchanges,
             userActions = userActions,
             correlationWindowMs = 2000,
             title = session.name
         )
+    }
+
+    /**
+     * Erstellt eine normalisierte Timeline aus der Session.
+     * Diese dient als Basis für alle weiteren Exports (Mermaid, State-Graph).
+     *
+     * ## Pipeline
+     * ```
+     * HAR/Exchanges → NormalizedTimeline → Sequenzdiagramm (Mermaid)
+     *                                   → State-Graph (Mermaid)
+     *                                   → Flow-Diagramm
+     * ```
+     */
+    private fun createNormalizedTimeline(
+        session: CaptureSessionManager.CaptureSession,
+        exchanges: List<EngineExchange>
+    ): NormalizedTimeline {
+        // Konvertiere User Actions
+        val userActions = session.userActions.map { action ->
+            MermaidSequenceExporter.UserActionEvent(
+                type = action.type.name,
+                target = action.target,
+                value = action.value,
+                timestamp = action.timestamp
+            )
+        }
+
+        return timelineNormalizer.normalize(
+            sessionId = session.id,
+            sessionName = session.name,
+            exchanges = exchanges,
+            userActions = userActions,
+            startedAt = session.startedAt,
+            endedAt = session.stoppedAt
+        )
+    }
+
+    /**
+     * Generiert die normalisierte Timeline als JSON.
+     */
+    private fun generateTimelineExport(
+        session: CaptureSessionManager.CaptureSession,
+        exchanges: List<EngineExchange>
+    ): String {
+        val timeline = createNormalizedTimeline(session, exchanges)
+        return timeline.toJson()
+    }
+
+    /**
+     * Generiert State-Graphs pro User-Aktion.
+     *
+     * ## Features
+     * - Session-State-Graph (vollständiger Flow)
+     * - State-Summary (Verteilung)
+     * - Per-Action State-Graphs
+     * - Combined Flow-Graph
+     */
+    private fun generateStateGraphExport(
+        session: CaptureSessionManager.CaptureSession,
+        exchanges: List<EngineExchange>
+    ): String {
+        val timeline = createNormalizedTimeline(session, exchanges)
+        return stateGraphExporter.generateFullExport(timeline)
     }
 
     private fun createBlueprintFromExchanges(
@@ -551,7 +624,9 @@ class SessionExportManager(private val context: Context) {
             ExportFormat.CURL to "curl_commands.sh",
             ExportFormat.MARKDOWN to "README.md",
             ExportFormat.MERMAID to "sequence_diagram.md",
-            ExportFormat.MERMAID_CORRELATION to "correlation_diagram.md"
+            ExportFormat.MERMAID_CORRELATION to "correlation_diagram.md",
+            ExportFormat.STATE_GRAPH to "state_graph.md",
+            ExportFormat.TIMELINE to "normalized_timeline.json"
         )
 
         for ((format, fileName) in formats) {
@@ -607,6 +682,8 @@ class SessionExportManager(private val context: Context) {
             ExportFormat.MARKDOWN,
             ExportFormat.MERMAID,
             ExportFormat.MERMAID_CORRELATION,
+            ExportFormat.STATE_GRAPH,
+            ExportFormat.TIMELINE,
             ExportFormat.ZIP
         )
     }

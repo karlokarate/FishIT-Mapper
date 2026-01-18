@@ -135,7 +135,7 @@ class MermaidSequenceExporter {
 
         // Korreliere Actions mit Exchanges
         val correlations = correlateActionsWithExchanges(exchanges, userActions, correlationWindowMs)
-        
+
         // Sammle Hosts (mit Fallback für null)
         val hosts = exchanges
             .mapNotNull { it.request.host }
@@ -350,14 +350,14 @@ class MermaidSequenceExporter {
         lastActionTime: Instant?
     ): String {
         val method = exchange.request.method
-        val path = exchange.request.path.take(35).let { 
-            if (it.length == 35) "$it..." else it 
+        val path = exchange.request.path.take(35).let {
+            if (it.length == 35) "$it..." else it
         }
         val status = exchange.response?.status ?: 0
 
         // Request Arrow
         val requestArrow = "B->>S$hostIndex"
-        
+
         // Response Arrow basierend auf Status
         val responseArrow = when {
             status == 0 -> "S$hostIndex--xB"  // Kein Response
