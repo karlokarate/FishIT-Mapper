@@ -30,6 +30,10 @@ import java.util.UUID
  * - **Kein Export nötig** - die Datei IST bereits der Export
  * - **Copilot-kompatibel** - AI versteht HAR nativ
  *
+ * ## Chainpoint-Labels
+ * Während des Recordings kann der User den nächsten Chainpoint benennen.
+ * Der nächste Klick wird dann diesem Label zugeordnet.
+ *
  * ## Verwendung
  * ```kotlin
  * val sessionManager = CaptureSessionManager(context)
@@ -39,6 +43,9 @@ import java.util.UUID
  *
  * // Session starten
  * val session = sessionManager.startSession("Example.com API")
+ *
+ * // Nächsten Chainpoint benennen
+ * sessionManager.setNextChainpointLabel("Login Button Click")
  *
  * // Exchanges hinzufügen
  * webView.capturedExchanges.collect { exchanges ->
@@ -57,6 +64,18 @@ class CaptureSessionManager(context: Context? = null) {
     // HAR-basierter Store (Standard-Format!)
     private val harStore: HarSessionStore? = context?.let { HarSessionStore(it) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Label für den nächsten Chainpoint (wird bei nächstem Klick verwendet).
+     */
+    private val _nextChainpointLabel = MutableStateFlow<String?>(null)
+    val nextChainpointLabel: StateFlow<String?> = _nextChainpointLabel.asStateFlow()
+
+    /**
+     * Alle definierten Chainpoint-Labels in der aktuellen Session.
+     */
+    private val _chainpointLabels = MutableStateFlow<Map<String, String>>(emptyMap())
+    val chainpointLabels: StateFlow<Map<String, String>> = _chainpointLabels.asStateFlow()
 
     /**
      * Eine Recording-Session mit allen gesammelten Daten.
@@ -256,6 +275,7 @@ class CaptureSessionManager(context: Context? = null) {
 
     /**
      * Fügt User Actions zur aktiven Session hinzu.
+     * Wenn ein Chainpoint-Label gesetzt ist, wird es der ersten CLICK-Action zugewiesen.
      */
     fun addUserActions(actions: List<TrafficInterceptWebView.UserAction>) {
         val session = _currentSession.value ?: return
@@ -264,6 +284,17 @@ class CaptureSessionManager(context: Context? = null) {
         val newActions = actions.filter { it.id !in existingIds }
 
         if (newActions.isNotEmpty()) {
+            // Prüfe ob ein Chainpoint-Label gesetzt ist
+            val pendingLabel = _nextChainpointLabel.value
+            if (pendingLabel != null) {
+                // Finde die erste Click-Action und weise das Label zu
+                val clickAction = newActions.find { it.type == TrafficInterceptWebView.ActionType.CLICK }
+                if (clickAction != null) {
+                    _chainpointLabels.value = _chainpointLabels.value + (clickAction.id to pendingLabel)
+                    _nextChainpointLabel.value = null // Label verbraucht
+                }
+            }
+
             _currentSession.value = session.copy(
                 userActions = session.userActions + newActions
             )
@@ -288,6 +319,141 @@ class CaptureSessionManager(context: Context? = null) {
         val session = _currentSession.value ?: return
 
         _currentSession.value = session.copy(notes = notes)
+    }
+
+    // ========================================================================
+    // Chainpoint-Label Management
+    // ========================================================================
+
+    /**
+     * Setzt ein Label für den nächsten Chainpoint.
+     * Der nächste Klick wird dann diesem Label zugeordnet.
+     */
+    fun setNextChainpointLabel(label: String?) {
+        _nextChainpointLabel.value = label
+    }
+
+    /**
+     * Gibt das Label für eine Action-ID zurück.
+     */
+    fun getChainpointLabel(actionId: String): String? {
+        return _chainpointLabels.value[actionId]
+    }
+
+    /**
+     * Aktualisiert das Label für eine Action.
+     */
+    fun updateChainpointLabel(actionId: String, newLabel: String?) {
+        if (newLabel.isNullOrBlank()) {
+            _chainpointLabels.value = _chainpointLabels.value - actionId
+        } else {
+            _chainpointLabels.value = _chainpointLabels.value + (actionId to newLabel)
+        }
+    }
+
+    // ========================================================================
+    // Session Editing
+    // ========================================================================
+
+    /**
+     * Löscht einen Exchange aus der aktiven Session.
+     */
+    fun deleteExchange(exchangeId: String) {
+        val session = _currentSession.value ?: return
+        _currentSession.value = session.copy(
+            exchanges = session.exchanges.filter { it.id != exchangeId }
+        )
+    }
+
+    /**
+     * Löscht mehrere Exchanges aus der aktiven Session.
+     */
+    fun deleteExchanges(exchangeIds: Set<String>) {
+        val session = _currentSession.value ?: return
+        _currentSession.value = session.copy(
+            exchanges = session.exchanges.filter { it.id !in exchangeIds }
+        )
+    }
+
+    /**
+     * Löscht eine User Action aus der aktiven Session.
+     */
+    fun deleteUserAction(actionId: String) {
+        val session = _currentSession.value ?: return
+        _currentSession.value = session.copy(
+            userActions = session.userActions.filter { it.id != actionId }
+        )
+        // Auch das Label entfernen
+        _chainpointLabels.value = _chainpointLabels.value - actionId
+    }
+
+    /**
+     * Aktualisiert den Request Body eines Exchanges.
+     */
+    fun updateExchangeRequestBody(exchangeId: String, newBody: String?) {
+        val session = _currentSession.value ?: return
+        _currentSession.value = session.copy(
+            exchanges = session.exchanges.map { exchange ->
+                if (exchange.id == exchangeId) {
+                    exchange.copy(requestBody = newBody)
+                } else {
+                    exchange
+                }
+            }
+        )
+    }
+
+    /**
+     * Aktualisiert den Response Body eines Exchanges.
+     */
+    fun updateExchangeResponseBody(exchangeId: String, newBody: String?) {
+        val session = _currentSession.value ?: return
+        _currentSession.value = session.copy(
+            exchanges = session.exchanges.map { exchange ->
+                if (exchange.id == exchangeId) {
+                    exchange.copy(responseBody = newBody)
+                } else {
+                    exchange
+                }
+            }
+        )
+    }
+
+    /**
+     * Aktualisiert einen Request Header.
+     */
+    fun updateExchangeRequestHeader(exchangeId: String, key: String, value: String?) {
+        val session = _currentSession.value ?: return
+        _currentSession.value = session.copy(
+            exchanges = session.exchanges.map { exchange ->
+                if (exchange.id == exchangeId) {
+                    val newHeaders = if (value == null) {
+                        exchange.requestHeaders - key
+                    } else {
+                        exchange.requestHeaders + (key to value)
+                    }
+                    exchange.copy(requestHeaders = newHeaders)
+                } else {
+                    exchange
+                }
+            }
+        )
+    }
+
+    /**
+     * Aktualisiert die URL eines Exchanges (z.B. um sensitive Daten zu entfernen).
+     */
+    fun updateExchangeUrl(exchangeId: String, newUrl: String) {
+        val session = _currentSession.value ?: return
+        _currentSession.value = session.copy(
+            exchanges = session.exchanges.map { exchange ->
+                if (exchange.id == exchangeId) {
+                    exchange.copy(url = newUrl)
+                } else {
+                    exchange
+                }
+            }
+        )
     }
 
     /**

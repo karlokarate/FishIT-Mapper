@@ -36,6 +36,17 @@ class ApiExporter {
     }
 
     // =========================================================================
+    // JSON Export
+    // =========================================================================
+
+    /**
+     * Exportiert den Blueprint als JSON zur weiteren Verarbeitung.
+     */
+    fun toJson(blueprint: ApiBlueprint): String {
+        return json.encodeToString(blueprint)
+    }
+
+    // =========================================================================
     // OpenAPI Export
     // =========================================================================
 

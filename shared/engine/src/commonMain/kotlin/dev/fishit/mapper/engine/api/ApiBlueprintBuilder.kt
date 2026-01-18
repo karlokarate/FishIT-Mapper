@@ -1,8 +1,5 @@
 package dev.fishit.mapper.engine.api
 
-import dev.fishit.mapper.android.import.httpcanary.CapturedExchange
-import dev.fishit.mapper.android.import.httpcanary.CorrelatedAction
-import dev.fishit.mapper.android.import.httpcanary.WebsiteMap
 import kotlinx.datetime.Clock
 
 /**

@@ -1,7 +1,9 @@
 package dev.fishit.mapper.android.ui.capture
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -67,6 +69,8 @@ fun CaptureWebViewScreen(
     var urlInput by remember { mutableStateOf("https://") }
     var showSessionDialog by remember { mutableStateOf(false) }
     var showStatsPanel by remember { mutableStateOf(false) }
+    var showChainpointDialog by remember { mutableStateOf(false) }
+    var showSessionEditor by remember { mutableStateOf(false) }
     var pendingRecordUrl by remember { mutableStateOf<String?>(null) }
 
     // Flows sammeln
@@ -77,11 +81,13 @@ fun CaptureWebViewScreen(
     val pageEvents by webView.pageEvents.collectAsState()
     val isLoading by webView.isLoading.collectAsState()
     val currentUrl by webView.currentUrl.collectAsState()
+    val nextChainpointLabel by sessionManager.nextChainpointLabel.collectAsState()
+    val chainpointLabels by sessionManager.chainpointLabels.collectAsState()
 
     // URL-Input synchron halten mit geladener URL
     LaunchedEffect(currentUrl) {
-        if (currentUrl.isNotEmpty() && !isRecording) {
-            urlInput = currentUrl
+        if (!currentUrl.isNullOrEmpty() && !isRecording) {
+            urlInput = currentUrl ?: ""
         }
     }
 
@@ -210,7 +216,7 @@ fun CaptureWebViewScreen(
                     }
                 )
 
-                // Recording Indicator
+                // Recording Indicator mit Chainpoint-Button
                 AnimatedVisibility(
                     visible = isRecording,
                     enter = expandVertically() + fadeIn(),
@@ -219,7 +225,11 @@ fun CaptureWebViewScreen(
                     RecordingIndicator(
                         exchangeCount = currentSession?.exchangeCount ?: 0,
                         actionCount = currentSession?.actionCount ?: 0,
-                        sessionName = currentSession?.name ?: ""
+                        sessionName = currentSession?.name ?: "",
+                        pendingChainpointLabel = nextChainpointLabel,
+                        onSetChainpoint = { showChainpointDialog = true },
+                        onClearChainpoint = { sessionManager.setNextChainpointLabel(null) },
+                        onEditSession = { showSessionEditor = true }
                     )
                 }
 
@@ -232,6 +242,7 @@ fun CaptureWebViewScreen(
                     StatsPanel(
                         exchanges = exchanges,
                         userActions = userActions,
+                        chainpointLabels = chainpointLabels,
                         onClose = { showStatsPanel = false }
                     )
                 }
@@ -272,6 +283,40 @@ fun CaptureWebViewScreen(
                 startRecordingWithUrl(name, url)
                 showSessionDialog = false
                 pendingRecordUrl = null
+            }
+        )
+    }
+
+    // Chainpoint Label Dialog
+    if (showChainpointDialog) {
+        ChainpointLabelDialog(
+            onDismiss = { showChainpointDialog = false },
+            onConfirm = { label ->
+                sessionManager.setNextChainpointLabel(label)
+                showChainpointDialog = false
+            }
+        )
+    }
+
+    // Session Editor
+    if (showSessionEditor && currentSession != null) {
+        SessionEditorSheet(
+            session = currentSession!!,
+            chainpointLabels = chainpointLabels,
+            onDismiss = { showSessionEditor = false },
+            onDeleteExchange = { sessionManager.deleteExchange(it) },
+            onDeleteAction = { sessionManager.deleteUserAction(it) },
+            onUpdateChainpointLabel = { actionId, label ->
+                sessionManager.updateChainpointLabel(actionId, label)
+            },
+            onUpdateExchangeUrl = { exchangeId, url ->
+                sessionManager.updateExchangeUrl(exchangeId, url)
+            },
+            onUpdateExchangeRequestBody = { exchangeId, body ->
+                sessionManager.updateExchangeRequestBody(exchangeId, body)
+            },
+            onUpdateExchangeResponseBody = { exchangeId, body ->
+                sessionManager.updateExchangeResponseBody(exchangeId, body)
             }
         )
     }
@@ -365,45 +410,132 @@ private fun UrlBar(
 private fun RecordingIndicator(
     exchangeCount: Int,
     actionCount: Int,
-    sessionName: String
+    sessionName: String,
+    pendingChainpointLabel: String?,
+    onSetChainpoint: () -> Unit,
+    onClearChainpoint: () -> Unit,
+    onEditSession: () -> Unit
 ) {
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.FiberManualRecord,
-                    "Recording",
-                    tint = Color.Red,
-                    modifier = Modifier.size(12.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Recording: $sessionName",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
+            // Obere Zeile: Recording-Info und Stats
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.FiberManualRecord,
+                        "Recording",
+                        tint = Color.Red,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Recording: $sessionName",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "$exchangeCount Req",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Text(
+                        text = "$actionCount Act",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(
-                    text = "$exchangeCount Requests",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
-                Text(
-                    text = "$actionCount Actions",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
+            Spacer(Modifier.height(8.dp))
+
+            // Untere Zeile: Chainpoint-Label und Edit-Button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Chainpoint Label Button
+                if (pendingChainpointLabel != null) {
+                    // Label ist gesetzt - zeige es an
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(16.dp),
+                        onClick = onClearChainpoint
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Flag,
+                                null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = pendingChainpointLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                Icons.Default.Close,
+                                "Entfernen",
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                } else {
+                    // Kein Label - Button zum Setzen
+                    OutlinedButton(
+                        onClick = onSetChainpoint,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Flag,
+                            null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Chainpoint benennen",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+
+                // Edit Session Button
+                OutlinedButton(
+                    onClick = onEditSession,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Edit,
+                        null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Bearbeiten",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
         }
     }
@@ -413,6 +545,7 @@ private fun RecordingIndicator(
 private fun StatsPanel(
     exchanges: List<TrafficInterceptWebView.CapturedExchange>,
     userActions: List<TrafficInterceptWebView.UserAction>,
+    chainpointLabels: Map<String, String>,
     onClose: () -> Unit
 ) {
     Surface(
@@ -671,6 +804,615 @@ private fun SessionStartDialog(
                 Icon(Icons.Default.FiberManualRecord, null)
                 Spacer(Modifier.width(8.dp))
                 Text("Recording starten")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Abbrechen")
+            }
+        }
+    )
+}
+/**
+ * Dialog zum Benennen des nächsten Chainpoints.
+ */
+@Composable
+private fun ChainpointLabelDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var label by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Flag,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Nächsten Chainpoint benennen")
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    "Gib einen Namen für den nächsten Klick-Punkt ein. " +
+                    "Der nächste Klick wird diesem Label zugeordnet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    label = { Text("Chainpoint Name") },
+                    placeholder = { Text("z.B. Login Button, Submit Form") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = {
+                        Icon(Icons.Default.Flag, null)
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(label) },
+                enabled = label.isNotBlank()
+            ) {
+                Text("Setzen")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Abbrechen")
+            }
+        }
+    )
+}
+
+/**
+ * Bottom Sheet zum Bearbeiten der Session.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SessionEditorSheet(
+    session: CaptureSessionManager.CaptureSession,
+    chainpointLabels: Map<String, String>,
+    onDismiss: () -> Unit,
+    onDeleteExchange: (String) -> Unit,
+    onDeleteAction: (String) -> Unit,
+    onUpdateChainpointLabel: (String, String?) -> Unit,
+    onUpdateExchangeUrl: (String, String) -> Unit,
+    onUpdateExchangeRequestBody: (String, String?) -> Unit,
+    onUpdateExchangeResponseBody: (String, String?) -> Unit
+) {
+    var selectedTab by remember { mutableStateOf(0) }
+    var selectedExchangeId by remember { mutableStateOf<String?>(null) }
+    var selectedActionId by remember { mutableStateOf<String?>(null) }
+    var editMode by remember { mutableStateOf<EditMode?>(null) }
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.9f)
+                .padding(16.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Session bearbeiten",
+                    style = MaterialTheme.typography.titleLarge
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, "Schließen")
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Tab Row
+            TabRow(selectedTabIndex = selectedTab) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text("Exchanges (${session.exchanges.size})") }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("Actions (${session.userActions.size})") }
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Content
+            when (selectedTab) {
+                0 -> ExchangesList(
+                    exchanges = session.exchanges,
+                    selectedId = selectedExchangeId,
+                    onSelect = { selectedExchangeId = it },
+                    onDelete = onDeleteExchange,
+                    onEditUrl = { id -> editMode = EditMode.ExchangeUrl(id) },
+                    onEditRequestBody = { id -> editMode = EditMode.RequestBody(id) },
+                    onEditResponseBody = { id -> editMode = EditMode.ResponseBody(id) }
+                )
+                1 -> ActionsList(
+                    actions = session.userActions,
+                    chainpointLabels = chainpointLabels,
+                    selectedId = selectedActionId,
+                    onSelect = { selectedActionId = it },
+                    onDelete = onDeleteAction,
+                    onEditLabel = { id -> editMode = EditMode.ActionLabel(id) }
+                )
+            }
+        }
+    }
+
+    // Edit Dialogs
+    editMode?.let { mode ->
+        when (mode) {
+            is EditMode.ExchangeUrl -> {
+                val exchange = session.exchanges.find { it.id == mode.exchangeId }
+                if (exchange != null) {
+                    TextEditDialog(
+                        title = "URL bearbeiten",
+                        initialValue = exchange.url,
+                        onDismiss = { editMode = null },
+                        onConfirm = { newValue ->
+                            onUpdateExchangeUrl(mode.exchangeId, newValue)
+                            editMode = null
+                        }
+                    )
+                }
+            }
+            is EditMode.RequestBody -> {
+                val exchange = session.exchanges.find { it.id == mode.exchangeId }
+                if (exchange != null) {
+                    TextEditDialog(
+                        title = "Request Body bearbeiten",
+                        initialValue = exchange.requestBody ?: "",
+                        multiLine = true,
+                        onDismiss = { editMode = null },
+                        onConfirm = { newValue ->
+                            onUpdateExchangeRequestBody(mode.exchangeId, newValue.ifBlank { null })
+                            editMode = null
+                        }
+                    )
+                }
+            }
+            is EditMode.ResponseBody -> {
+                val exchange = session.exchanges.find { it.id == mode.exchangeId }
+                if (exchange != null) {
+                    TextEditDialog(
+                        title = "Response Body bearbeiten",
+                        initialValue = exchange.responseBody ?: "",
+                        multiLine = true,
+                        onDismiss = { editMode = null },
+                        onConfirm = { newValue ->
+                            onUpdateExchangeResponseBody(mode.exchangeId, newValue.ifBlank { null })
+                            editMode = null
+                        }
+                    )
+                }
+            }
+            is EditMode.ActionLabel -> {
+                val currentLabel = chainpointLabels[mode.actionId] ?: ""
+                TextEditDialog(
+                    title = "Chainpoint Label bearbeiten",
+                    initialValue = currentLabel,
+                    onDismiss = { editMode = null },
+                    onConfirm = { newValue ->
+                        onUpdateChainpointLabel(mode.actionId, newValue.ifBlank { null })
+                        editMode = null
+                    }
+                )
+            }
+        }
+    }
+}
+
+private sealed class EditMode {
+    data class ExchangeUrl(val exchangeId: String) : EditMode()
+    data class RequestBody(val exchangeId: String) : EditMode()
+    data class ResponseBody(val exchangeId: String) : EditMode()
+    data class ActionLabel(val actionId: String) : EditMode()
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ExchangesList(
+    exchanges: List<TrafficInterceptWebView.CapturedExchange>,
+    selectedId: String?,
+    onSelect: (String?) -> Unit,
+    onDelete: (String) -> Unit,
+    onEditUrl: (String) -> Unit,
+    onEditRequestBody: (String) -> Unit,
+    onEditResponseBody: (String) -> Unit
+) {
+    LazyColumn {
+        items(exchanges, key = { it.id }) { exchange ->
+            val isSelected = exchange.id == selectedId
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .animateItemPlacement(),
+                onClick = { onSelect(if (isSelected) null else exchange.id) }
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Method Badge
+                            Surface(
+                                color = when (exchange.method) {
+                                    "GET" -> Color(0xFF4CAF50)
+                                    "POST" -> Color(0xFF2196F3)
+                                    "PUT" -> Color(0xFFFF9800)
+                                    "DELETE" -> Color(0xFFF44336)
+                                    else -> Color.Gray
+                                },
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    exchange.method,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            Spacer(Modifier.width(8.dp))
+
+                            // Status
+                            Text(
+                                exchange.responseStatus?.toString() ?: "...",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = when (exchange.responseStatus) {
+                                    in 200..299 -> Color(0xFF4CAF50)
+                                    in 400..499 -> Color(0xFFFF9800)
+                                    in 500..599 -> Color(0xFFF44336)
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                }
+                            )
+                        }
+
+                        // Delete Button
+                        IconButton(onClick = { onDelete(exchange.id) }) {
+                            Icon(
+                                Icons.Default.Delete,
+                                "Löschen",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+
+                    // URL (mit Copy-Button)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            exchange.url,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = if (isSelected) 5 else 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        CopyButton(exchange.url)
+                    }
+
+                    // Expanded Details
+                    AnimatedVisibility(visible = isSelected) {
+                        Column(modifier = Modifier.padding(top = 8.dp)) {
+                            // Edit Actions
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { onEditUrl(exchange.id) },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.Edit, null, Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("URL", style = MaterialTheme.typography.labelSmall)
+                                }
+
+                                if (exchange.requestBody != null) {
+                                    OutlinedButton(
+                                        onClick = { onEditRequestBody(exchange.id) },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Default.Edit, null, Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Req Body", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+
+                                if (exchange.responseBody != null) {
+                                    OutlinedButton(
+                                        onClick = { onEditResponseBody(exchange.id) },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Default.Edit, null, Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Resp Body", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
+
+                            // Request Body Preview
+                            exchange.requestBody?.let { body ->
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "Request Body:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                CopyableText(body.take(500))
+                            }
+
+                            // Response Body Preview
+                            exchange.responseBody?.let { body ->
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "Response Body:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                CopyableText(body.take(500))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ActionsList(
+    actions: List<TrafficInterceptWebView.UserAction>,
+    chainpointLabels: Map<String, String>,
+    selectedId: String?,
+    onSelect: (String?) -> Unit,
+    onDelete: (String) -> Unit,
+    onEditLabel: (String) -> Unit
+) {
+    LazyColumn {
+        items(actions, key = { it.id }) { action ->
+            val isSelected = action.id == selectedId
+            val label = chainpointLabels[action.id]
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .animateItemPlacement(),
+                onClick = { onSelect(if (isSelected) null else action.id) }
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Action Type Icon
+                            Icon(
+                                when (action.type) {
+                                    TrafficInterceptWebView.ActionType.CLICK -> Icons.Default.TouchApp
+                                    TrafficInterceptWebView.ActionType.SUBMIT -> Icons.Default.Send
+                                    TrafficInterceptWebView.ActionType.INPUT -> Icons.Default.Keyboard
+                                    TrafficInterceptWebView.ActionType.NAVIGATION -> Icons.Default.Navigation
+                                },
+                                action.type.name,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+
+                            Spacer(Modifier.width(8.dp))
+
+                            Column {
+                                Text(
+                                    action.type.name,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                                if (label != null) {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Row {
+                            // Edit Label Button
+                            IconButton(onClick = { onEditLabel(action.id) }) {
+                                Icon(
+                                    Icons.Default.Flag,
+                                    "Label bearbeiten",
+                                    tint = if (label != null) MaterialTheme.colorScheme.primary
+                                           else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            // Delete Button
+                            IconButton(onClick = { onDelete(action.id) }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    "Löschen",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+
+                    // Target
+                    Text(
+                        "Target: ${action.target}",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = if (isSelected) 5 else 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    // Value (if any)
+                    action.value?.let { value ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Value: $value",
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = if (isSelected) 3 else 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            CopyButton(value)
+                        }
+                    }
+
+                    // Page URL
+                    action.pageUrl?.let { pageUrl ->
+                        Text(
+                            "Page: $pageUrl",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CopyButton(text: String) {
+    val context = LocalContext.current
+
+    IconButton(
+        onClick = {
+            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("FishIT", text)
+            clipboard.setPrimaryClip(clip)
+        },
+        modifier = Modifier.size(32.dp)
+    ) {
+        Icon(
+            Icons.Default.ContentCopy,
+            "Kopieren",
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CopyableText(text: String) {
+    val context = LocalContext.current
+
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(4.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(8.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                modifier = Modifier
+                    .weight(1f)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                as android.content.ClipboardManager
+                            val clip = android.content.ClipData.newPlainText("FishIT", text)
+                            clipboard.setPrimaryClip(clip)
+                        }
+                    )
+            )
+            CopyButton(text)
+        }
+    }
+}
+
+@Composable
+private fun TextEditDialog(
+    title: String,
+    initialValue: String,
+    multiLine: Boolean = false,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var value by remember { mutableStateOf(initialValue) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            if (multiLine) {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 150.dp, max = 300.dp),
+                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                )
+            } else {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(value) }) {
+                Text("Speichern")
             }
         },
         dismissButton = {

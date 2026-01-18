@@ -1,10 +1,6 @@
 package dev.fishit.mapper.engine.export
 
-import dev.fishit.mapper.android.import.httpcanary.CapturedExchange
-import dev.fishit.mapper.android.import.httpcanary.CapturedRequest
-import dev.fishit.mapper.android.import.httpcanary.CapturedResponse
-import dev.fishit.mapper.engine.api.ApiBlueprint
-import dev.fishit.mapper.engine.api.ApiEndpoint
+import dev.fishit.mapper.engine.api.*
 import kotlinx.datetime.Instant
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
@@ -91,7 +87,7 @@ class HarExporter {
         return json.encodeToString(har)
     }
 
-    private fun buildRequest(request: CapturedRequest): JsonObject {
+    private fun buildRequest(request: EngineRequest): JsonObject {
         // Parse URL für Query-Params
         val url = request.url
         val queryStart = url.indexOf('?')
@@ -130,9 +126,9 @@ class HarExporter {
 
             // Body
             if (request.body != null) {
-                put("bodySize", request.body.length)
+                put("bodySize", request.body!!.length)
                 put("postData", buildJsonObject {
-                    put("mimeType", request.headers["Content-Type"] ?: "application/octet-stream")
+                    put("mimeType", request.contentType ?: request.headers["Content-Type"] ?: "application/octet-stream")
                     put("text", request.body)
                 })
             } else {
@@ -143,7 +139,7 @@ class HarExporter {
         }
     }
 
-    private fun buildResponse(response: CapturedResponse?): JsonObject {
+    private fun buildResponse(response: EngineResponse?): JsonObject {
         if (response == null) {
             return buildJsonObject {
                 put("status", 0)
@@ -186,7 +182,7 @@ class HarExporter {
             // Content
             put("content", buildJsonObject {
                 put("size", response.body?.length ?: 0)
-                put("mimeType", response.headers["Content-Type"] ?: "")
+                put("mimeType", response.contentType ?: response.headers["Content-Type"] ?: "")
                 if (response.body != null) {
                     put("text", response.body)
                 }

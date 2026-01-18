@@ -346,7 +346,7 @@ class HarSessionStore(private val context: Context) {
 
     private fun buildPages(session: CaptureSessionManager.CaptureSession): JsonArray {
         val pages = session.pageEvents
-            .filter { it.type == TrafficInterceptWebView.PageEventType.PAGE_LOAD }
+            .filter { it.type == TrafficInterceptWebView.PageEventType.FINISHED }
             .mapIndexed { index, event ->
                 buildJsonObject {
                     put("startedDateTime", event.timestamp.toString())

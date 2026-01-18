@@ -1,7 +1,6 @@
 package dev.fishit.mapper.engine.export
 
-import dev.fishit.mapper.engine.api.ApiBlueprint
-import dev.fishit.mapper.engine.bundle.HttpExchange
+import dev.fishit.mapper.engine.api.*
 
 /**
  * Zentrale Export-Orchestrierung für alle Ausgabeformate.
@@ -77,7 +76,7 @@ object ExportOrchestrator {
      */
     fun exportForCodespace(
         blueprint: ApiBlueprint,
-        exchanges: List<HttpExchange>,
+        exchanges: List<CapturedExchange>,
         packageName: String = "dev.example.api"
     ): ExportBundle {
         val files = mutableMapOf<String, String>()
@@ -119,7 +118,7 @@ object ExportOrchestrator {
      * - Chrome DevTools Analyse
      * - Copilot "read this HAR" Prompts
      */
-    fun exportToHar(exchanges: List<HttpExchange>): String {
+    fun exportToHar(exchanges: List<CapturedExchange>): String {
         return HarExporter().export(exchanges)
     }
 
@@ -180,7 +179,7 @@ object ExportOrchestrator {
      */
     fun exportAll(
         blueprint: ApiBlueprint,
-        exchanges: List<HttpExchange>,
+        exchanges: List<CapturedExchange>,
         packageName: String = "dev.example.api"
     ): Map<String, String> {
         val apiExporter = ApiExporter()

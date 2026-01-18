@@ -30,6 +30,7 @@ import dev.fishit.mapper.contract.ProjectId
 
 private enum class ProjectTab(val label: String) {
     Browser("Browser"),
+    Capture("Capture"),
     Graph("Graph"),
     Sessions("Sessions"),
     Chains("Chains")
@@ -40,7 +41,8 @@ private enum class ProjectTab(val label: String) {
 fun ProjectHomeScreen(
     projectId: String,
     onBack: () -> Unit,
-    onOpenSession: (sessionId: String) -> Unit
+    onOpenSession: (sessionId: String) -> Unit,
+    onOpenCapture: ((projectId: String) -> Unit)? = null
 ) {
     val container = LocalAppContainer.current
     val vm: ProjectViewModel = viewModel(
@@ -80,6 +82,18 @@ fun ProjectHomeScreen(
                     onClick = { tab = ProjectTab.Browser },
                     label = { Text(ProjectTab.Browser.label) },
                     icon = { Text("🌍") }
+                )
+                NavigationBarItem(
+                    selected = tab == ProjectTab.Capture,
+                    onClick = {
+                        if (onOpenCapture != null) {
+                            onOpenCapture(projectId)
+                        } else {
+                            tab = ProjectTab.Capture
+                        }
+                    },
+                    label = { Text(ProjectTab.Capture.label) },
+                    icon = { Text("📡") }
                 )
                 NavigationBarItem(
                     selected = tab == ProjectTab.Graph,
@@ -130,6 +144,17 @@ fun ProjectHomeScreen(
                             onStopRecording = { finalUrl -> vm.stopRecording(finalUrl) },
                             onRecorderEvent = { event -> vm.onRecorderEvent(event) }
                         )
+
+                        ProjectTab.Capture -> {
+                            // Wird über Navigation gehandhabt via onOpenCapture
+                            // Fallback: Zeige Hinweis
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = androidx.compose.ui.Alignment.Center
+                            ) {
+                                Text("Öffne Advanced Capture...")
+                            }
+                        }
 
                         ProjectTab.Graph -> GraphScreen(
                             graph = state.graph,
