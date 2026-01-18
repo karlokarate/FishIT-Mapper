@@ -76,10 +76,11 @@ class HarExporter {
 
                 put("entries", JsonArray(entries))
 
-                // Browser info (optional)
+                // Browser info (FishIT-Mapper, nicht HttpCanary)
                 put("browser", buildJsonObject {
-                    put("name", "HttpCanary Import")
-                    put("version", "1.0")
+                    put("name", "FishIT-Mapper")
+                    put("version", "1.0.0")
+                    put("comment", "Android WebView Traffic Capture")
                 })
             })
         }

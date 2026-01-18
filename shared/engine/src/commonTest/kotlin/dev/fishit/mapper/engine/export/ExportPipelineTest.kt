@@ -145,7 +145,7 @@ class ExportPipelineTest {
         )
 
         assertEquals("test-session", timeline.sessionId)
-        
+
         // Sollte sowohl User-Actions als auch HTTP-Events enthalten
         assertTrue(timeline.events.any { it.type == EventType.USER_ACTION })
         assertTrue(timeline.events.any { it.type == EventType.HTTP_REQUEST || it.type == EventType.HTTP_RESPONSE })
@@ -289,7 +289,7 @@ class ExportPipelineTest {
     fun stateGraphExporterGeneratesValidMermaid() {
         val normalizer = TimelineNormalizer()
         val exporter = StateGraphExporter()
-        
+
         val exchanges = listOf(
             createTestExchange(id = "1", url = "https://example.com/login", method = "GET"),
             createTestExchange(id = "2", url = "https://example.com/login", method = "POST"),
@@ -316,7 +316,7 @@ class ExportPipelineTest {
     fun stateGraphExporterGeneratesPerActionGraphs() {
         val normalizer = TimelineNormalizer()
         val exporter = StateGraphExporter()
-        
+
         val exchanges = listOf(
             createTestExchange(id = "1", url = "https://example.com/page1"),
             createTestExchange(id = "2", url = "https://example.com/page2")

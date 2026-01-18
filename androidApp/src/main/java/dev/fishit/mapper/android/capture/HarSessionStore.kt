@@ -177,10 +177,11 @@ class HarSessionStore(private val context: Context) {
                     put("comment", "WebView Traffic Capture")
                 })
 
-                // Browser-Info (WebView)
+                // Browser-Info (FishIT-Mapper WebView)
                 put("browser", buildJsonObject {
-                    put("name", "Android WebView")
-                    put("version", android.os.Build.VERSION.RELEASE)
+                    put("name", "FishIT-Mapper")
+                    put("version", "1.0.0")
+                    put("comment", "Android ${android.os.Build.VERSION.RELEASE} WebView")
                 })
 
                 // Pages (für Navigation)

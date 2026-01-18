@@ -125,6 +125,23 @@ class TrafficInterceptWebView @JvmOverloads constructor(
 
     init {
         setupWebView()
+        // WICHTIG: Focus-Handling für Tastatur-Input bei Eingabefeldern
+        isFocusable = true
+        isFocusableInTouchMode = true
+        
+        // KRITISCH: OnTouchListener für Tastatur-Aktivierung
+        setOnTouchListener { v, event ->
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN, 
+                android.view.MotionEvent.ACTION_UP -> {
+                    if (!v.hasFocus()) {
+                        v.requestFocus()
+                    }
+                }
+            }
+            // WICHTIG: false zurückgeben, damit WebView das Event selbst verarbeitet
+            false
+        }
     }
 
     private fun setupWebView() {
@@ -164,7 +181,13 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         settings.allowFileAccess = true
         settings.allowContentAccess = true
 
+        // WICHTIG: Soft Keyboard / Input Method Configuration
+        // Ermöglicht Tastatur-Popup bei Eingabefeldern
+        isVerticalScrollBarEnabled = true
+        isHorizontalScrollBarEnabled = false
+
         // User Agent setzen (wie normaler Chrome, NICHT als WebView erkennbar)
+        settings.userAgentString = settings.userAgentString.replace("; wv", "")
         settings.userAgentString = settings.userAgentString.replace("; wv", "")
 
         // JavaScript Interface für Capture

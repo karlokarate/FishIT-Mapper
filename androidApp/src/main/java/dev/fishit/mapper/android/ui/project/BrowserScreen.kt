@@ -24,7 +24,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -107,9 +106,29 @@ fun BrowserScreen(
         Spacer(Modifier.height(4.dp))
 
         AndroidView(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize(),
             factory = {
                 WebView(context).apply {
+                    // WICHTIG: Focus-Handling für Tastatur
+                    isFocusable = true
+                    isFocusableInTouchMode = true
+                    
+                    // KRITISCH: OnTouchListener für Tastatur-Aktivierung
+                    setOnTouchListener { v, event ->
+                        when (event.action) {
+                            android.view.MotionEvent.ACTION_DOWN, 
+                            android.view.MotionEvent.ACTION_UP -> {
+                                if (!v.hasFocus()) {
+                                    v.requestFocus()
+                                }
+                            }
+                        }
+                        // WICHTIG: false zurückgeben, damit WebView das Event verarbeitet
+                        false
+                    }
+                    
+                    requestFocus()
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     settings.loadsImagesAutomatically = true
@@ -310,8 +329,9 @@ fun BrowserScreen(
                 }
             },
             update = { webView ->
-                // This update block is crucial for proper touch event handling
-                // It ensures the WebView responds to recompositions properly
+                // WICHTIG: Focus bei jedem Update sicherstellen für Tastatur-Input
+                webView.isFocusable = true
+                webView.isFocusableInTouchMode = true
             }
         )
     }

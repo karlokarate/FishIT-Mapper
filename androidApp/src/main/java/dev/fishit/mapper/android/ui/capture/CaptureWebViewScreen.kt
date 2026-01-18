@@ -80,6 +80,11 @@ fun CaptureWebViewScreen(
     // Session für Export speichern (bleibt erhalten nach Stop)
     var sessionToExport by remember { mutableStateOf<CaptureSessionManager.CaptureSession?>(null) }
 
+    // Gespeicherte Sessions beim Start laden
+    LaunchedEffect(Unit) {
+        sessionManager.loadSavedSessions()
+    }
+
     // Flows sammeln
     val currentSession by sessionManager.currentSession.collectAsState()
     val completedSessions by sessionManager.completedSessions.collectAsState()
@@ -288,10 +293,21 @@ fun CaptureWebViewScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // WebView
+            // WebView mit Focus-Support für Tastatur
             AndroidView(
-                factory = { webView },
-                modifier = Modifier.fillMaxSize()
+                factory = {
+                    webView.apply {
+                        // WICHTIG: Focus-Handling für Tastatur-Input auf Eingabefeldern
+                        isFocusable = true
+                        isFocusableInTouchMode = true
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+                update = { view ->
+                    // Focus bei jedem Update sicherstellen
+                    view.isFocusable = true
+                    view.isFocusableInTouchMode = true
+                }
             )
 
             // Loading Indicator
