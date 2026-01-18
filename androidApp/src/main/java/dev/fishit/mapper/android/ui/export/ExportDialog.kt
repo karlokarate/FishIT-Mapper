@@ -312,6 +312,8 @@ private fun FormatItem(
         ExportFormat.CURL -> Icons.Default.Terminal
         ExportFormat.TYPESCRIPT -> Icons.Default.Code
         ExportFormat.MARKDOWN -> Icons.Default.Description
+        ExportFormat.MERMAID -> Icons.Default.AccountTree
+        ExportFormat.MERMAID_CORRELATION -> Icons.Default.Timeline
         ExportFormat.ZIP -> Icons.Default.FolderZip
     }
 
@@ -322,7 +324,9 @@ private fun FormatItem(
         ExportFormat.POSTMAN -> "Postman Import"
         ExportFormat.CURL -> "Shell-Befehle"
         ExportFormat.TYPESCRIPT -> "TypeScript API Client"
-        ExportFormat.MARKDOWN -> "Dokumentation"
+        ExportFormat.MARKDOWN -> "Dokumentation mit Diagramm"
+        ExportFormat.MERMAID -> "Sequenzdiagramm (Mermaid)"
+        ExportFormat.MERMAID_CORRELATION -> "Actions → Requests Korrelation"
         ExportFormat.ZIP -> "Alle Formate in einem Archiv"
     }
 
