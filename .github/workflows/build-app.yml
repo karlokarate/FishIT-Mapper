@@ -104,7 +104,10 @@ jobs:
                 echo "❌ ERROR: Key alias '$KEY_ALIAS' NOT found in keystore!"
                 echo ""
                 echo "Available aliases in keystore:"
-                keytool -list -keystore ./androidApp/keystore.jks -storepass "$KEYSTORE_PASSWORD" | grep "Alias name:" || echo "No aliases found"
+                keytool -list -keystore ./androidApp/keystore.jks -storepass "$KEYSTORE_PASSWORD" 2>&1 | grep -i "alias" || {
+                  echo "Could not extract aliases. Full keystore listing:"
+                  keytool -list -keystore ./androidApp/keystore.jks -storepass "$KEYSTORE_PASSWORD"
+                }
                 echo ""
                 echo "💡 FIX: Set the KEY_ALIAS secret to match one of the aliases above"
                 echo "   or regenerate the keystore with the correct alias."
