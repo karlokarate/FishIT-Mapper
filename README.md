@@ -53,7 +53,21 @@ The contract is generated automatically on build. You can also run:
 ./gradlew :shared:contract:generateFishitContract
 ```
 
-### Option 2: ChatGPT Codex Browser
+### Option 2: Signierte APK über GitHub Actions
+
+Erstelle automatisch signierte Release-Builds über GitHub Actions:
+
+1. **Setup (einmalig)**: [Android Signing Setup Guide](docs/ANDROID_SIGNING_SETUP.md)
+   - Keystore generieren mit Workflow "Generate Keystore and Secrets"
+   - GitHub Secrets konfigurieren (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD)
+
+2. **Build**: Workflow "Android Build" ausführen
+   - Signierte Release-APK wird automatisch erstellt
+   - Download als Artifact
+
+📖 **[Vollständiger Setup-Guide](docs/ANDROID_SIGNING_SETUP.md)**
+
+### Option 3: ChatGPT Codex Browser
 
 Für die Nutzung im ChatGPT Codex Browser:
 
