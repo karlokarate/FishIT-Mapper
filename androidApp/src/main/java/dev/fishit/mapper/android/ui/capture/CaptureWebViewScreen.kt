@@ -573,7 +573,7 @@ fun CaptureWebViewScreen(
                 showExportDialog = true
             },
             onDeleteSession = { session ->
-                // TODO: Implementiere Session-Löschung
+                sessionManager.deleteSession(session.id)
                 snackbarMessage = "Session '${session.name}' gelöscht"
             }
         )

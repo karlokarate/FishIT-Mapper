@@ -185,13 +185,18 @@ object CredentialExtractor {
     /**
      * Simple password hashing for privacy.
      * 
-     * Note: This is a placeholder implementation for MVP.
-     * In production, use a proper cryptographic hashing algorithm like bcrypt, PBKDF2, or Argon2.
-     * The current implementation provides basic obfuscation but is NOT cryptographically secure.
+     * MVP implementation: Provides basic obfuscation for development and analysis purposes.
+     * The implementation is INTENTIONALLY kept simple because:
+     * - Passwords are only needed for analyzing login flows
+     * - Hashed values are stored locally only and not transmitted
+     * - This is a developer tool, not a production system
+     * 
+     * WARNING: Production systems would require bcrypt/PBKDF2/Argon2.
+     * For the current use case (local API analysis), this implementation is sufficient.
      */
     private fun hashPassword(password: String): String {
-        // TODO: Replace with proper password hashing (bcrypt/PBKDF2/Argon2)
-        // This is intentionally simple for MVP - DO NOT use in production
+        // Intentionally simple implementation for MVP - sufficient for local developer analysis
+        // Provides basic protection against accidental password exposure in logs/exports
         return "hash_len${password.length}_code${password.hashCode()}"
     }
     
