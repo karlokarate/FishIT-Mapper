@@ -7,6 +7,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,7 +25,10 @@ import androidx.compose.ui.unit.dp
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onOpenDiagnostics: (() -> Unit)? = null
+) {
     val context = LocalContext.current
 
     Scaffold(
@@ -46,6 +51,50 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // WebView Diagnostics Button
+            if (onOpenDiagnostics != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onOpenDiagnostics
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.BugReport,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    "WebView Diagnostics",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Debug-Informationen, Console-Logs und Fehlerdiagnose",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            
             // HttpCanary Info Section
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
