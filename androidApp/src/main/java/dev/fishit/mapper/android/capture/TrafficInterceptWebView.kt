@@ -417,91 +417,167 @@ class TrafficInterceptWebView @JvmOverloads constructor(
 
     /**
      * JavaScript Interface für Capture-Callbacks.
+     * 
+     * WICHTIG: Alle Methoden haben try-catch um Crashes durch JavaScript-Fehler zu verhindern.
+     * Bei großen GraphQL Responses oder speziellen Encodings können sonst OutOfMemory oder
+     * Parsing-Fehler auftreten.
      */
     private inner class CaptureJsBridge {
 
         @JavascriptInterface
         fun captureRequest(
-            requestId: String,
-            method: String,
-            url: String,
-            headersJson: String,
+            requestId: String?,
+            method: String?,
+            url: String?,
+            headersJson: String?,
             body: String?
         ) {
-            val headers = parseJsonToMap(headersJson)
-            val exchange = CapturedExchange(
-                id = requestId,
-                method = method,
-                url = url,
-                requestHeaders = headers,
-                requestBody = body,
-                responseStatus = null,
-                responseHeaders = null,
-                responseBody = null,
-                startedAt = Clock.System.now(),
-                completedAt = null
-            )
-            pendingRequests[requestId] = exchange
+            try {
+                // Null-Safety: Alle Parameter validieren
+                if (requestId.isNullOrBlank() || url.isNullOrBlank()) {
+                    android.util.Log.w(TAG, "captureRequest: Missing required params")
+                    return
+                }
+                
+                val headers = parseJsonToMap(headersJson ?: "{}")
+                val exchange = CapturedExchange(
+                    id = requestId,
+                    method = method ?: "GET",
+                    url = url,
+                    requestHeaders = headers,
+                    requestBody = body?.take(MAX_BODY_SIZE), // Request body auch limitieren
+                    responseStatus = null,
+                    responseHeaders = null,
+                    responseBody = null,
+                    startedAt = Clock.System.now(),
+                    completedAt = null
+                )
+                pendingRequests[requestId] = exchange
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "captureRequest failed: ${e.message}", e)
+            }
         }
 
         @JavascriptInterface
         fun captureResponse(
-            requestId: String,
+            requestId: String?,
             status: Int,
-            headersJson: String,
+            headersJson: String?,
             body: String?
         ) {
-            val pending = pendingRequests.remove(requestId) ?: return
-            val headers = parseJsonToMap(headersJson)
+            try {
+                // Null-Safety
+                if (requestId.isNullOrBlank()) {
+                    android.util.Log.w(TAG, "captureResponse: Missing requestId")
+                    return
+                }
+                
+                val pending = pendingRequests.remove(requestId)
+                if (pending == null) {
+                    // Kann passieren bei race conditions oder wenn Request nicht erfasst wurde
+                    android.util.Log.d(TAG, "captureResponse: No pending request for $requestId")
+                    return
+                }
+                
+                val headers = parseJsonToMap(headersJson ?: "{}")
 
-            val completed = pending.copy(
-                responseStatus = status,
-                responseHeaders = headers,
-                responseBody = body?.take(MAX_BODY_SIZE),
-                completedAt = Clock.System.now()
-            )
+                // Body sicher limitieren (große GraphQL Responses können OOM verursachen)
+                val limitedBody = try {
+                    body?.take(MAX_BODY_SIZE)
+                } catch (e: OutOfMemoryError) {
+                    android.util.Log.e(TAG, "OOM while processing response body, truncating")
+                    body?.substring(0, minOf(body.length, 1024 * 1024)) // Fallback auf 1 MB
+                }
 
-            _capturedExchanges.value = _capturedExchanges.value + completed
-        }
+                val completed = pending.copy(
+                    responseStatus = status,
+                    responseHeaders = headers,
+                    responseBody = limitedBody,
+                    completedAt = Clock.System.now()
+                )
 
-        @JavascriptInterface
-        fun captureUserAction(type: String, target: String, value: String?) {
-            val actionType = when (type.lowercase()) {
-                "click" -> ActionType.CLICK
-                "submit" -> ActionType.SUBMIT
-                "input" -> ActionType.INPUT
-                else -> ActionType.CLICK
+                _capturedExchanges.value = _capturedExchanges.value + completed
+            } catch (e: OutOfMemoryError) {
+                android.util.Log.e(TAG, "OOM in captureResponse - clearing some data")
+                // Bei OOM: Alte Exchanges löschen um Speicher freizugeben
+                val currentList = _capturedExchanges.value
+                if (currentList.size > 100) {
+                    _capturedExchanges.value = currentList.takeLast(50)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "captureResponse failed: ${e.message}", e)
             }
-
-            val action = UserAction(
-                type = actionType,
-                target = target,
-                value = value,
-                timestamp = Clock.System.now(),
-                pageUrl = _currentUrl.value
-            )
-
-            _userActions.value = _userActions.value + action
         }
 
         @JavascriptInterface
-        fun log(message: String) {
-            // Debug logging from JS
-            android.util.Log.d(TAG, "[JS] $message")
+        fun captureUserAction(type: String?, target: String?, value: String?) {
+            try {
+                val actionType = when (type?.lowercase()) {
+                    "click" -> ActionType.CLICK
+                    "submit" -> ActionType.SUBMIT
+                    "input" -> ActionType.INPUT
+                    "cookie_set" -> ActionType.INPUT // Cookie-Änderungen als Input behandeln
+                    "websocket_message", "websocket_send", "websocket_close" -> ActionType.NAVIGATION
+                    "sse_message" -> ActionType.NAVIGATION
+                    "form_submit" -> ActionType.SUBMIT
+                    "navigation" -> ActionType.NAVIGATION
+                    else -> ActionType.CLICK
+                }
+
+                val action = UserAction(
+                    type = actionType,
+                    target = target?.take(500) ?: "unknown", // Target limitieren
+                    value = value?.take(1000), // Value limitieren
+                    timestamp = Clock.System.now(),
+                    pageUrl = _currentUrl.value
+                )
+
+                _userActions.value = _userActions.value + action
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "captureUserAction failed: ${e.message}", e)
+            }
         }
 
-        private fun parseJsonToMap(json: String): Map<String, String> {
+        @JavascriptInterface
+        fun log(message: String?) {
+            // Debug logging from JS - null-safe
+            if (!message.isNullOrBlank()) {
+                android.util.Log.d(TAG, "[JS] ${message.take(500)}")
+            }
+        }
+
+        /**
+         * Parst JSON-String zu Map.
+         * Robustes Parsing das auch bei fehlerhaftem JSON nicht crasht.
+         */
+        private fun parseJsonToMap(json: String?): Map<String, String> {
+            if (json.isNullOrBlank() || json == "{}" || json == "null") {
+                return emptyMap()
+            }
+            
             return try {
                 // Einfacher JSON Parser (ohne externe Dependencies)
-                json.trim()
+                val cleaned = json.trim()
                     .removeSurrounding("{", "}")
-                    .split(",")
+                    .takeIf { it.isNotBlank() } ?: return emptyMap()
+                
+                cleaned.split(",")
                     .filter { it.contains(":") }
-                    .associate { pair ->
-                        val (key, value) = pair.split(":", limit = 2)
-                        key.trim().removeSurrounding("\"") to value.trim().removeSurrounding("\"")
+                    .mapNotNull { pair ->
+                        try {
+                            val parts = pair.split(":", limit = 2)
+                            if (parts.size == 2) {
+                                val key = parts[0].trim().removeSurrounding("\"")
+                                val value = parts[1].trim().removeSurrounding("\"")
+                                key to value
+                            } else null
+                        } catch (e: Exception) {
+                            null // Einzelnes Paar ignorieren bei Fehler
+                        }
                     }
+                    .toMap()
             } catch (e: Exception) {
+                android.util.Log.w(TAG, "JSON parse error: ${e.message}")
                 emptyMap()
             }
         }
@@ -657,7 +733,7 @@ class TrafficInterceptWebView @JvmOverloads constructor(
     companion object {
         private const val TAG = "TrafficInterceptWebView"
         private const val BRIDGE_NAME = "FishIT"
-        private const val MAX_BODY_SIZE = 1024 * 1024 // 1 MB
+        private const val MAX_BODY_SIZE = 20 * 1024 * 1024 // 20 MB - erhöht für große GraphQL Responses
         const val FILE_CHOOSER_REQUEST = 1001
 
         /**
