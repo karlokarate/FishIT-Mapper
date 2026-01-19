@@ -19,8 +19,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             
-            <!-- Deep link for Custom Tabs return -->
-            <intent-filter>
+            <!-- Deep link for Custom Tabs return (Issue #9: autoVerify for secure handling) -->
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />

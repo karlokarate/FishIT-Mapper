@@ -96,8 +96,10 @@ fun CaptureWebViewScreen(
                 snackbarMessage = "Session erfolgreich wiederhergestellt"
             }
             
-            // Clear the return state after handling
-            customTabReturnState.value = null
+            // Issue #17: Clear state only if it wasn't updated during processing
+            if (customTabReturnState.value === returnData) {
+                customTabReturnState.value = null
+            }
         }
     }
 

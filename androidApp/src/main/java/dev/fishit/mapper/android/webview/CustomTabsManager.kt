@@ -54,7 +54,6 @@ class CustomTabsManager(private val context: Context) {
     data class CustomTabStatus(
         val isActive: Boolean = false,
         val launchedUrl: String? = null,
-        val returnUrl: String? = null,
         val cookiesSynced: Boolean = false
     )
 
@@ -73,15 +72,16 @@ class CustomTabsManager(private val context: Context) {
 
     /**
      * Startet Chrome Custom Tab mit Cookie-Synchronisation.
+     * 
+     * Note: Return handling via deep link (fishit://auth-callback) is configured
+     * in AndroidManifest and handled by MainActivity, not via returnUrl parameter.
      *
      * @param url URL die im Custom Tab geladen werden soll
      * @param transferCookies Cookies die von WebView übertragen werden sollen
-     * @param returnUrl Optional: URL zu der nach Auth zurückgekehrt werden soll
      */
     fun launchCustomTab(
         url: String,
-        transferCookies: Map<String, String> = emptyMap(),
-        returnUrl: String? = null
+        transferCookies: Map<String, String> = emptyMap()
     ) {
         Log.d(TAG, "Launching Custom Tab for URL: $url")
         Log.d(TAG, "Transfer cookies: ${transferCookies.keys.joinToString()}")
@@ -122,7 +122,6 @@ class CustomTabsManager(private val context: Context) {
             _status.value = CustomTabStatus(
                 isActive = true,
                 launchedUrl = url,
-                returnUrl = returnUrl,
                 cookiesSynced = false
             )
             Log.d(TAG, "Custom Tab launched successfully")
@@ -216,8 +215,11 @@ class CustomTabsManager(private val context: Context) {
         val pm = context.packageManager
         val activityIntent = Intent(Intent.ACTION_VIEW, Uri.parse("http://www.example.com"))
 
-        // Alle Apps finden die HTTP URLs öffnen können
-        val resolvedActivities = pm.queryIntentActivities(activityIntent, 0)
+        // Issue #15: Use MATCH_DEFAULT_ONLY flag
+        val resolvedActivities = pm.queryIntentActivities(
+            activityIntent,
+            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY
+        )
 
         // Priorisierte Liste von Chrome Packages
         val preferredPackages = listOf(

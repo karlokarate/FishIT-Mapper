@@ -42,10 +42,15 @@ class MainActivity : ComponentActivity() {
     
     override fun onResume() {
         super.onResume()
-        // Detect return from Custom Tab (when app comes to foreground)
+        // Issue #4: Detect return from Custom Tab (fallback for browsers without deep link support)
+        // Note: Deep link via onNewIntent() is preferred, this is a fallback
         if (customTabReturnState.value == null) {
-            // This could be a return from Custom Tab without deep link
-            Log.d(TAG, "Activity resumed - possible Custom Tab return")
+            Log.d(TAG, "Activity resumed - possible Custom Tab return without deep link")
+            // Set generic return state to trigger session restoration
+            customTabReturnState.value = CustomTabReturn(
+                returnedAt = System.currentTimeMillis(),
+                fromUrl = null  // No URL info available without deep link
+            )
         }
     }
     

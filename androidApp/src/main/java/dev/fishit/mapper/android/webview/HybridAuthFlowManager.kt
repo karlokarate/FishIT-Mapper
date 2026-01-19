@@ -189,8 +189,7 @@ class HybridAuthFlowManager(
         // Custom Tab starten
         customTabsManager.launchCustomTab(
             url = url,
-            transferCookies = cookies,
-            returnUrl = url // Zurück zur gleichen URL nach Auth
+            transferCookies = cookies
         )
 
         // Decision Point loggen
