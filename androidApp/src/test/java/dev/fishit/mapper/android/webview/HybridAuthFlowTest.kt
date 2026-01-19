@@ -3,6 +3,7 @@ package dev.fishit.mapper.android.webview
 import dev.fishit.mapper.android.import.httpcanary.CapturedExchange
 import dev.fishit.mapper.android.import.httpcanary.CapturedRequest
 import dev.fishit.mapper.android.import.httpcanary.CapturedResponse
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -145,7 +146,7 @@ class HybridAuthFlowTest {
         redirectLocation: String? = null,
         cookies: List<String> = emptyList(),
         responseBody: String? = null,
-        timestamp: Instant = Instant.parse("2024-01-15T10:00:00Z")
+        timestamp: Instant = Clock.System.now()  // Issue #2: Use current time instead of hardcoded 2024
     ): CapturedExchange {
         val headers = mutableMapOf<String, String>()
         redirectLocation?.let { headers["Location"] = it }

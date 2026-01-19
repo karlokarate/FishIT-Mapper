@@ -248,11 +248,11 @@ val afterCookies = cookieManager.getCookie(url)
 
 ## Performance
 
-- **Return Detection**: < 100ms
-- **Cookie Sync**: < 50ms
-- **WebView Reload**: ~500ms
+- **Return Detection**: Immediate upon deep link or activity resume
+- **Cookie Sync**: Synchronous operation, typically very fast on modern devices
+- **WebView Reload**: Depends on page complexity and network conditions
 
-Total return-to-ready time: **< 1 second**
+**Note**: Actual performance varies based on device capabilities, Android version, network conditions, and page complexity. The flow is designed to feel instant to users, with the WebView reload typically being the most noticeable delay.
 
 ## Security
 

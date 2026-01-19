@@ -509,13 +509,16 @@ fun CaptureWebViewScreen(
                 }
             }
 
+            // Issue #21: Extract badge top padding to avoid duplication
+            val badgeTopPadding = if (isRecording && isPaused) 48.dp else 8.dp
+
             // WebAuthn/Hybrid Auth Flow Indicator
             when (hybridAuthFlowContext.state) {
                 dev.fishit.mapper.android.webview.HybridAuthFlowManager.FlowState.WEBAUTHN_DETECTED -> {
                     Surface(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = if (isRecording && isPaused) 48.dp else 8.dp),
+                            .padding(top = badgeTopPadding),
                         color = Color(0xFF2196F3),
                         shape = RoundedCornerShape(16.dp)
                     ) {
@@ -542,7 +545,7 @@ fun CaptureWebViewScreen(
                     Surface(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = if (isRecording && isPaused) 48.dp else 8.dp),
+                            .padding(top = badgeTopPadding),
                         color = Color(0xFF4CAF50),
                         shape = RoundedCornerShape(16.dp)
                     ) {
@@ -569,7 +572,7 @@ fun CaptureWebViewScreen(
                     Surface(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = if (isRecording && isPaused) 48.dp else 8.dp),
+                            .padding(top = badgeTopPadding),
                         color = Color(0xFF4CAF50),
                         shape = RoundedCornerShape(16.dp)
                     ) {

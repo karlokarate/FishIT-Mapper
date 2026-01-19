@@ -304,18 +304,22 @@ webView.evaluateJavascript(
 
 ### Script Injection Timing
 
-Inject detection scripts in `onPageFinished` to ensure DOM is ready:
+Inject detection scripts in `onPageStarted` using `webView.post()` to minimize delay while ensuring the page is loading:
 
 ```kotlin
-override fun onPageFinished(view: WebView?, url: String?) {
-    super.onPageFinished(view, url)
-    webAuthnDetector.injectDetectionScript(view)
+override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+    super.onPageStarted(view, url, favicon)
+    view?.post {
+        webAuthnDetector.injectDetectionScript(view)
+    }
 }
 ```
 
+Note: Using `onPageStarted` with `post()` provides earlier injection compared to `onPageFinished`, which is important for intercepting early WebAuthn calls.
+
 ### Cookie Sync Overhead
 
-Cookie synchronization is fast (<10ms) but should be done carefully:
+Cookie synchronization is designed to be fast but actual performance varies by device:
 
 - Only sync when actually needed (WebAuthn detected)
 - Flush cookies asynchronously when possible
