@@ -771,453 +771,396 @@ class TrafficInterceptWebView @JvmOverloads constructor(
          * - XHR (XMLHttpRequest)
          * - Fetch API
          * - WebSocket (Real-time Kommunikation)
-         * - Redirects (durch Response-Analyse)
-         * - Cookies (document.cookie Hook)
-         * - sendBeacon (Analytics)
-         * - Form Submissions
          * - User Actions (Click, Submit, Input)
-         * - Service Worker fetch events
          *
-         * KEIN HttpCanary nötig - die App fängt ALLES selbst ab!
+         * ROBUST VERSION: Verzögerte Injection, Graceful Degradation,
+         * Body-Limits im JS, keine Konflikte mit modernen SPAs/GraphQL.
          */
         private const val INTERCEPTOR_SCRIPT = """
 (function() {
+    'use strict';
+
+    // Verhindere doppelte Injection
     if (window.__fishit_injected) return;
     window.__fishit_injected = true;
 
-    const bridge = window.FishIT;
+    var bridge = window.FishIT;
     if (!bridge) {
-        console.error('[FishIT] Bridge not found');
+        console.warn('[FishIT] Bridge not found, retrying...');
+        // Retry nach 100ms
+        setTimeout(function() {
+            if (window.FishIT) {
+                window.__fishit_injected = false;
+                eval(arguments.callee.toString() + '()');
+            }
+        }, 100);
         return;
     }
 
-    // Helper: Generate unique ID
+    // ==================== KONFIGURATION ====================
+    var MAX_BODY_SIZE = 5 * 1024 * 1024; // 5 MB - im JS limitieren
+    var SAFE_MODE = true; // Bei Fehlern original Funktionen nutzen
+
+    // ==================== HELPER FUNKTIONEN ====================
     function generateId() {
         return 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 
-    // Helper: Headers to JSON
-    function headersToJson(headers) {
-        if (!headers) return '{}';
-        if (headers instanceof Headers) {
-            const obj = {};
-            headers.forEach((value, key) => { obj[key] = value; });
+    function safeStringify(obj) {
+        try {
             return JSON.stringify(obj);
+        } catch(e) {
+            return '{}';
         }
-        if (typeof headers === 'object') {
-            return JSON.stringify(headers);
+    }
+
+    function limitBody(body) {
+        if (!body) return null;
+        try {
+            var str = typeof body === 'string' ? body : String(body);
+            return str.length > MAX_BODY_SIZE ? str.substring(0, MAX_BODY_SIZE) + '...[TRUNCATED]' : str;
+        } catch(e) {
+            return null;
         }
+    }
+
+    function headersToJson(headers) {
+        try {
+            if (!headers) return '{}';
+            if (headers instanceof Headers) {
+                var obj = {};
+                headers.forEach(function(value, key) { obj[key] = value; });
+                return safeStringify(obj);
+            }
+            if (typeof headers === 'object') {
+                return safeStringify(headers);
+            }
+        } catch(e) {}
         return '{}';
     }
 
-    // Helper: Check if redirect
-    function isRedirectStatus(status) {
-        return [301, 302, 303, 307, 308].includes(status);
+    function safeBridgeCall(fn) {
+        try {
+            fn();
+        } catch(e) {
+            try { bridge.log('Bridge error: ' + e.message); } catch(e2) {}
+        }
     }
 
-    // ==================== XHR Interception ====================
-    const OriginalXHR = window.XMLHttpRequest;
+    // ==================== XHR Interception (SAFE) ====================
+    try {
+        var OriginalXHR = window.XMLHttpRequest;
 
-    function InterceptedXHR() {
-        const xhr = new OriginalXHR();
-        const requestId = generateId();
-        let method = 'GET';
-        let url = '';
-        let requestHeaders = {};
+        function InterceptedXHR() {
+            var xhr = new OriginalXHR();
+            var requestId = generateId();
+            var method = 'GET';
+            var url = '';
+            var requestHeaders = {};
+            var captured = false;
 
-        // Intercept open()
-        const originalOpen = xhr.open;
-        xhr.open = function(m, u) {
-            method = m;
-            url = u;
-            return originalOpen.apply(xhr, arguments);
-        };
-
-        // Intercept setRequestHeader()
-        const originalSetHeader = xhr.setRequestHeader;
-        xhr.setRequestHeader = function(key, value) {
-            requestHeaders[key] = value;
-            return originalSetHeader.apply(xhr, arguments);
-        };
-
-        // Intercept send()
-        const originalSend = xhr.send;
-        xhr.send = function(body) {
-            try {
-                bridge.captureRequest(
-                    requestId,
-                    method,
-                    url,
-                    JSON.stringify(requestHeaders),
-                    body ? String(body) : null
-                );
-            } catch(e) {
-                bridge.log('XHR capture error: ' + e.message);
-            }
-
-            xhr.addEventListener('load', function() {
+            // Intercept open() - SAFE
+            var originalOpen = xhr.open;
+            xhr.open = function(m, u) {
                 try {
-                    const responseHeaders = {};
-                    const headerStr = xhr.getAllResponseHeaders();
-                    if (headerStr) {
-                        headerStr.split('\r\n').forEach(line => {
-                            const parts = line.split(': ');
-                            if (parts.length === 2) {
-                                responseHeaders[parts[0]] = parts[1];
+                    method = m || 'GET';
+                    url = u || '';
+                } catch(e) {}
+                return originalOpen.apply(xhr, arguments);
+            };
+
+            // Intercept setRequestHeader() - SAFE
+            var originalSetHeader = xhr.setRequestHeader;
+            xhr.setRequestHeader = function(key, value) {
+                try {
+                    requestHeaders[key] = value;
+                } catch(e) {}
+                return originalSetHeader.apply(xhr, arguments);
+            };
+
+            // Intercept send() - SAFE
+            var originalSend = xhr.send;
+            xhr.send = function(body) {
+                if (!captured) {
+                    captured = true;
+                    safeBridgeCall(function() {
+                        bridge.captureRequest(
+                            requestId,
+                            method,
+                            url,
+                            safeStringify(requestHeaders),
+                            limitBody(body)
+                        );
+                    });
+                }
+
+                // Response Handler
+                xhr.addEventListener('load', function() {
+                    safeBridgeCall(function() {
+                        var responseHeaders = {};
+                        try {
+                            var headerStr = xhr.getAllResponseHeaders();
+                            if (headerStr) {
+                                headerStr.split('\r\n').forEach(function(line) {
+                                    var parts = line.split(': ');
+                                    if (parts.length === 2) {
+                                        responseHeaders[parts[0]] = parts[1];
+                                    }
+                                });
                             }
+                        } catch(e) {}
+
+                        var responseBody = null;
+                        try {
+                            responseBody = limitBody(xhr.responseText);
+                        } catch(e) {}
+
+                        bridge.captureResponse(
+                            requestId,
+                            xhr.status || 0,
+                            safeStringify(responseHeaders),
+                            responseBody
+                        );
+                    });
+                });
+
+                xhr.addEventListener('error', function() {
+                    safeBridgeCall(function() {
+                        bridge.captureResponse(requestId, 0, '{"X-FishIT-Error":"Network Error"}', null);
+                    });
+                });
+
+                return originalSend.apply(xhr, arguments);
+            };
+
+            return xhr;
+        }
+
+        // Properties kopieren
+        Object.keys(OriginalXHR).forEach(function(key) {
+            try { InterceptedXHR[key] = OriginalXHR[key]; } catch(e) {}
+        });
+        InterceptedXHR.prototype = OriginalXHR.prototype;
+        window.XMLHttpRequest = InterceptedXHR;
+
+    } catch(e) {
+        try { bridge.log('XHR interception failed: ' + e.message); } catch(e2) {}
+    }
+
+    // ==================== Fetch Interception (SAFE) ====================
+    try {
+        var originalFetch = window.fetch;
+        if (originalFetch) {
+            window.fetch = function(input, init) {
+                var requestId = generateId();
+                var url = '';
+                var method = 'GET';
+
+                try {
+                    url = typeof input === 'string' ? input : (input && input.url ? input.url : String(input));
+                    method = (init && init.method) || (input && input.method) || 'GET';
+                } catch(e) {}
+
+                // Request capturen
+                safeBridgeCall(function() {
+                    var reqHeaders = {};
+                    try {
+                        reqHeaders = (init && init.headers) || {};
+                        if (input instanceof Request && input.headers) {
+                            input.headers.forEach(function(v, k) { reqHeaders[k] = v; });
+                        }
+                    } catch(e) {}
+
+                    bridge.captureRequest(
+                        requestId,
+                        method,
+                        url,
+                        headersToJson(reqHeaders),
+                        limitBody(init && init.body)
+                    );
+                });
+
+                // Original Fetch aufrufen
+                return originalFetch.apply(this, arguments).then(function(response) {
+                    // Response capturen (async, non-blocking)
+                    try {
+                        var clone = response.clone();
+                        var respHeaders = {};
+                        response.headers.forEach(function(v, k) { respHeaders[k] = v; });
+
+                        if (response.redirected) {
+                            respHeaders['X-FishIT-Redirect'] = 'true';
+                            respHeaders['X-FishIT-RedirectUrl'] = response.url;
+                        }
+
+                        clone.text().then(function(body) {
+                            safeBridgeCall(function() {
+                                bridge.captureResponse(
+                                    requestId,
+                                    response.status,
+                                    safeStringify(respHeaders),
+                                    limitBody(body)
+                                );
+                            });
+                        }).catch(function() {
+                            safeBridgeCall(function() {
+                                bridge.captureResponse(requestId, response.status, safeStringify(respHeaders), null);
+                            });
                         });
+                    } catch(e) {}
+
+                    return response;
+                }).catch(function(e) {
+                    safeBridgeCall(function() {
+                        bridge.captureResponse(requestId, 0, '{"X-FishIT-Error":"' + (e.message || 'Fetch Error') + '"}', null);
+                    });
+                    throw e;
+                });
+            };
+        }
+    } catch(e) {
+        try { bridge.log('Fetch interception failed: ' + e.message); } catch(e2) {}
+    }
+
+    // ==================== sendBeacon (SAFE) ====================
+    try {
+        if (navigator.sendBeacon) {
+            var originalSendBeacon = navigator.sendBeacon.bind(navigator);
+            navigator.sendBeacon = function(url, data) {
+                var requestId = generateId();
+                safeBridgeCall(function() {
+                    bridge.captureRequest(requestId, 'POST', url, '{"X-FishIT-Beacon":"true"}', limitBody(data));
+                    bridge.captureResponse(requestId, 200, '{}', null);
+                });
+                return originalSendBeacon(url, data);
+            };
+        }
+    } catch(e) {}
+
+    // ==================== User Actions (SAFE, MINIMAL) ====================
+    try {
+        // Click Events - einfach und sicher
+        document.addEventListener('click', function(e) {
+            safeBridgeCall(function() {
+                var target = e.target;
+                var selector = target.tagName ? target.tagName.toLowerCase() : 'unknown';
+                try {
+                    if (target.id) selector += '#' + target.id;
+                    if (target.className && typeof target.className === 'string') {
+                        selector += '.' + target.className.split(' ').slice(0, 3).join('.');
                     }
-
-                    // Redirect Detection
-                    if (isRedirectStatus(xhr.status)) {
-                        responseHeaders['X-FishIT-Redirect'] = 'true';
-                        responseHeaders['X-FishIT-RedirectUrl'] = xhr.responseURL || responseHeaders['Location'] || '';
+                    var link = target.closest ? target.closest('a') : null;
+                    if (link && link.href) {
+                        selector = 'a[href]';
                     }
-
-                    bridge.captureResponse(
-                        requestId,
-                        xhr.status,
-                        JSON.stringify(responseHeaders),
-                        xhr.responseText
-                    );
-                } catch(e) {
-                    bridge.log('XHR response capture error: ' + e.message);
-                }
+                } catch(e) {}
+                var value = target.textContent ? target.textContent.trim().substring(0, 50) : null;
+                bridge.captureUserAction('click', selector.substring(0, 200), value);
             });
+        }, true);
 
-            // Error handling
-            xhr.addEventListener('error', function() {
-                bridge.captureResponse(requestId, 0, '{"X-FishIT-Error": "Network Error"}', null);
+        // Form Submit Events
+        document.addEventListener('submit', function(e) {
+            safeBridgeCall(function() {
+                var form = e.target;
+                var action = form.action || window.location.href;
+                bridge.captureUserAction('submit', action.substring(0, 200), form.method || 'GET');
             });
+        }, true);
 
-            xhr.addEventListener('timeout', function() {
-                bridge.captureResponse(requestId, 0, '{"X-FishIT-Error": "Timeout"}', null);
+        // Input Events (debounced)
+        var inputTimeout;
+        document.addEventListener('input', function(e) {
+            clearTimeout(inputTimeout);
+            inputTimeout = setTimeout(function() {
+                var target = e.target;
+                if (target.type === 'password') return;
+                safeBridgeCall(function() {
+                    var selector = target.tagName ? target.tagName.toLowerCase() : 'input';
+                    if (target.name) selector += '[name="' + target.name + '"]';
+                    else if (target.id) selector += '#' + target.id;
+                    var value = target.value ? target.value.substring(0, 50) : '';
+                    bridge.captureUserAction('input', selector.substring(0, 200), value);
+                });
+            }, 500);
+        }, true);
+    } catch(e) {}
+
+    // ==================== History/Navigation (SAFE) ====================
+    try {
+        var originalPushState = history.pushState;
+        history.pushState = function() {
+            safeBridgeCall(function() {
+                bridge.captureUserAction('navigation', arguments[2] || window.location.href, 'pushState');
             });
-
-            return originalSend.apply(xhr, arguments);
+            return originalPushState.apply(history, arguments);
         };
 
-        return xhr;
-    }
-
-    // Alle Properties/Methods von OriginalXHR kopieren
-    Object.keys(OriginalXHR).forEach(key => {
-        InterceptedXHR[key] = OriginalXHR[key];
-    });
-    InterceptedXHR.prototype = OriginalXHR.prototype;
-
-    window.XMLHttpRequest = InterceptedXHR;
-
-    // ==================== Fetch Interception ====================
-    const originalFetch = window.fetch;
-
-    window.fetch = async function(input, init = {}) {
-        const requestId = generateId();
-        const url = typeof input === 'string' ? input : (input.url || input.toString());
-        const method = init.method || (input.method) || 'GET';
-
-        // Request Headers sammeln
-        let reqHeaders = init.headers || {};
-        if (input instanceof Request) {
-            const h = {};
-            input.headers.forEach((v, k) => { h[k] = v; });
-            reqHeaders = {...h, ...reqHeaders};
-        }
-
-        try {
-            bridge.captureRequest(
-                requestId,
-                method,
-                url,
-                headersToJson(reqHeaders),
-                init.body ? String(init.body) : null
-            );
-        } catch(e) {
-            bridge.log('Fetch capture error: ' + e.message);
-        }
-
-        try {
-            const response = await originalFetch.apply(this, arguments);
-            const clone = response.clone();
-
-            // Response Headers mit Redirect-Info
-            const respHeaders = {};
-            response.headers.forEach((v, k) => { respHeaders[k] = v; });
-
-            // Redirect Detection (fetch folgt automatisch)
-            if (response.redirected) {
-                respHeaders['X-FishIT-Redirect'] = 'true';
-                respHeaders['X-FishIT-RedirectUrl'] = response.url;
-                respHeaders['X-FishIT-OriginalUrl'] = url;
-            }
-
-            // Response body lesen (async)
-            clone.text().then(body => {
-                try {
-                    bridge.captureResponse(
-                        requestId,
-                        response.status,
-                        JSON.stringify(respHeaders),
-                        body
-                    );
-                } catch(e) {
-                    bridge.log('Fetch response capture error: ' + e.message);
-                }
-            }).catch(() => {
-                // Body nicht lesbar (z.B. Blob)
-                bridge.captureResponse(requestId, response.status, JSON.stringify(respHeaders), null);
+        var originalReplaceState = history.replaceState;
+        history.replaceState = function() {
+            safeBridgeCall(function() {
+                bridge.captureUserAction('navigation', arguments[2] || window.location.href, 'replaceState');
             });
-
-            return response;
-        } catch(e) {
-            // Fetch Error
-            bridge.captureResponse(requestId, 0, '{"X-FishIT-Error": "' + e.message + '"}', null);
-            throw e;
-        }
-    };
-
-    // ==================== sendBeacon Interception (Analytics) ====================
-    if (navigator.sendBeacon) {
-        const originalSendBeacon = navigator.sendBeacon.bind(navigator);
-        navigator.sendBeacon = function(url, data) {
-            const requestId = generateId();
-            try {
-                bridge.captureRequest(
-                    requestId,
-                    'POST',
-                    url,
-                    '{"Content-Type": "application/x-www-form-urlencoded"}',
-                    data ? String(data) : null
-                );
-                // sendBeacon hat keinen Response
-                bridge.captureResponse(requestId, 200, '{"X-FishIT-Beacon": "true"}', null);
-            } catch(e) {}
-            return originalSendBeacon(url, data);
+            return originalReplaceState.apply(history, arguments);
         };
-    }
+    } catch(e) {}
 
-    // ==================== Cookie Tracking ====================
-    let lastCookies = document.cookie;
+    // ==================== WebSocket (OPTIONAL, kann deaktiviert werden) ====================
+    try {
+        var OriginalWebSocket = window.WebSocket;
+        if (OriginalWebSocket) {
+            window.WebSocket = function(url, protocols) {
+                var wsId = generateId();
+                safeBridgeCall(function() {
+                    bridge.captureRequest(wsId, 'WEBSOCKET', url, '{}', null);
+                });
 
-    // Cookie-Änderungen überwachen
-    const cookieDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie') ||
-                             Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie');
+                var ws = protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
 
-    if (cookieDescriptor && cookieDescriptor.set) {
-        Object.defineProperty(document, 'cookie', {
-            get: function() {
-                return cookieDescriptor.get.call(document);
-            },
-            set: function(value) {
-                try {
-                    bridge.captureUserAction('cookie_set', value.split('=')[0], value.substring(0, 200));
-                } catch(e) {}
-                return cookieDescriptor.set.call(document, value);
-            }
-        });
-    }
+                ws.addEventListener('open', function() {
+                    safeBridgeCall(function() {
+                        bridge.captureResponse(wsId, 101, '{"Upgrade":"websocket"}', null);
+                    });
+                });
 
-    // ==================== Form Submission Interception ====================
-    const originalSubmit = HTMLFormElement.prototype.submit;
-    HTMLFormElement.prototype.submit = function() {
-        const requestId = generateId();
-        const form = this;
-        const formData = new FormData(form);
-        const data = {};
-        formData.forEach((value, key) => {
-            if (key.toLowerCase().includes('password')) {
-                data[key] = '***REDACTED***';
-            } else {
-                data[key] = value;
-            }
-        });
+                ws.addEventListener('message', function(event) {
+                    safeBridgeCall(function() {
+                        var data = typeof event.data === 'string' ? event.data.substring(0, 500) : '[Binary]';
+                        bridge.captureUserAction('websocket_message', url.substring(0, 200), data);
+                    });
+                });
 
-        try {
-            bridge.captureRequest(
-                requestId,
-                form.method.toUpperCase() || 'GET',
-                form.action || window.location.href,
-                '{"Content-Type": "application/x-www-form-urlencoded"}',
-                JSON.stringify(data)
-            );
-            bridge.captureUserAction('form_submit', form.action || form.id || 'form', form.method);
-        } catch(e) {}
+                ws.addEventListener('error', function() {
+                    safeBridgeCall(function() {
+                        bridge.captureResponse(wsId, 0, '{"X-FishIT-Error":"WebSocket Error"}', null);
+                    });
+                });
 
-        return originalSubmit.apply(this, arguments);
-    };
+                // Send intercepten
+                var originalSend = ws.send;
+                ws.send = function(data) {
+                    safeBridgeCall(function() {
+                        var msg = typeof data === 'string' ? data.substring(0, 500) : '[Binary]';
+                        bridge.captureUserAction('websocket_send', url.substring(0, 200), msg);
+                    });
+                    return originalSend.apply(ws, arguments);
+                };
 
-    // ==================== User Action Tracking ====================
+                return ws;
+            };
 
-    // Click Events
-    document.addEventListener('click', function(e) {
-        const target = e.target;
-        let selector = target.tagName.toLowerCase();
-        if (target.id) selector += '#' + target.id;
-        if (target.className && typeof target.className === 'string') {
-            selector += '.' + target.className.split(' ').filter(c => c).join('.');
+            // Static properties kopieren
+            window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+            window.WebSocket.OPEN = OriginalWebSocket.OPEN;
+            window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
+            window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
+            window.WebSocket.prototype = OriginalWebSocket.prototype;
         }
-
-        // Link-Clicks besonders behandeln
-        const link = target.closest('a');
-        if (link && link.href) {
-            selector = 'a[href="' + link.href.substring(0, 100) + '"]';
-        }
-
-        const value = target.textContent ? target.textContent.trim().substring(0, 100) : null;
-
-        try {
-            bridge.captureUserAction('click', selector, value);
-        } catch(e) {}
-    }, true);
-
-    // Form Submit Events
-    document.addEventListener('submit', function(e) {
-        const form = e.target;
-        const action = form.action || window.location.href;
-
-        try {
-            bridge.captureUserAction('submit', action, form.method || 'GET');
-        } catch(e) {}
-    }, true);
-
-    // Input Events (debounced)
-    let inputTimeout;
-    document.addEventListener('input', function(e) {
-        clearTimeout(inputTimeout);
-        inputTimeout = setTimeout(function() {
-            const target = e.target;
-            if (target.type === 'password') return; // Keine Passwörter loggen
-
-            let selector = target.tagName.toLowerCase();
-            if (target.name) selector += '[name="' + target.name + '"]';
-            else if (target.id) selector += '#' + target.id;
-
-            try {
-                bridge.captureUserAction('input', selector, target.value.substring(0, 100));
-            } catch(e) {}
-        }, 500);
-    }, true);
-
-    // ==================== History/Navigation Tracking ====================
-    const originalPushState = history.pushState;
-    history.pushState = function() {
-        try {
-            bridge.captureUserAction('navigation', arguments[2] || '', 'pushState');
-        } catch(e) {}
-        return originalPushState.apply(history, arguments);
-    };
-
-    const originalReplaceState = history.replaceState;
-    history.replaceState = function() {
-        try {
-            bridge.captureUserAction('navigation', arguments[2] || '', 'replaceState');
-        } catch(e) {}
-        return originalReplaceState.apply(history, arguments);
-    };
-
-    window.addEventListener('popstate', function(e) {
-        try {
-            bridge.captureUserAction('navigation', window.location.href, 'popstate');
-        } catch(e) {}
-    });
-
-    // ==================== WebSocket Interception ====================
-    const OriginalWebSocket = window.WebSocket;
-
-    window.WebSocket = function(url, protocols) {
-        const wsId = generateId();
-        bridge.log('WebSocket connecting: ' + url);
-
-        try {
-            bridge.captureRequest(wsId, 'WEBSOCKET', url, '{}', null);
-        } catch(e) {}
-
-        const ws = protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
-
-        ws.addEventListener('open', function() {
-            try {
-                bridge.captureResponse(wsId, 101, '{"Upgrade": "websocket"}', null);
-            } catch(e) {}
-        });
-
-        ws.addEventListener('message', function(event) {
-            try {
-                const data = typeof event.data === 'string' ? event.data.substring(0, 1000) : '[Binary]';
-                bridge.captureUserAction('websocket_message', url, data);
-            } catch(e) {}
-        });
-
-        ws.addEventListener('error', function() {
-            try {
-                bridge.captureResponse(wsId, 0, '{"X-FishIT-Error": "WebSocket Error"}', null);
-            } catch(e) {}
-        });
-
-        ws.addEventListener('close', function(event) {
-            try {
-                bridge.captureUserAction('websocket_close', url, 'Code: ' + event.code);
-            } catch(e) {}
-        });
-
-        // Intercept send
-        const originalSend = ws.send;
-        ws.send = function(data) {
-            try {
-                const msg = typeof data === 'string' ? data.substring(0, 1000) : '[Binary]';
-                bridge.captureUserAction('websocket_send', url, msg);
-            } catch(e) {}
-            return originalSend.apply(ws, arguments);
-        };
-
-        return ws;
-    };
-
-    // Copy static properties
-    window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
-    window.WebSocket.OPEN = OriginalWebSocket.OPEN;
-    window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
-    window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
-    window.WebSocket.prototype = OriginalWebSocket.prototype;
-
-    // ==================== EventSource (Server-Sent Events) ====================
-    if (window.EventSource) {
-        const OriginalEventSource = window.EventSource;
-
-        window.EventSource = function(url, config) {
-            const sseId = generateId();
-            bridge.log('EventSource connecting: ' + url);
-
-            try {
-                bridge.captureRequest(sseId, 'SSE', url, '{}', null);
-            } catch(e) {}
-
-            const es = new OriginalEventSource(url, config);
-
-            es.addEventListener('open', function() {
-                try {
-                    bridge.captureResponse(sseId, 200, '{"Content-Type": "text/event-stream"}', null);
-                } catch(e) {}
-            });
-
-            es.addEventListener('message', function(event) {
-                try {
-                    bridge.captureUserAction('sse_message', url, event.data.substring(0, 500));
-                } catch(e) {}
-            });
-
-            es.addEventListener('error', function() {
-                try {
-                    bridge.captureResponse(sseId, 0, '{"X-FishIT-Error": "SSE Error"}', null);
-                } catch(e) {}
-            });
-
-            return es;
-        };
-
-        window.EventSource.prototype = OriginalEventSource.prototype;
+    } catch(e) {
+        try { bridge.log('WebSocket interception skipped'); } catch(e2) {}
     }
 
-    bridge.log('FishIT interceptors injected successfully - capturing ALL traffic including WebSockets');
+    try { bridge.log('FishIT interceptors injected (safe mode)'); } catch(e) {}
 })();
 """
     }

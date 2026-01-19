@@ -142,14 +142,16 @@ fun CaptureWebViewScreen(
         // 2. Cache leeren für frischen Start
         webView.clearCache(true)
 
-        // 3. Session starten BEVOR die URL geladen wird
-        // Interception wird automatisch durch LaunchedEffect aktiviert
+        // 3. Interception SOFORT aktivieren (vor Session-Start!)
+        webView.setInterceptionEnabled(true)
+
+        // 4. Session starten BEVOR die URL geladen wird
         sessionManager.startSession(sessionName, url)
 
-        // 4. Markiere dass wir jetzt eine URL geladen haben
+        // 5. Markiere dass wir jetzt eine URL geladen haben
         hasLoadedInitialUrl = true
 
-        // 5. URL frisch laden - Requests werden erfasst sobald Interception aktiv
+        // 6. URL frisch laden - Requests werden erfasst
         val fullUrl = if (url.startsWith("http")) url else "https://$url"
         webView.loadUrl(fullUrl)
     }
