@@ -185,18 +185,18 @@ object CredentialExtractor {
     /**
      * Simple password hashing for privacy.
      * 
-     * MVP-Implementierung: Bietet grundlegende Obfuskation für Entwicklungs- und Analyse-Zwecke.
-     * Die Implementierung ist BEWUSST einfach gehalten, da:
-     * - Passwörter nur zur Analyse von Login-Flows benötigt werden
-     * - Die gehashten Werte nur lokal gespeichert und nicht übertragen werden
-     * - Dies eine Entwickler-Tool ist, kein Production-System
+     * MVP implementation: Provides basic obfuscation for development and analysis purposes.
+     * The implementation is INTENTIONALLY kept simple because:
+     * - Passwords are only needed for analyzing login flows
+     * - Hashed values are stored locally only and not transmitted
+     * - This is a developer tool, not a production system
      * 
-     * WARNUNG: Für Production-Systeme würde bcrypt/PBKDF2/Argon2 benötigt werden.
-     * Für den aktuellen Anwendungsfall (lokale API-Analyse) ist die Implementierung ausreichend.
+     * WARNING: Production systems would require bcrypt/PBKDF2/Argon2.
+     * For the current use case (local API analysis), this implementation is sufficient.
      */
     private fun hashPassword(password: String): String {
-        // Bewusst einfache Implementierung für MVP - ausreichend für lokale Entwickler-Analysen
-        // Bietet Basis-Schutz gegen versehentliche Passwort-Exposition in Logs/Exports
+        // Intentionally simple implementation for MVP - sufficient for local developer analysis
+        // Provides basic protection against accidental password exposure in logs/exports
         return "hash_len${password.length}_code${password.hashCode()}"
     }
     

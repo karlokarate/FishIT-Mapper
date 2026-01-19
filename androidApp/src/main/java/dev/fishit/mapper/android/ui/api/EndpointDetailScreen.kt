@@ -151,8 +151,8 @@ fun EndpointDetailScreen(
                     ExamplesSection(
                         examples = endpoint.examples,
                         onViewExample = { 
-                            // Exchange examples werden inline in der ExamplesSection angezeigt
-                            // Separate Detail-Ansicht ist optional und für MVP nicht erforderlich
+                            // Exchange examples are displayed inline in ExamplesSection
+                            // Separate detail view is optional and not required for MVP
                         }
                     )
                 }

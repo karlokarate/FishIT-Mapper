@@ -41,19 +41,19 @@ object FormAnalyzer {
      * Parses form submit data from a UserActionEvent.
      * Expected format: "formsubmit:{json data}"
      * 
-     * NOTE: MVP-Implementierung - liefert Basis-Metadaten.
-     * Die aktuelle Implementierung ist funktional für die Erkennung von Form-Submits.
-     * Zukünftige Verbesserung: JSON-Parsing für strukturierte Daten vom JavaScript Bridge.
+     * NOTE: MVP implementation - provides basic metadata.
+     * The current implementation is functional for detecting form submits.
+     * Future enhancement: JSON parsing for structured data from JavaScript bridge.
      */
     fun parseFormSubmit(event: UserActionEvent): FormSubmitInfo? {
         if (!event.action.startsWith("formsubmit:")) return null
         
-        // Basis-Implementierung für MVP - erkennt Form-Submits zuverlässig
-        // Detaillierte Feld-Extraktion kann bei Bedarf später ergänzt werden
+        // Basic implementation for MVP - reliably detects form submits
+        // Detailed field extraction can be added later if needed
         val _data = event.action.removePrefix("formsubmit:")
         
         return try {
-            // Funktionale Implementierung für MVP - liefert grundlegende Form-Informationen
+            // Functional implementation for MVP - provides basic form information
             FormSubmitInfo(
                 formId = event.target,
                 action = null,
