@@ -211,9 +211,6 @@ class TrafficInterceptWebView @JvmOverloads constructor(
     }
 
     private fun setupWebView() {
-        // Initialize diagnostics manager
-        WebViewDiagnosticsManager.initialize(context)
-        
         // JavaScript aktivieren (erforderlich für Interception)
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true

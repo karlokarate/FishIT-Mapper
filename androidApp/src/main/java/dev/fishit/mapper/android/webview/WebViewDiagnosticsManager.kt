@@ -21,8 +21,10 @@ import kotlinx.datetime.Instant
  *
  * ## Verwendung
  * ```kotlin
- * // In WebView setup:
- * WebViewDiagnosticsManager.initialize(context)
+ * // In WebView setup (nach vollständiger Konfiguration):
+ * WebViewDiagnosticsManager.updateDiagnosticsData(context, webView)
+ * 
+ * // Logging während der Nutzung:
  * WebViewDiagnosticsManager.logConsoleMessage("INFO", "Page loaded", webView.url)
  *
  * // In Diagnostics Screen:
@@ -87,24 +89,6 @@ object WebViewDiagnosticsManager {
 
     private const val MAX_CONSOLE_LOGS = 50
     private const val MAX_ERROR_LOGS = 50
-
-    /**
-     * Initialisiert den Diagnostics Manager ohne konkrete WebView-Instanz.
-     *
-     * Hinweis: Diese Variante erfasst nur Basisinformationen (Paket, Version, Cookies),
-     * aber **keine** WebView-spezifischen Einstellungen. Für vollständige Diagnosedaten
-     * sollte stattdessen [updateDiagnosticsData] mit einer WebView-Instanz verwendet werden.
-     *
-     * @deprecated Verwende updateDiagnosticsData(context, webView) für vollständige Diagnosedaten
-     */
-    @Deprecated(
-        message = "Verwende updateDiagnosticsData(context, webView) für vollständige WebView-Diagnosedaten",
-        replaceWith = ReplaceWith("updateDiagnosticsData(context, webView)")
-    )
-    fun initialize(context: Context) {
-        // Keine Diagnostics-Update ohne WebView-Instanz,
-        // um irreführende Default-Werte zu vermeiden
-    }
 
     /**
      * Loggt eine Console-Nachricht.

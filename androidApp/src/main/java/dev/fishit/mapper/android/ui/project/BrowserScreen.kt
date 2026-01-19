@@ -114,9 +114,6 @@ fun BrowserScreen(
                 .fillMaxSize(),
             factory = {
                 WebView(context).apply {
-                    // Initialize diagnostics
-                    WebViewDiagnosticsManager.initialize(context)
-                    
                     // WICHTIG: Focus-Handling für Tastatur
                     isFocusable = true
                     isFocusableInTouchMode = true
