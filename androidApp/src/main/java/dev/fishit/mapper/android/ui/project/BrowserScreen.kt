@@ -18,7 +18,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -66,14 +74,53 @@ fun BrowserScreen(
 
     // Keep a stable WebView instance across recompositions
     val webViewHolder = remember { arrayOfNulls<WebView>(1) }
+    
+    // Track WebView navigation state
+    var canGoBack by remember { mutableStateOf(false) }
+    var canGoForward by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Navigation buttons row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            IconButton(
+                onClick = {
+                    val wv = webViewHolder[0]
+                    if (wv != null && wv.canGoBack()) {
+                        wv.goBack()
+                    }
+                },
+                enabled = canGoBack
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Zurück"
+                )
+            }
+            
+            IconButton(
+                onClick = {
+                    val wv = webViewHolder[0]
+                    if (wv != null && wv.canGoForward()) {
+                        wv.goForward()
+                    }
+                },
+                enabled = canGoForward
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "Vorwärts"
+                )
+            }
+            
             OutlinedTextField(
                 value = urlText,
                 onValueChange = { urlText = it },
@@ -81,6 +128,7 @@ fun BrowserScreen(
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
+            
             Button(onClick = {
                 val wv = webViewHolder[0]
                 if (wv != null) wv.loadUrl(urlText.trim())
@@ -105,7 +153,9 @@ fun BrowserScreen(
         Spacer(Modifier.height(4.dp))
 
         AndroidView(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(600.dp),
             factory = {
                 WebView(context).apply {
                     settings.javaScriptEnabled = true
@@ -171,6 +221,9 @@ fun BrowserScreen(
                             // Always inject tracking script so it's available when recording starts mid-session
                             if (view != null) {
                                 view.evaluateJavascript(TrackingScript.getScript(), null)
+                                // Update navigation state
+                                canGoBack = view.canGoBack()
+                                canGoForward = view.canGoForward()
                             }
                         }
 
