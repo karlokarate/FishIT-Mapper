@@ -92,6 +92,7 @@ fun CaptureWebViewScreen(
     val currentSession by sessionManager.currentSession.collectAsState()
     val completedSessions by sessionManager.completedSessions.collectAsState()
     val isRecording by sessionManager.isRecording.collectAsState()
+    val isPaused by sessionManager.isPaused.collectAsState()
     val exchanges by webView.capturedExchanges.collectAsState()
     val userActions by webView.userActions.collectAsState()
     val pageEvents by webView.pageEvents.collectAsState()
@@ -99,29 +100,36 @@ fun CaptureWebViewScreen(
     val currentUrl by webView.currentUrl.collectAsState()
     val nextChainpointLabel by sessionManager.nextChainpointLabel.collectAsState()
     val chainpointLabels by sessionManager.chainpointLabels.collectAsState()
+    val interceptionEnabled by webView.interceptionEnabled.collectAsState()
+
+    // Interception mit Recording-State synchronisieren
+    LaunchedEffect(isRecording, isPaused) {
+        // Interception NUR aktiv wenn Recording läuft UND nicht pausiert
+        webView.setInterceptionEnabled(isRecording && !isPaused)
+    }
 
     // URL-Input synchron halten mit geladener URL
     LaunchedEffect(currentUrl) {
-        if (!currentUrl.isNullOrEmpty() && !isRecording) {
+        if (!currentUrl.isNullOrEmpty()) {
             urlInput = currentUrl ?: ""
         }
     }
 
-    // Exchanges und Actions zur Session hinzufügen
+    // Exchanges und Actions zur Session hinzufügen - NUR wenn aktiv recording (nicht pausiert)
     LaunchedEffect(exchanges) {
-        if (isRecording) {
+        if (isRecording && !isPaused) {
             sessionManager.addExchanges(exchanges)
         }
     }
 
     LaunchedEffect(userActions) {
-        if (isRecording) {
+        if (isRecording && !isPaused) {
             sessionManager.addUserActions(userActions)
         }
     }
 
     LaunchedEffect(pageEvents) {
-        if (isRecording) {
+        if (isRecording && !isPaused) {
             sessionManager.addPageEvents(pageEvents)
         }
     }
@@ -135,12 +143,20 @@ fun CaptureWebViewScreen(
         webView.clearCache(true)
 
         // 3. Session starten BEVOR die URL geladen wird
+        // Interception wird automatisch durch LaunchedEffect aktiviert
         sessionManager.startSession(sessionName, url)
 
         // 4. Markiere dass wir jetzt eine URL geladen haben
         hasLoadedInitialUrl = true
 
-        // 5. URL frisch laden - JETZT werden alle Requests erfasst!
+        // 5. URL frisch laden - Requests werden erfasst sobald Interception aktiv
+        val fullUrl = if (url.startsWith("http")) url else "https://$url"
+        webView.loadUrl(fullUrl)
+    }
+
+    // Funktion: URL OHNE Recording laden (normales Browsen)
+    fun loadUrlWithoutRecording(url: String) {
+        hasLoadedInitialUrl = true
         val fullUrl = if (url.startsWith("http")) url else "https://$url"
         webView.loadUrl(fullUrl)
     }
@@ -194,7 +210,28 @@ fun CaptureWebViewScreen(
                             }
                         }
 
-                        // Recording Button
+                        // Pause Button (nur während Recording sichtbar)
+                        if (isRecording) {
+                            IconButton(
+                                onClick = {
+                                    if (isPaused) {
+                                        sessionManager.resumeSession()
+                                        snackbarMessage = "Recording fortgesetzt"
+                                    } else {
+                                        sessionManager.pauseSession()
+                                        snackbarMessage = "Recording pausiert - Navigation ohne Erfassung möglich"
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                    if (isPaused) "Fortsetzen" else "Pausieren",
+                                    tint = if (isPaused) Color(0xFFFF9800) else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        // Recording Button (Start/Stop)
                         IconButton(
                             onClick = {
                                 if (isRecording) {
@@ -218,29 +255,24 @@ fun CaptureWebViewScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = if (isRecording)
-                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-                        else
-                            MaterialTheme.colorScheme.surface
+                        containerColor = when {
+                            isRecording && isPaused -> Color(0xFFFF9800).copy(alpha = 0.2f) // Orange für pausiert
+                            isRecording -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f) // Rot für recording
+                            else -> MaterialTheme.colorScheme.surface
+                        }
                     )
                 )
 
-                // URL Bar
+                // URL Bar - mit Optionen für Recording oder normales Browsen
                 UrlBar(
                     url = urlInput,
                     onUrlChange = { urlInput = it },
                     onGo = {
-                        if (isRecording) {
-                            // Während Recording: Normal laden (wird erfasst)
-                            val url = if (urlInput.startsWith("http")) urlInput
-                            else "https://$urlInput"
-                            webView.loadUrl(url)
-                        } else {
-                            // NICHT Recording: Zeige Recording-Dialog statt URL zu laden!
-                            // So wird GARANTIERT der initiale Request erfasst
-                            pendingRecordUrl = urlInput
-                            showSessionDialog = true
-                        }
+                        // URL IMMER laden - Recording oder nicht
+                        val url = if (urlInput.startsWith("http")) urlInput
+                        else "https://$urlInput"
+                        hasLoadedInitialUrl = true
+                        webView.loadUrl(url)
                     },
                     onBack = {
                         // Navigation IMMER erlauben
@@ -263,7 +295,7 @@ fun CaptureWebViewScreen(
                         webView.reload()
                     },
                     canGoBack = webView.canGoBack(), // IMMER basierend auf WebView-State
-                    canGoForward = webView.canGoForward(), // IMMER basierend auf WebView-State  
+                    canGoForward = webView.canGoForward(), // IMMER basierend auf WebView-State
                     isLoading = isLoading,
                     isRecording = isRecording,
                     onStartRecording = {
@@ -317,16 +349,16 @@ fun CaptureWebViewScreen(
                         // WICHTIG: Focus-Handling für Tastatur-Input auf Eingabefeldern
                         isFocusable = true
                         isFocusableInTouchMode = true
-                        
+
                         // WICHTIG: Scrolling aktivieren
                         isVerticalScrollBarEnabled = true
                         isHorizontalScrollBarEnabled = true
                         isScrollbarFadingEnabled = true
                         scrollBarStyle = android.view.View.SCROLLBARS_INSIDE_OVERLAY
-                        
+
                         // OverScroll für besseres Scroll-Feeling
                         overScrollMode = android.view.View.OVER_SCROLL_ALWAYS
-                        
+
                         // Nested Scrolling für Compose-Kompatibilität
                         isNestedScrollingEnabled = true
                     }
@@ -342,8 +374,8 @@ fun CaptureWebViewScreen(
                 }
             )
 
-            // "Waiting for Recording" Overlay - zeigt an dass noch nicht geladen wird
-            if (!isRecording && !hasLoadedInitialUrl) {
+            // Start-Overlay - zeigt Optionen wenn noch keine URL geladen
+            if (!hasLoadedInitialUrl) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -352,28 +384,93 @@ fun CaptureWebViewScreen(
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(32.dp)
                     ) {
                         Icon(
-                            Icons.Default.FiberManualRecord,
+                            Icons.Default.Web,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )
+
                         Text(
-                            "Drücke ▶ Record um zu starten",
-                            style = MaterialTheme.typography.headlineSmall
-                        )
-                        Text(
-                            "Die URL wird erst geladen wenn Recording aktiv ist,\ndamit alle initialen Requests erfasst werden.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                        )
-                        Text(
-                            urlInput,
-                            style = MaterialTheme.typography.bodyLarge,
+                            urlInput.ifBlank { "URL eingeben" },
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        // Option 1: Mit Recording starten
+                        Button(
+                            onClick = {
+                                pendingRecordUrl = urlInput
+                                showSessionDialog = true
+                            },
+                            modifier = Modifier.fillMaxWidth(0.8f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.Red.copy(alpha = 0.9f)
+                            )
+                        ) {
+                            Icon(Icons.Default.FiberManualRecord, null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Mit Recording starten")
+                        }
+
+                        Text(
+                            "Alle API-Requests werden erfasst",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // Option 2: Ohne Recording browsen
+                        OutlinedButton(
+                            onClick = {
+                                loadUrlWithoutRecording(urlInput)
+                            },
+                            modifier = Modifier.fillMaxWidth(0.8f)
+                        ) {
+                            Icon(Icons.Default.OpenInBrowser, null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Ohne Recording öffnen")
+                        }
+
+                        Text(
+                            "Normales Browsen - Recording später starten",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // Pause-Indicator Overlay (wenn pausiert)
+            if (isRecording && isPaused) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 8.dp),
+                    color = Color(0xFFFF9800),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Pause,
+                            null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "PAUSIERT - Navigation ohne Erfassung",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium
                         )
                     }
                 }

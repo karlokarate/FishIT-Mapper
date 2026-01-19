@@ -157,6 +157,35 @@ class CaptureSessionManager(context: Context? = null) {
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
 
+    // Pause Status - Recording läuft weiter aber Daten werden nicht erfasst
+    private val _isPaused = MutableStateFlow(false)
+    val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
+
+    /**
+     * Pausiert das Recording.
+     * Session bleibt aktiv, aber neue Exchanges/Actions werden nicht erfasst.
+     */
+    fun pauseSession() {
+        if (_isRecording.value && !_isPaused.value) {
+            _isPaused.value = true
+        }
+    }
+
+    /**
+     * Setzt das pausierte Recording fort.
+     */
+    fun resumeSession() {
+        if (_isRecording.value && _isPaused.value) {
+            _isPaused.value = false
+        }
+    }
+
+    /**
+     * Prüft ob aktiv aufgenommen wird (nicht pausiert).
+     */
+    val isActivelyRecording: Boolean
+        get() = _isRecording.value && !_isPaused.value
+
     /**
      * Startet eine neue Recording-Session.
      *

@@ -123,6 +123,29 @@ class TrafficInterceptWebView @JvmOverloads constructor(
     // Pending Requests (warten auf Response)
     private val pendingRequests = mutableMapOf<String, CapturedExchange>()
 
+    /**
+     * Steuert ob Traffic-Interception aktiv ist.
+     * Wenn false, wird KEIN JavaScript injiziert und keine Requests erfasst.
+     * Das verhindert Crashes auf problematischen Seiten (z.B. GraphQL mit spezieller JS-Engine).
+     */
+    private val _interceptionEnabled = MutableStateFlow(false)
+    val interceptionEnabled: StateFlow<Boolean> = _interceptionEnabled.asStateFlow()
+
+    /**
+     * Aktiviert/Deaktiviert Traffic-Interception.
+     * Bei Deaktivierung wird die Seite neu geladen um die JS-Hooks zu entfernen.
+     */
+    fun setInterceptionEnabled(enabled: Boolean, reloadPage: Boolean = false) {
+        _interceptionEnabled.value = enabled
+        if (reloadPage && !enabled) {
+            // Seite neu laden ohne Interception
+            reload()
+        } else if (enabled) {
+            // Interception aktivieren - Seite neu laden um Hooks zu injizieren
+            injectInterceptors()
+        }
+    }
+
     init {
         setupWebView()
         // WICHTIG: Focus-Handling für Tastatur-Input bei Eingabefeldern
@@ -618,8 +641,15 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             super.onPageFinished(view, url)
             _isLoading.value = false
 
-            // Interceptors injizieren nach Page Load
-            injectInterceptors()
+            // Interceptors NUR injizieren wenn Interception aktiviert ist
+            // Das verhindert Crashes auf problematischen Seiten (GraphQL, etc.)
+            if (_interceptionEnabled.value) {
+                try {
+                    injectInterceptors()
+                } catch (e: Exception) {
+                    android.util.Log.e(TAG, "JS Injection failed: ${e.message}", e)
+                }
+            }
 
             url?.let {
                 val event = PageEvent(
