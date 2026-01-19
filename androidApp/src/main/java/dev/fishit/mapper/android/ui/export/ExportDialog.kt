@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -308,7 +309,7 @@ private fun FormatItem(
         ExportFormat.HAR -> Icons.Default.Http
         ExportFormat.JSON -> Icons.Default.DataObject
         ExportFormat.OPENAPI -> Icons.Default.Api
-        ExportFormat.POSTMAN -> Icons.Default.Send
+        ExportFormat.POSTMAN -> Icons.AutoMirrored.Filled.Send
         ExportFormat.CURL -> Icons.Default.Terminal
         ExportFormat.TYPESCRIPT -> Icons.Default.Code
         ExportFormat.MARKDOWN -> Icons.Default.Description

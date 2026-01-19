@@ -13,6 +13,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -1161,7 +1163,7 @@ private fun SessionStartDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     leadingIcon = {
-                        Icon(Icons.Default.Label, null)
+                        Icon(Icons.AutoMirrored.Filled.Label, null)
                     }
                 )
             }
@@ -1433,7 +1435,7 @@ private fun ExchangesList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
-                    .animateItemPlacement(),
+                    .animateItem(),
                 onClick = { onSelect(if (isSelected) null else exchange.id) }
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
@@ -1592,7 +1594,7 @@ private fun ActionsList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
-                    .animateItemPlacement(),
+                    .animateItem(),
                 onClick = { onSelect(if (isSelected) null else action.id) }
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
@@ -1606,7 +1608,7 @@ private fun ActionsList(
                             Icon(
                                 when (action.type) {
                                     TrafficInterceptWebView.ActionType.CLICK -> Icons.Default.TouchApp
-                                    TrafficInterceptWebView.ActionType.SUBMIT -> Icons.Default.Send
+                                    TrafficInterceptWebView.ActionType.SUBMIT -> Icons.AutoMirrored.Filled.Send
                                     TrafficInterceptWebView.ActionType.INPUT -> Icons.Default.Keyboard
                                     TrafficInterceptWebView.ActionType.NAVIGATION -> Icons.Default.Navigation
                                 },

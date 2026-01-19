@@ -148,13 +148,16 @@ object WebViewDiagnosticsManager {
             0
         }
 
+        @Suppress("DEPRECATION")
+        val databaseEnabled = webView?.settings?.databaseEnabled ?: false
+
         val data = DiagnosticsData(
             webViewPackage = packageInfo?.packageName,
             webViewVersion = packageInfo?.versionName,
             userAgent = webView?.settings?.userAgentString,
             javaScriptEnabled = webView?.settings?.javaScriptEnabled ?: false,
             domStorageEnabled = webView?.settings?.domStorageEnabled ?: false,
-            databaseEnabled = webView?.settings?.databaseEnabled ?: false,
+            databaseEnabled = databaseEnabled,
             cookiesEnabled = cookieManager.acceptCookie(),
             thirdPartyCookiesEnabled = webView?.let { 
                 cookieManager.acceptThirdPartyCookies(it) 
