@@ -27,11 +27,42 @@ jobs:
     - name: Decode Keystore (if available)
       env:
         KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'fishit-mapper' }}
       run: |
         if [ -n "$KEYSTORE_BASE64" ]; then
           echo "$KEYSTORE_BASE64" | base64 -d > ./androidApp/keystore.jks
           echo "✅ Keystore decoded successfully"
           echo "KEYSTORE_AVAILABLE=true" >> $GITHUB_ENV
+          
+          # Validate keystore and check if alias exists
+          echo ""
+          echo "🔍 Validating keystore..."
+          if [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "📋 Keystore contents:"
+            keytool -list -keystore ./androidApp/keystore.jks -storepass "$KEYSTORE_PASSWORD" 2>&1 || {
+              echo "❌ ERROR: Failed to read keystore. Check KEYSTORE_PASSWORD secret."
+              echo "KEYSTORE_AVAILABLE=false" >> $GITHUB_ENV
+              exit 0
+            }
+            
+            # Check if the specified alias exists
+            if keytool -list -keystore ./androidApp/keystore.jks -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
+              echo "✅ Key alias '$KEY_ALIAS' found in keystore"
+            else
+              echo "❌ ERROR: Key alias '$KEY_ALIAS' NOT found in keystore!"
+              echo ""
+              echo "Available aliases in keystore:"
+              keytool -list -keystore ./androidApp/keystore.jks -storepass "$KEYSTORE_PASSWORD" | grep "Alias name:" || echo "No aliases found"
+              echo ""
+              echo "💡 FIX: Set the KEY_ALIAS secret to match one of the aliases above"
+              echo "   or regenerate the keystore with the correct alias."
+              echo "KEYSTORE_AVAILABLE=false" >> $GITHUB_ENV
+              exit 0
+            fi
+          else
+            echo "⚠️  KEYSTORE_PASSWORD not set, skipping validation"
+          fi
         else
           echo "⚠️  No keystore available, will build without signing"
           echo "KEYSTORE_AVAILABLE=false" >> $GITHUB_ENV
