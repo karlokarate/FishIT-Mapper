@@ -99,8 +99,8 @@ fun FishitApp(container: AppContainer) {
                         CaptureWebViewScreen(
                             startUrl = startUrl,
                             onExportSession = { session ->
-                                // Session wurde beendet - zurück zum Projekt
-                                // TODO: Session speichern und in Sessions-Tab anzeigen
+                                // Session wurde beendet und automatisch als HAR-Datei gespeichert
+                                // Die Session ist nun über die Sessions-Liste im CaptureWebViewScreen zugänglich
                                 navController.popBackStack()
                             },
                             onBack = { navController.popBackStack() }
