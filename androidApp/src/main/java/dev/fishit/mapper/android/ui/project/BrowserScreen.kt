@@ -11,6 +11,7 @@ import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Arrangement
@@ -221,15 +222,15 @@ fun BrowserScreen(
                         }
                         
                         override fun onReceivedHttpError(
-                            view: WebView?,
-                            request: WebResourceRequest?,
-                            errorResponse: WebResourceResponse?
+                            view: WebView,
+                            request: WebResourceRequest,
+                            errorResponse: WebResourceResponse
                         ) {
                             super.onReceivedHttpError(view, request, errorResponse)
                             
-                            val url = request?.url?.toString()
-                            val statusCode = errorResponse?.statusCode ?: 0
-                            val reasonPhrase = errorResponse?.reasonPhrase ?: "Unknown"
+                            val url = request.url?.toString()
+                            val statusCode = errorResponse.statusCode
+                            val reasonPhrase = errorResponse.reasonPhrase ?: "Unknown"
                             
                             Log.w(TAG, "HTTP Error: $statusCode $reasonPhrase for $url")
                             
