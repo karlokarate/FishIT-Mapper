@@ -43,7 +43,13 @@ Traditional solutions require full Chrome Custom Tabs, losing WebView's traffic 
    - Logs decision points with timestamps and context
    - Handles session restoration
 
-4. **AuthFlowAnalyzer** (`AuthFlowAnalyzer.kt`)
+4. **TrafficInterceptWebView** (`TrafficInterceptWebView.kt`)
+   - Integrated WebAuthn error detection
+   - Pattern-matching console messages for WebAuthn errors
+   - External browser fallback with URL validation
+   - Security: Only allows http/https schemes
+
+5. **AuthFlowAnalyzer** (`AuthFlowAnalyzer.kt`)
    - Analyzes HTTP Canary data for auth flows
    - Identifies redirect chains and OAuth patterns
    - Correlates decision points with network requests
@@ -245,6 +251,32 @@ Recommended sites for testing WebAuthn:
    - Export decision points for analysis
 
 ## Troubleshooting
+
+### WebAuthn Not Supported Error (New!)
+
+**Symptom**: Console shows "WebAuthn is not supported in this browser" and nothing happens
+
+**Solution**: Automatic external browser fallback dialog
+
+The app now automatically detects WebAuthn-related errors and offers to open the page in an external browser where WebAuthn is fully supported.
+
+**How it works**:
+1. JavaScript error is detected in WebView console
+2. Pattern matching identifies it as a WebAuthn error
+3. Dialog appears with explanation
+4. User can click "Im Browser öffnen" to open in external browser
+5. User completes authentication with full WebAuthn support
+
+**Detected Error Patterns**:
+- "webauthn.*not supported"
+- "publickeycredential.*not.*defined"
+- "navigator.credentials.*undefined"
+- "webauthn.*unavailable"
+- "fido.*not supported"
+
+**Security**: Only http and https URLs are allowed (rejects javascript:, data:, file: schemes)
+
+**Example Real-World Case**: eltern.kitaplus.de login throws "Uncaught (in promise) Error: WebAuthn is not supported in this browser" - automatically detected and handled.
 
 ### Custom Tabs Not Available
 
