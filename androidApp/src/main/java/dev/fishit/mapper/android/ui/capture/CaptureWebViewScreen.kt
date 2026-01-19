@@ -243,24 +243,27 @@ fun CaptureWebViewScreen(
                         }
                     },
                     onBack = {
-                        if (isRecording) {
+                        // Navigation IMMER erlauben
+                        if (webView.canGoBack()) {
                             webView.goBack()
                         }
                     },
                     onForward = {
-                        if (isRecording) {
+                        // Navigation IMMER erlauben
+                        if (webView.canGoForward()) {
                             webView.goForward()
                         }
                     },
                     onRefresh = {
+                        // Refresh IMMER erlauben
                         if (isRecording) {
-                            // Cache leeren und neu laden
+                            // Mit Recording: Cache leeren für saubere Erfassung
                             webView.clearCache(true)
-                            webView.reload()
                         }
+                        webView.reload()
                     },
-                    canGoBack = webView.canGoBack() && isRecording,
-                    canGoForward = webView.canGoForward() && isRecording,
+                    canGoBack = webView.canGoBack(), // IMMER basierend auf WebView-State
+                    canGoForward = webView.canGoForward(), // IMMER basierend auf WebView-State  
                     isLoading = isLoading,
                     isRecording = isRecording,
                     onStartRecording = {
@@ -307,20 +310,35 @@ fun CaptureWebViewScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // WebView mit Focus-Support für Tastatur
+            // WebView mit korrektem Scrolling und Focus-Support
             AndroidView(
                 factory = {
                     webView.apply {
                         // WICHTIG: Focus-Handling für Tastatur-Input auf Eingabefeldern
                         isFocusable = true
                         isFocusableInTouchMode = true
+                        
+                        // WICHTIG: Scrolling aktivieren
+                        isVerticalScrollBarEnabled = true
+                        isHorizontalScrollBarEnabled = true
+                        isScrollbarFadingEnabled = true
+                        scrollBarStyle = android.view.View.SCROLLBARS_INSIDE_OVERLAY
+                        
+                        // OverScroll für besseres Scroll-Feeling
+                        overScrollMode = android.view.View.OVER_SCROLL_ALWAYS
+                        
+                        // Nested Scrolling für Compose-Kompatibilität
+                        isNestedScrollingEnabled = true
                     }
                 },
                 modifier = Modifier.fillMaxSize(),
                 update = { view ->
-                    // Focus bei jedem Update sicherstellen
+                    // Focus und Scrolling bei jedem Update sicherstellen
                     view.isFocusable = true
                     view.isFocusableInTouchMode = true
+                    view.isVerticalScrollBarEnabled = true
+                    view.isHorizontalScrollBarEnabled = true
+                    view.isNestedScrollingEnabled = true
                 }
             )
 

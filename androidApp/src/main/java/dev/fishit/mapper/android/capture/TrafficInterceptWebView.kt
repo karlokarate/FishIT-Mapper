@@ -417,7 +417,7 @@ class TrafficInterceptWebView @JvmOverloads constructor(
 
     /**
      * JavaScript Interface für Capture-Callbacks.
-     * 
+     *
      * WICHTIG: Alle Methoden haben try-catch um Crashes durch JavaScript-Fehler zu verhindern.
      * Bei großen GraphQL Responses oder speziellen Encodings können sonst OutOfMemory oder
      * Parsing-Fehler auftreten.
@@ -438,7 +438,7 @@ class TrafficInterceptWebView @JvmOverloads constructor(
                     android.util.Log.w(TAG, "captureRequest: Missing required params")
                     return
                 }
-                
+
                 val headers = parseJsonToMap(headersJson ?: "{}")
                 val exchange = CapturedExchange(
                     id = requestId,
@@ -471,14 +471,14 @@ class TrafficInterceptWebView @JvmOverloads constructor(
                     android.util.Log.w(TAG, "captureResponse: Missing requestId")
                     return
                 }
-                
+
                 val pending = pendingRequests.remove(requestId)
                 if (pending == null) {
                     // Kann passieren bei race conditions oder wenn Request nicht erfasst wurde
                     android.util.Log.d(TAG, "captureResponse: No pending request for $requestId")
                     return
                 }
-                
+
                 val headers = parseJsonToMap(headersJson ?: "{}")
 
                 // Body sicher limitieren (große GraphQL Responses können OOM verursachen)
@@ -554,13 +554,13 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             if (json.isNullOrBlank() || json == "{}" || json == "null") {
                 return emptyMap()
             }
-            
+
             return try {
                 // Einfacher JSON Parser (ohne externe Dependencies)
                 val cleaned = json.trim()
                     .removeSurrounding("{", "}")
                     .takeIf { it.isNotBlank() } ?: return emptyMap()
-                
+
                 cleaned.split(",")
                     .filter { it.contains(":") }
                     .mapNotNull { pair ->
