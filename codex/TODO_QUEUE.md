@@ -2,13 +2,36 @@
 
 Diese Datei verwaltet die Task-Warteschlange für den GitHub Actions Orchestrator.
 
-## Issue #9: Vervollständigung offener Features
+## Issue #48: Browser-Tab Traffic Capture + Click→Flow Website Mapping
 
-### Priorität 1: Quick Wins (1-2 Tage)
+### Task 3: MitmProxyServer Robust for Real Websites (Closed - Architecture Changed)
 
-- [ ] 1.1 WebChromeClient für Console-Logs hinzufügen
-- [ ] 1.2 Chains-Tab im UI erstellen
-- [ ] 1.3 Filter-Dropdown für NodeKind/EdgeKind
+- [x] 3.1 Forward request bodies (POST/PUT)
+- [x] 3.2 Keep `followRedirects(false)` for observable 30x responses
+- [x] 3.3 Byte-safe stream handling - **N/A: MITM Proxy deprecated, using TrafficInterceptWebView**
+- [x] 3.4 Keep-alive loops for HTTP and HTTPS/CONNECT - **N/A: MITM Proxy deprecated**
+- [x] 3.5 Capture text-like response bodies only - **N/A: MITM Proxy deprecated**
+
+> **Note**: MitmProxyServer wurde deprecated. Traffic-Capture erfolgt nun über:
+> - `TrafficInterceptWebView` mit JavaScript-Hooks
+> - Externe Tools wie HttpCanary für HTTPS
+
+### Task 6: WebsiteMap per Session (Completed ✅)
+
+- [x] 6.1 Define action window (until next action or 10s max)
+- [x] 6.2 Collect ResourceRequestEvent + ResourceResponseEvent via requestId
+- [x] 6.3 Produce WebsiteMap structure
+- [x] 6.4 Persist to disk under `projects/<id>/maps/<sessionId>.json`
+- [x] 6.5 Include in export bundles - **Implemented 2026-01-19**
+
+---
+
+## Completed Tasks Summary
+
+| Task                | Status   | Note                                            |
+| ------------------- | -------- | ----------------------------------------------- |
+| 3.x MitmProxyServer | ✅ Closed | Architecture changed to TrafficInterceptWebView |
+| 6.x WebsiteMap      | ✅ Done   | WebsiteMap now included in ZIP exports          |
 
 ---
 

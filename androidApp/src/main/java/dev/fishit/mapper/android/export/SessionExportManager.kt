@@ -8,6 +8,14 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.core.content.FileProvider
 import dev.fishit.mapper.android.capture.CaptureSessionManager
 import dev.fishit.mapper.android.capture.HarSessionStore
+import dev.fishit.mapper.android.import.httpcanary.CapturedExchange
+import dev.fishit.mapper.android.import.httpcanary.CapturedRequest
+import dev.fishit.mapper.android.import.httpcanary.CapturedResponse
+import dev.fishit.mapper.android.import.httpcanary.WebsiteMapBuilder
+import dev.fishit.mapper.contract.EventId
+import dev.fishit.mapper.contract.NavigationEvent
+import dev.fishit.mapper.contract.RecorderEvent
+import dev.fishit.mapper.contract.UserActionEvent
 import dev.fishit.mapper.engine.api.*
 import dev.fishit.mapper.engine.export.ApiExporter
 import dev.fishit.mapper.engine.export.ExportOrchestrator
@@ -19,10 +27,13 @@ import dev.fishit.mapper.engine.export.TimelineNormalizer
 import dev.fishit.mapper.engine.export.toJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import dev.fishit.mapper.android.import.httpcanary.WebsiteMap as HttpCanaryWebsiteMap
 
 /**
  * Verwaltet alle Export-Operationen für Sessions.
@@ -55,6 +66,8 @@ class SessionExportManager(private val context: Context) {
     private val mermaidExporter = MermaidSequenceExporter()
     private val stateGraphExporter = StateGraphExporter()
     private val timelineNormalizer = TimelineNormalizer()
+    private val websiteMapBuilder = WebsiteMapBuilder()
+    private val json = Json { prettyPrint = true }
 
     /**
      * Export-Formate
@@ -76,6 +89,7 @@ class SessionExportManager(private val context: Context) {
         MERMAID_CORRELATION(".md", "text/markdown", "Mermaid Korrelation", "Korreliertes Sequenzdiagramm"),
         STATE_GRAPH(".md", "text/markdown", "State-Graph", "State-Graph pro User-Aktion"),
         TIMELINE(".json", "application/json", "Timeline", "Normalisierte Timeline (JSON)"),
+        WEBSITE_MAP(".json", "application/json", "WebsiteMap", "Korrelation User-Actions → HTTP-Exchanges"),
         ZIP(".zip", "application/zip", "ZIP Bundle", "Alle Formate in einem ZIP-Archiv")
     }
 
@@ -236,6 +250,7 @@ class SessionExportManager(private val context: Context) {
             ExportFormat.MERMAID_CORRELATION -> generateMermaidCorrelationExport(session, engineExchanges)
             ExportFormat.STATE_GRAPH -> generateStateGraphExport(session, engineExchanges)
             ExportFormat.TIMELINE -> generateTimelineExport(session, engineExchanges)
+            ExportFormat.WEBSITE_MAP -> generateWebsiteMapExport(session)
             ExportFormat.ZIP -> "" // ZIP wird separat behandelt
         }
     }
@@ -487,6 +502,62 @@ class SessionExportManager(private val context: Context) {
         return stateGraphExporter.generateFullExport(timeline)
     }
 
+    /**
+     * Generiert eine WebsiteMap die User-Actions mit HTTP-Exchanges korreliert.
+     *
+     * ## Features
+     * - Korrelation von User-Actions (Klicks, Formular-Submits) mit HTTP-Requests
+     * - Redirect-Chain-Erkennung
+     * - Navigation-Outcome-Tracking
+     *
+     * Die WebsiteMap ist maschinenlesbar und kann für Automatisierung verwendet werden.
+     */
+    private fun generateWebsiteMapExport(session: CaptureSessionManager.CaptureSession): String {
+        // Konvertiere Session-Exchanges zu CapturedExchange für WebsiteMapBuilder
+        val capturedExchanges = session.exchanges.map { exchange ->
+            CapturedExchange(
+                exchangeId = exchange.id,
+                startedAt = exchange.startedAt,
+                request = CapturedRequest(
+                    method = exchange.method,
+                    url = exchange.url,
+                    headers = exchange.requestHeaders ?: emptyMap(),
+                    body = exchange.requestBody
+                ),
+                response = exchange.responseStatus?.let { status ->
+                    CapturedResponse(
+                        status = status,
+                        headers = exchange.responseHeaders ?: emptyMap(),
+                        body = exchange.responseBody,
+                        redirectLocation = exchange.responseHeaders?.get("Location")
+                    )
+                }
+            )
+        }
+
+        // Konvertiere User-Actions zu RecorderEvents
+        val recorderEvents: List<RecorderEvent> = session.userActions.map { action ->
+            UserActionEvent(
+                id = EventId(action.hashCode().toString()),
+                at = action.timestamp,
+                action = action.type.name.lowercase(),
+                payload = mapOf(
+                    "target" to action.target,
+                    "value" to (action.value ?: "")
+                )
+            )
+        }
+
+        // Baue die WebsiteMap
+        val websiteMap = websiteMapBuilder.build(
+            sessionId = session.id,
+            events = recorderEvents,
+            exchanges = capturedExchanges
+        )
+
+        return json.encodeToString(websiteMap)
+    }
+
     private fun createBlueprintFromExchanges(
         session: CaptureSessionManager.CaptureSession,
         exchanges: List<EngineExchange>
@@ -626,7 +697,8 @@ class SessionExportManager(private val context: Context) {
             ExportFormat.MERMAID to "sequence_diagram.md",
             ExportFormat.MERMAID_CORRELATION to "correlation_diagram.md",
             ExportFormat.STATE_GRAPH to "state_graph.md",
-            ExportFormat.TIMELINE to "normalized_timeline.json"
+            ExportFormat.TIMELINE to "normalized_timeline.json",
+            ExportFormat.WEBSITE_MAP to "website_map.json"
         )
 
         for ((format, fileName) in formats) {

@@ -316,6 +316,7 @@ private fun FormatItem(
         ExportFormat.MERMAID_CORRELATION -> Icons.Default.Timeline
         ExportFormat.STATE_GRAPH -> Icons.Default.BubbleChart
         ExportFormat.TIMELINE -> Icons.Default.Schedule
+        ExportFormat.WEBSITE_MAP -> Icons.Default.Map
         ExportFormat.ZIP -> Icons.Default.FolderZip
     }
 
@@ -331,6 +332,7 @@ private fun FormatItem(
         ExportFormat.MERMAID_CORRELATION -> "Actions → Requests Korrelation"
         ExportFormat.STATE_GRAPH -> "State-Graph pro User-Aktion"
         ExportFormat.TIMELINE -> "Normalisierte Timeline (JSON)"
+        ExportFormat.WEBSITE_MAP -> "Actions → HTTP-Exchanges Korrelation"
         ExportFormat.ZIP -> "Alle Formate in einem Archiv"
     }
 
