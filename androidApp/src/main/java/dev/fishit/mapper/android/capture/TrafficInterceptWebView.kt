@@ -589,6 +589,8 @@ class TrafficInterceptWebView @JvmOverloads constructor(
      * Launches the current URL in an external browser as fallback when WebAuthn is not supported.
      * This is used when the website requires WebAuthn but the WebView doesn't support it.
      * 
+     * Only allows http and https schemes for security reasons.
+     * 
      * @param url The URL to open in external browser
      */
     fun launchInExternalBrowser(url: String) {
@@ -603,6 +605,14 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             val uri = android.net.Uri.parse(url)
             if (uri.scheme.isNullOrEmpty() || uri.host.isNullOrEmpty()) {
                 android.util.Log.w(TAG, "Invalid URL format: $url")
+                return
+            }
+            
+            // Security: Only allow http and https schemes to prevent attacks
+            // Reject dangerous schemes like javascript:, data:, file:
+            val scheme = uri.scheme?.lowercase()
+            if (scheme != "http" && scheme != "https") {
+                android.util.Log.w(TAG, "Rejected unsafe URL scheme: $scheme")
                 return
             }
             

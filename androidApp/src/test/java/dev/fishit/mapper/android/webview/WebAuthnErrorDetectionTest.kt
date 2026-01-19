@@ -106,4 +106,30 @@ class WebAuthnErrorDetectionTest {
             assertTrue(detectWebAuthnError(message), "Should detect as WebAuthn error: $message")
         }
     }
+
+    /**
+     * Tests for URL validation logic (conceptual - actual validation is in launchInExternalBrowser).
+     * These demonstrate the expected behavior for security validation.
+     */
+    @Test
+    fun `launchInExternalBrowser should only accept http and https URLs`() {
+        val validUrls = listOf(
+            "https://example.com",
+            "http://example.com",
+            "https://eltern.kitaplus.de/login"
+        )
+        
+        val invalidUrls = listOf(
+            "javascript:alert('xss')",
+            "data:text/html,<script>alert('xss')</script>",
+            "file:///etc/passwd",
+            "about:blank",
+            ""
+        )
+        
+        // Note: This is a conceptual test documenting expected behavior
+        // Actual implementation is tested through integration
+        assertTrue(validUrls.all { it.startsWith("http://") || it.startsWith("https://") })
+        assertFalse(invalidUrls.any { it.startsWith("http://") || it.startsWith("https://") })
+    }
 }

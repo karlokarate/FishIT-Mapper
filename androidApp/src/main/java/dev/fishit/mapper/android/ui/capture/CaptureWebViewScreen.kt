@@ -649,19 +649,21 @@ fun CaptureWebViewScreen(
     }
 
     // WebAuthn Error Dialog
-    if (showWebAuthnErrorDialog && webAuthnErrorUrl != null) {
-        WebAuthnErrorDialog(
-            url = webAuthnErrorUrl!!,
-            onDismiss = {
-                showWebAuthnErrorDialog = false
-                webView.clearWebAuthnError()
-            },
-            onOpenInBrowser = {
-                webView.launchInExternalBrowser(webAuthnErrorUrl!!)
-                showWebAuthnErrorDialog = false
-                webView.clearWebAuthnError()
-            }
-        )
+    webAuthnErrorUrl?.let { url ->
+        if (showWebAuthnErrorDialog) {
+            WebAuthnErrorDialog(
+                url = url,
+                onDismiss = {
+                    showWebAuthnErrorDialog = false
+                    webView.clearWebAuthnError()
+                },
+                onOpenInBrowser = {
+                    webView.launchInExternalBrowser(url)
+                    showWebAuthnErrorDialog = false
+                    webView.clearWebAuthnError()
+                }
+            )
+        }
     }
 
     // Session Editor
