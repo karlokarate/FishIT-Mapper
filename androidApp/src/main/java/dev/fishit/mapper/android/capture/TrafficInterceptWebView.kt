@@ -569,20 +569,11 @@ class TrafficInterceptWebView @JvmOverloads constructor(
      * - "WebAuthn is not supported"
      * - "PublicKeyCredential is not defined"
      * - "navigator.credentials is undefined"
+     * 
+     * Made internal for testing purposes.
      */
-    private fun detectWebAuthnError(message: String): Boolean {
-        val webAuthnErrorPatterns = listOf(
-            "webauthn.*not supported",
-            "publickeycredential.*not.*defined",
-            "navigator\\.credentials.*undefined",
-            "webauthn.*unavailable",
-            "fido.*not supported"
-        )
-        
-        val lowerMessage = message.lowercase()
-        return webAuthnErrorPatterns.any { pattern ->
-            lowerMessage.contains(Regex(pattern))
-        }
+    internal fun detectWebAuthnError(message: String): Boolean {
+        return WebAuthnErrorDetector.detectWebAuthnError(message)
     }
 
     /**
@@ -1722,5 +1713,33 @@ class TrafficInterceptWebView @JvmOverloads constructor(
     try { bridge.log('FishIT interceptors injected (safe mode)'); } catch(e) {}
 })();
 """
+    }
+}
+
+/**
+ * Utility object for detecting WebAuthn-related errors in console messages.
+ * Extracted for testability without requiring Android context.
+ */
+internal object WebAuthnErrorDetector {
+    
+    private val webAuthnErrorPatterns = listOf(
+        "webauthn.*not supported",
+        "publickeycredential.*not.*defined",
+        "navigator\\.credentials.*undefined",
+        "webauthn.*unavailable",
+        "fido.*not supported"
+    )
+    
+    /**
+     * Detects if a console error message is related to WebAuthn not being supported.
+     * 
+     * @param message The console error message to check
+     * @return true if the message indicates a WebAuthn error, false otherwise
+     */
+    fun detectWebAuthnError(message: String): Boolean {
+        val lowerMessage = message.lowercase()
+        return webAuthnErrorPatterns.any { pattern ->
+            lowerMessage.contains(Regex(pattern))
+        }
     }
 }
