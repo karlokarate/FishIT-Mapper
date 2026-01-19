@@ -367,8 +367,4 @@ class HybridAuthFlowManager(
             url
         }
     }
-
-    companion object {
-        private const val TAG = "HybridAuthFlowManager"
-    }
 }
