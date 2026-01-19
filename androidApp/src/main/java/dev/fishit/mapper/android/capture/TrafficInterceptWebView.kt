@@ -175,6 +175,20 @@ class TrafficInterceptWebView @JvmOverloads constructor(
     val interceptionEnabled: StateFlow<Boolean> = _interceptionEnabled.asStateFlow()
 
     /**
+     * Hybrid Auth Flow Manager für WebAuthn/Custom Tabs Integration.
+     * Wird lazy initialisiert da Context benötigt wird.
+     */
+    private val _hybridAuthFlowManager by lazy { 
+        dev.fishit.mapper.android.webview.HybridAuthFlowManager(context)
+    }
+    
+    /**
+     * Hybrid Auth Flow Status - exposed für UI.
+     */
+    val hybridAuthFlowContext: StateFlow<dev.fishit.mapper.android.webview.HybridAuthFlowManager.FlowContext>
+        get() = _hybridAuthFlowManager.flowContext
+
+    /**
      * Aktiviert/Deaktiviert Traffic-Interception.
      * Bei Deaktivierung wird die Seite neu geladen um die JS-Hooks zu entfernen.
      */
@@ -266,6 +280,9 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         // User Agent setzen (wie normaler Chrome, NICHT als WebView erkennbar)
         settings.userAgentString = settings.userAgentString.replace("; wv", "")
         settings.userAgentString = settings.userAgentString.replace("; wv", "")
+
+        // Hybrid Auth Flow Manager Setup
+        _hybridAuthFlowManager.setupWebViewBridge(this)
 
         // JavaScript Interface für Capture
         addJavascriptInterface(CaptureJsBridge(), BRIDGE_NAME)
@@ -497,6 +514,28 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         _pageEvents.value = emptyList()
         _cookieEvents.value = emptyList()
         pendingRequests.clear()
+    }
+
+    /**
+     * Behandelt Rückkehr von Chrome Custom Tabs nach WebAuthn-Flow.
+     * Synchronisiert Session und lädt Seite neu.
+     */
+    fun handleCustomTabReturn(): Boolean {
+        return _hybridAuthFlowManager.onCustomTabReturned(this)
+    }
+
+    /**
+     * Behandelt User-Cancel des Custom Tab Flows.
+     */
+    fun handleCustomTabCancel() {
+        _hybridAuthFlowManager.onCustomTabCancelled()
+    }
+
+    /**
+     * Gibt alle Decision Points für Analyse zurück.
+     */
+    fun getAuthFlowDecisionPoints(): List<dev.fishit.mapper.android.webview.HybridAuthFlowManager.DecisionPoint> {
+        return _hybridAuthFlowManager.exportDecisionPoints()
     }
 
     /**
@@ -858,6 +897,13 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             super.onPageStarted(view, url, favicon)
             _isLoading.value = true
             _currentUrl.value = url
+
+            // Hybrid Auth Flow: Page started event
+            url?.let { 
+                view?.let { webView ->
+                    _hybridAuthFlowManager.onPageStarted(webView, it)
+                }
+            }
 
             url?.let {
                 val event = PageEvent(

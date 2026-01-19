@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.fishit.mapper.android.MainActivity
 import dev.fishit.mapper.android.capture.CaptureSessionManager
 import dev.fishit.mapper.android.capture.TrafficInterceptWebView
 import dev.fishit.mapper.android.ui.export.ExportDialog
@@ -57,6 +58,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun CaptureWebViewScreen(
     startUrl: String = "https://",
+    customTabReturnState: androidx.compose.runtime.MutableState<MainActivity.CustomTabReturn?>? = null,
     onExportSession: (CaptureSessionManager.CaptureSession) -> Unit,
     onBack: () -> Unit
 ) {
@@ -82,6 +84,24 @@ fun CaptureWebViewScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     // Session für Export speichern (bleibt erhalten nach Stop)
     var sessionToExport by remember { mutableStateOf<CaptureSessionManager.CaptureSession?>(null) }
+    
+    // Handle Custom Tab return
+    LaunchedEffect(customTabReturnState?.value) {
+        customTabReturnState?.value?.let { returnData ->
+            android.util.Log.d("CaptureWebView", "Custom Tab returned at ${returnData.returnedAt}")
+            
+            // Restore session in WebView
+            val restored = webView.handleCustomTabReturn()
+            if (restored) {
+                snackbarMessage = "Session erfolgreich wiederhergestellt"
+            }
+            
+            // Issue #17: Clear state only if it wasn't updated during processing
+            if (customTabReturnState.value === returnData) {
+                customTabReturnState.value = null
+            }
+        }
+    }
 
     // Gespeicherte Sessions beim Start laden
     LaunchedEffect(Unit) {
@@ -102,6 +122,9 @@ fun CaptureWebViewScreen(
     val nextChainpointLabel by sessionManager.nextChainpointLabel.collectAsState()
     val chainpointLabels by sessionManager.chainpointLabels.collectAsState()
     val interceptionEnabled by webView.interceptionEnabled.collectAsState()
+    
+    // Hybrid Auth Flow Status
+    val hybridAuthFlowContext by webView.hybridAuthFlowContext.collectAsState()
 
     // Interception mit Recording-State synchronisieren
     LaunchedEffect(isRecording, isPaused) {
@@ -484,6 +507,95 @@ fun CaptureWebViewScreen(
                         )
                     }
                 }
+            }
+
+            // Issue #21: Extract badge top padding to avoid duplication
+            val badgeTopPadding = if (isRecording && isPaused) 48.dp else 8.dp
+
+            // WebAuthn/Hybrid Auth Flow Indicator
+            when (hybridAuthFlowContext.state) {
+                dev.fishit.mapper.android.webview.HybridAuthFlowManager.FlowState.WEBAUTHN_DETECTED -> {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = badgeTopPadding),
+                        color = Color(0xFF2196F3),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Security,
+                                null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "WebAuthn erkannt - Wechsel zu Chrome Custom Tabs...",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                }
+                dev.fishit.mapper.android.webview.HybridAuthFlowManager.FlowState.CUSTOM_TAB_ACTIVE -> {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = badgeTopPadding),
+                        color = Color(0xFF4CAF50),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.OpenInBrowser,
+                                null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "WebAuthn-Flow in Chrome Custom Tab aktiv",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                }
+                dev.fishit.mapper.android.webview.HybridAuthFlowManager.FlowState.SESSION_RESTORED -> {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = badgeTopPadding),
+                        color = Color(0xFF4CAF50),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Session erfolgreich wiederhergestellt",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                }
+                else -> { /* No indicator for normal states */ }
             }
 
             // Loading Indicator

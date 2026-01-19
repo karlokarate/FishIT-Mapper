@@ -22,7 +22,10 @@ import dev.fishit.mapper.android.ui.settings.SettingsScreen
 import dev.fishit.mapper.android.ui.settings.WebViewDiagnosticsScreen
 
 @Composable
-fun FishitApp(container: AppContainer) {
+fun FishitApp(
+    container: AppContainer,
+    customTabReturnState: androidx.compose.runtime.MutableState<MainActivity.CustomTabReturn?>? = null
+) {
     CompositionLocalProvider(LocalAppContainer provides container) {
         MaterialTheme {
             Surface(modifier = Modifier.fillMaxSize()) {
@@ -108,6 +111,7 @@ fun FishitApp(container: AppContainer) {
 
                         CaptureWebViewScreen(
                             startUrl = startUrl,
+                            customTabReturnState = customTabReturnState,
                             onExportSession = { session ->
                                 // Session wurde beendet - zurück zum Projekt
                                 // TODO: Session speichern und in Sessions-Tab anzeigen

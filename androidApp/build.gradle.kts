@@ -120,6 +120,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.documentfile)
+    implementation(libs.androidx.browser)
 
     // Testing
     testImplementation(kotlin("test"))
