@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.fishit.mapper.android.MainActivity
 import dev.fishit.mapper.android.capture.CaptureSessionManager
 import dev.fishit.mapper.android.capture.TrafficInterceptWebView
 import dev.fishit.mapper.android.ui.export.ExportDialog
@@ -57,6 +58,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun CaptureWebViewScreen(
     startUrl: String = "https://",
+    customTabReturnState: androidx.compose.runtime.MutableState<MainActivity.CustomTabReturn?>? = null,
     onExportSession: (CaptureSessionManager.CaptureSession) -> Unit,
     onBack: () -> Unit
 ) {
@@ -82,6 +84,22 @@ fun CaptureWebViewScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     // Session für Export speichern (bleibt erhalten nach Stop)
     var sessionToExport by remember { mutableStateOf<CaptureSessionManager.CaptureSession?>(null) }
+    
+    // Handle Custom Tab return
+    LaunchedEffect(customTabReturnState?.value) {
+        customTabReturnState?.value?.let { returnData ->
+            android.util.Log.d("CaptureWebView", "Custom Tab returned at ${returnData.returnedAt}")
+            
+            // Restore session in WebView
+            val restored = webView.handleCustomTabReturn()
+            if (restored) {
+                snackbarMessage = "Session erfolgreich wiederhergestellt"
+            }
+            
+            // Clear the return state after handling
+            customTabReturnState.value = null
+        }
+    }
 
     // Gespeicherte Sessions beim Start laden
     LaunchedEffect(Unit) {
