@@ -18,10 +18,20 @@ on:
       - "build.gradle.kts"
       - "settings.gradle.kts"
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build-Typ (debug oder release)'
+        required: false
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+          - both
 
 jobs:
   build:
-    name: Build Debug APK
+    name: Build Android App
     runs-on: ubuntu-latest
 
     permissions:
@@ -52,24 +62,90 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Determine Build Type
+        id: build-type
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            BUILD_TYPE="${{ inputs.build_type }}"
+          else
+            BUILD_TYPE="debug"
+          fi
+          echo "BUILD_TYPE=$BUILD_TYPE" >> $GITHUB_ENV
+          echo "build_type=$BUILD_TYPE" >> $GITHUB_OUTPUT
+          echo "ℹ️  Build-Typ: $BUILD_TYPE"
+
+      - name: Decode Keystore (for release builds)
+        if: env.BUILD_TYPE == 'release' || env.BUILD_TYPE == 'both'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > ./androidApp/keystore.jks
+            echo "✅ Keystore decoded successfully"
+            echo "KEYSTORE_AVAILABLE=true" >> $GITHUB_ENV
+          else
+            echo "⚠️  No keystore configured - Release build will fail"
+            echo "KEYSTORE_AVAILABLE=false" >> $GITHUB_ENV
+          fi
+
       - name: Generate contract
         run: ./gradlew :shared:contract:generateFishitContract --no-daemon
 
       - name: Build Debug APK
+        if: env.BUILD_TYPE == 'debug' || env.BUILD_TYPE == 'both'
         run: ./gradlew :androidApp:assembleDebug --stacktrace
+        id: build-debug
+
+      - name: Build Release APK
+        if: (env.BUILD_TYPE == 'release' || env.BUILD_TYPE == 'both') && env.KEYSTORE_AVAILABLE == 'true'
+        run: ./gradlew :androidApp:assembleRelease --stacktrace
+        env:
+          KEYSTORE_FILE: keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        id: build-release
 
       - name: Upload Debug APK
+        if: steps.build-debug.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: androidApp/build/outputs/apk/debug/*.apk
           retention-days: 30
 
+      - name: Upload Release APK
+        if: steps.build-release.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-signed
+          path: androidApp/build/outputs/apk/release/*.apk
+          retention-days: 30
+
       - name: Build Summary
+        if: always()
         run: |
-          echo "### Build Completed Successfully! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Abgeschlossen! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Build-Typ:** $BUILD_TYPE" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Debug APK (app-debug)" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.build-debug.outcome }}" == "success" ]; then
+            echo "- ✅ app-debug (Debug-APK)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ steps.build-release.outcome }}" == "success" ]; then
+            echo "- ✅ app-release-signed (Signierte Release-APK)" >> $GITHUB_STEP_SUMMARY
+          elif [ "$BUILD_TYPE" == "release" ] || [ "$BUILD_TYPE" == "both" ]; then
+            if [ "$KEYSTORE_AVAILABLE" != "true" ]; then
+              echo "- ⚠️  Release-Build übersprungen (Kein Keystore konfiguriert)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "ℹ️  **Hinweis:** Um signierte Release-Builds zu erstellen, führen Sie den Workflow 'Generate Keystore and Secrets' aus." >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- ❌ Release-Build fehlgeschlagen" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+          
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download the artifact from the workflow run page." >> $GITHUB_STEP_SUMMARY
+          echo "Laden Sie die Artifacts von der Workflow-Run-Seite herunter." >> $GITHUB_STEP_SUMMARY

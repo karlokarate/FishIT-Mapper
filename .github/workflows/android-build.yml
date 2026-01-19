@@ -30,40 +30,67 @@ jobs:
       run: |
         if [ -n "$KEYSTORE_BASE64" ]; then
           echo "$KEYSTORE_BASE64" | base64 -d > ./androidApp/keystore.jks
-          echo "Keystore decoded successfully"
+          echo "✅ Keystore decoded successfully"
+          echo "KEYSTORE_AVAILABLE=true" >> $GITHUB_ENV
         else
-          echo "No keystore available, will build without signing"
+          echo "⚠️  No keystore available, will build without signing"
+          echo "KEYSTORE_AVAILABLE=false" >> $GITHUB_ENV
         fi
     
     - name: Generate contract
       run: ./gradlew :shared:contract:generateFishitContract --no-daemon
     
     - name: Build Release APK (signed if keystore available)
+      if: env.KEYSTORE_AVAILABLE == 'true'
       run: ./gradlew :androidApp:assembleRelease --stacktrace
       env:
         KEYSTORE_FILE: keystore.jks
         KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-      continue-on-error: true
       id: build-release
     
-    - name: Build Debug APK (fallback if release signing fails)
-      if: steps.build-release.outcome == 'failure'
+    - name: Build Debug APK (fallback if no keystore)
+      if: env.KEYSTORE_AVAILABLE != 'true'
       run: ./gradlew :androidApp:assembleDebug --stacktrace
+      id: build-debug
     
     - name: Upload Release APK
       if: steps.build-release.outcome == 'success'
       uses: actions/upload-artifact@v4
       with:
-        name: release-apk
+        name: app-release-signed
         path: androidApp/build/outputs/apk/release/*.apk
         retention-days: 30
     
     - name: Upload Debug APK (fallback)
-      if: steps.build-release.outcome == 'failure'
+      if: steps.build-debug.outcome == 'success'
       uses: actions/upload-artifact@v4
       with:
-        name: debug-apk-unsigned
+        name: app-debug-unsigned
         path: androidApp/build/outputs/apk/debug/*.apk
         retention-days: 30
+    
+    - name: Build Summary
+      if: always()
+      run: |
+        echo "### Android Build Abgeschlossen! 🎉" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "$KEYSTORE_AVAILABLE" == "true" ]; then
+          echo "**Build-Typ:** Release (Signiert)" >> $GITHUB_STEP_SUMMARY
+          echo "**Signing:** ✅ Mit konfiguriertem Keystore signiert" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 app-release-signed (Signierte Release-APK)" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "**Build-Typ:** Debug (Unsigned)" >> $GITHUB_STEP_SUMMARY
+          echo "**Signing:** ⚠️  Kein Keystore konfiguriert" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifacts:**" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 app-debug-unsigned (Debug-APK)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "ℹ️  **Hinweis:** Um signierte Release-Builds zu erstellen, führen Sie den Workflow 'Generate Keystore and Secrets' aus und konfigurieren Sie die GitHub Secrets." >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Laden Sie das Artifact von der Workflow-Run-Seite herunter." >> $GITHUB_STEP_SUMMARY
