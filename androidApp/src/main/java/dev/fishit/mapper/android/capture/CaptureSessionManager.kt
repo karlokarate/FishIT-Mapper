@@ -89,6 +89,7 @@ class CaptureSessionManager(context: Context? = null) {
         val exchanges: List<TrafficInterceptWebView.CapturedExchange> = emptyList(),
         val userActions: List<TrafficInterceptWebView.UserAction> = emptyList(),
         val pageEvents: List<TrafficInterceptWebView.PageEvent> = emptyList(),
+        val cookieEvents: List<TrafficInterceptWebView.CookieEvent> = emptyList(),
         val notes: String? = null
     ) {
         val isActive: Boolean get() = stoppedAt == null
@@ -97,6 +98,7 @@ class CaptureSessionManager(context: Context? = null) {
         }
         val exchangeCount: Int get() = exchanges.size
         val actionCount: Int get() = userActions.size
+        val cookieEventCount: Int get() = cookieEvents.size
 
         /**
          * Findet Exchanges die zeitlich mit einer Action korrelieren.
@@ -339,6 +341,24 @@ class CaptureSessionManager(context: Context? = null) {
         _currentSession.value = session.copy(
             pageEvents = session.pageEvents + events
         )
+    }
+
+    /**
+     * Fügt Cookie Events zur aktiven Session hinzu.
+     * Cookie-Events tracken wann und wo Cookies gesetzt, gelesen oder gelöscht werden.
+     */
+    fun addCookieEvents(events: List<TrafficInterceptWebView.CookieEvent>) {
+        val session = _currentSession.value ?: return
+
+        // Deduplizieren basierend auf Zeitstempel und Cookie-Name
+        val existingKeys = session.cookieEvents.map { "${it.timestamp}-${it.name}" }.toSet()
+        val newEvents = events.filter { "${it.timestamp}-${it.name}" !in existingKeys }
+
+        if (newEvents.isNotEmpty()) {
+            _currentSession.value = session.copy(
+                cookieEvents = session.cookieEvents + newEvents
+            )
+        }
     }
 
     /**

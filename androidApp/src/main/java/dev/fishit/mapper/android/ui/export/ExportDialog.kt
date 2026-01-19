@@ -317,6 +317,7 @@ private fun FormatItem(
         ExportFormat.STATE_GRAPH -> Icons.Default.BubbleChart
         ExportFormat.TIMELINE -> Icons.Default.Schedule
         ExportFormat.WEBSITE_MAP -> Icons.Default.Map
+        ExportFormat.COOKIES -> Icons.Default.Cookie
         ExportFormat.ZIP -> Icons.Default.FolderZip
     }
 
@@ -333,6 +334,7 @@ private fun FormatItem(
         ExportFormat.STATE_GRAPH -> "State-Graph pro User-Aktion"
         ExportFormat.TIMELINE -> "Normalisierte Timeline (JSON)"
         ExportFormat.WEBSITE_MAP -> "Actions → HTTP-Exchanges Korrelation"
+        ExportFormat.COOKIES -> "Cookie-Tracking Details"
         ExportFormat.ZIP -> "Alle Formate in einem Archiv"
     }
 

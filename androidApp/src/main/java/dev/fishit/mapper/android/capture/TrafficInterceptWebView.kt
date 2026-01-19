@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.util.AttributeSet
 import android.webkit.*
+import dev.fishit.mapper.android.webview.AuthAwareCookieManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -104,6 +105,44 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         ERROR
     }
 
+    /**
+     * Cookie-Event für vollständiges Cookie-Tracking.
+     *
+     * Erfasst WANN, WO und WIE Cookies gesetzt/verwendet werden:
+     * - SET: Cookie wurde durch Set-Cookie Header oder document.cookie gesetzt
+     * - SENT: Cookie wurde bei einem Request mitgesendet
+     * - DELETED: Cookie wurde gelöscht (expires in past)
+     */
+    data class CookieEvent(
+        val id: String = UUID.randomUUID().toString(),
+        val type: CookieEventType,
+        val name: String,
+        val value: String?,
+        val domain: String?,
+        val path: String?,
+        val expires: String?,
+        val secure: Boolean,
+        val httpOnly: Boolean,
+        val sameSite: String?,
+        val timestamp: Instant,
+        val sourceUrl: String,
+        val sourceType: CookieSourceType,
+        val relatedRequestId: String? = null // Korrelation mit Exchange
+    )
+
+    enum class CookieEventType {
+        SET,      // Cookie wurde gesetzt
+        SENT,     // Cookie wurde bei Request mitgesendet
+        DELETED,  // Cookie wurde gelöscht
+        MODIFIED  // Cookie wurde geändert
+    }
+
+    enum class CookieSourceType {
+        RESPONSE_HEADER,  // Set-Cookie Header in Response
+        JAVASCRIPT,       // document.cookie = "..."
+        NAVIGATION        // Cookie bei Navigation mitgesendet
+    }
+
     // State Flows für Beobachter
     private val _capturedExchanges = MutableStateFlow<List<CapturedExchange>>(emptyList())
     val capturedExchanges: StateFlow<List<CapturedExchange>> = _capturedExchanges.asStateFlow()
@@ -113,6 +152,9 @@ class TrafficInterceptWebView @JvmOverloads constructor(
 
     private val _pageEvents = MutableStateFlow<List<PageEvent>>(emptyList())
     val pageEvents: StateFlow<List<PageEvent>> = _pageEvents.asStateFlow()
+
+    private val _cookieEvents = MutableStateFlow<List<CookieEvent>>(emptyList())
+    val cookieEvents: StateFlow<List<CookieEvent>> = _cookieEvents.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -181,11 +223,20 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         // WICHTIG: Mixed Content erlauben (HTTPS-Seiten mit HTTP-Ressourcen)
         settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
-        // Third-Party Cookies erlauben (für Login-Sessions)
+        // Third-Party Cookies erlauben (für Login-Sessions und OAuth)
         android.webkit.CookieManager.getInstance().apply {
             setAcceptCookie(true)
             setAcceptThirdPartyCookies(this@TrafficInterceptWebView, true)
         }
+
+        // OAuth-spezifische Cookie-Konfiguration
+        AuthAwareCookieManager.configureWebViewForOAuth(this)
+
+        // Wichtige Session-Domains registrieren
+        AuthAwareCookieManager.registerSessionDomain("kolping-hochschule.de")
+        AuthAwareCookieManager.registerSessionDomain("cms.kolping-hochschule.de")
+        AuthAwareCookieManager.registerSessionDomain("login.microsoftonline.com")
+        AuthAwareCookieManager.registerSessionDomain("login.windows.net")
 
         // Zoom und Viewport korrekt konfigurieren
         settings.setSupportZoom(true)
@@ -422,6 +473,7 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         _capturedExchanges.value = emptyList()
         _userActions.value = emptyList()
         _pageEvents.value = emptyList()
+        _cookieEvents.value = emptyList()
         pendingRequests.clear()
     }
 
@@ -435,6 +487,117 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         return _capturedExchanges.value.filter { exchange ->
             val exchangeTime = exchange.startedAt.toEpochMilliseconds()
             exchangeTime >= actionTime && exchangeTime <= actionTime + windowMs
+        }
+    }
+
+    /**
+     * Gibt alle Cookie-Events für einen bestimmten Exchange zurück.
+     * Ermöglicht Korrelation: Welche Cookies wurden bei diesem Request gesetzt?
+     */
+    fun getCookieEventsForExchange(exchangeId: String): List<CookieEvent> {
+        return _cookieEvents.value.filter { it.relatedRequestId == exchangeId }
+    }
+
+    /**
+     * Extrahiert Set-Cookie Headers aus Response und erstellt CookieEvents.
+     * Wird aufgerufen wenn eine Response erfasst wird.
+     */
+    private fun extractSetCookieHeaders(headers: Map<String, String>, sourceUrl: String, requestId: String) {
+        try {
+            // Set-Cookie Header können mehrere Cookies enthalten
+            val setCookieHeaders = headers.filterKeys { key ->
+                key.equals("Set-Cookie", ignoreCase = true) ||
+                key.equals("set-cookie", ignoreCase = true)
+            }
+
+            setCookieHeaders.values.forEach { cookieValue ->
+                parseCookieString(cookieValue, sourceUrl, requestId)
+            }
+
+            // Auch aus dem Android CookieManager die aktuellen Cookies für die URL holen
+            // um HttpOnly Cookies zu erfassen, die im JS nicht sichtbar sind
+            try {
+                val cookieManager = android.webkit.CookieManager.getInstance()
+                val cookies = cookieManager.getCookie(sourceUrl)
+                if (!cookies.isNullOrBlank()) {
+                    android.util.Log.d(TAG, "CookieManager cookies for $sourceUrl: ${cookies.take(200)}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "Failed to get cookies from CookieManager: ${e.message}")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "extractSetCookieHeaders failed: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Parst einen Set-Cookie Header-Wert und erstellt ein CookieEvent.
+     *
+     * Beispiel: "sessionId=abc123; Path=/; HttpOnly; Secure; SameSite=Strict"
+     */
+    private fun parseCookieString(cookieString: String, sourceUrl: String, requestId: String) {
+        try {
+            val parts = cookieString.split(";").map { it.trim() }
+            if (parts.isEmpty()) return
+
+            // Erstes Teil ist Name=Value
+            val nameValue = parts[0].split("=", limit = 2)
+            if (nameValue.isEmpty()) return
+
+            val name = nameValue[0].trim()
+            val value = if (nameValue.size > 1) nameValue[1].trim() else ""
+
+            // Attribute parsen
+            var domain: String? = null
+            var path: String? = null
+            var expires: String? = null
+            var secure = false
+            var httpOnly = false
+            var sameSite: String? = null
+
+            parts.drop(1).forEach { attr ->
+                val attrParts = attr.split("=", limit = 2)
+                val attrName = attrParts[0].trim().lowercase()
+                val attrValue = if (attrParts.size > 1) attrParts[1].trim() else ""
+
+                when (attrName) {
+                    "domain" -> domain = attrValue
+                    "path" -> path = attrValue
+                    "expires" -> expires = attrValue
+                    "max-age" -> expires = "max-age: $attrValue"
+                    "secure" -> secure = true
+                    "httponly" -> httpOnly = true
+                    "samesite" -> sameSite = attrValue
+                }
+            }
+
+            // Cookie-Event erstellen
+            val eventType = if (expires?.contains("-") == true && expires?.startsWith("Thu, 01 Jan 1970") == true) {
+                CookieEventType.DELETED
+            } else {
+                CookieEventType.SET
+            }
+
+            val event = CookieEvent(
+                type = eventType,
+                name = name,
+                value = value.take(1000),
+                domain = domain,
+                path = path,
+                expires = expires,
+                secure = secure,
+                httpOnly = httpOnly,
+                sameSite = sameSite,
+                timestamp = Clock.System.now(),
+                sourceUrl = sourceUrl,
+                sourceType = CookieSourceType.RESPONSE_HEADER,
+                relatedRequestId = requestId
+            )
+
+            _cookieEvents.value = _cookieEvents.value + event
+            android.util.Log.d(TAG, "Cookie from Set-Cookie header: $name (domain=$domain, httpOnly=$httpOnly, secure=$secure)")
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "parseCookieString failed: ${e.message}", e)
         }
     }
 
@@ -520,6 +683,9 @@ class TrafficInterceptWebView @JvmOverloads constructor(
                 )
 
                 _capturedExchanges.value = _capturedExchanges.value + completed
+
+                // Set-Cookie Headers extrahieren und als CookieEvent erfassen
+                extractSetCookieHeaders(headers, pending.url, requestId)
             } catch (e: OutOfMemoryError) {
                 android.util.Log.e(TAG, "OOM in captureResponse - clearing some data")
                 // Bei OOM: Alte Exchanges löschen um Speicher freizugeben
@@ -558,6 +724,61 @@ class TrafficInterceptWebView @JvmOverloads constructor(
                 _userActions.value = _userActions.value + action
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "captureUserAction failed: ${e.message}", e)
+            }
+        }
+
+        /**
+         * Erfasst Cookie-Änderungen aus JavaScript (document.cookie).
+         *
+         * @param name Cookie-Name
+         * @param value Cookie-Wert
+         * @param domain Cookie-Domain (optional)
+         * @param path Cookie-Path (optional)
+         * @param expires Cookie-Ablaufdatum (optional)
+         * @param secure Ist das Cookie nur über HTTPS?
+         * @param sameSite SameSite-Attribut (optional)
+         * @param eventType "set", "deleted", "modified"
+         */
+        @JavascriptInterface
+        fun captureCookie(
+            name: String?,
+            value: String?,
+            domain: String?,
+            path: String?,
+            expires: String?,
+            secure: Boolean,
+            sameSite: String?,
+            eventType: String?
+        ) {
+            try {
+                if (name.isNullOrBlank()) return
+
+                val cookieEventType = when (eventType?.lowercase()) {
+                    "deleted" -> CookieEventType.DELETED
+                    "modified" -> CookieEventType.MODIFIED
+                    else -> CookieEventType.SET
+                }
+
+                val event = CookieEvent(
+                    type = cookieEventType,
+                    name = name,
+                    value = value?.take(1000), // Werte limitieren
+                    domain = domain,
+                    path = path,
+                    expires = expires,
+                    secure = secure,
+                    httpOnly = false, // JS kann HttpOnly cookies nicht sehen
+                    sameSite = sameSite,
+                    timestamp = Clock.System.now(),
+                    sourceUrl = _currentUrl.value ?: "unknown",
+                    sourceType = CookieSourceType.JAVASCRIPT,
+                    relatedRequestId = null
+                )
+
+                _cookieEvents.value = _cookieEvents.value + event
+                android.util.Log.d(TAG, "Cookie captured from JS: $name=$value (${cookieEventType.name})")
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "captureCookie failed: ${e.message}", e)
             }
         }
 
@@ -641,14 +862,30 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             super.onPageFinished(view, url)
             _isLoading.value = false
 
-            // Interceptors NUR injizieren wenn Interception aktiviert ist
-            // Das verhindert Crashes auf problematischen Seiten (GraphQL, etc.)
-            if (_interceptionEnabled.value) {
+            // WICHTIG: Cookies persistieren nach OAuth-Redirects
+            // Das stellt sicher, dass Session-Tokens nicht verloren gehen
+            url?.let { finishedUrl ->
+                if (AuthAwareCookieManager.isOAuthRedirect(finishedUrl) ||
+                    AuthAwareCookieManager.isOAuthUrl(finishedUrl)) {
+                    android.util.Log.d(TAG, "OAuth page finished, persisting cookies")
+                    AuthAwareCookieManager.persistCookies()
+                }
+            }
+
+            // Interceptors NUR injizieren wenn:
+            // 1. Interception aktiviert ist
+            // 2. Die Seite KEINE OAuth-Seite ist (verhindert Auth-Probleme)
+            val shouldInject = _interceptionEnabled.value &&
+                url?.let { !AuthAwareCookieManager.isOAuthUrl(it) } != false
+
+            if (shouldInject) {
                 try {
                     injectInterceptors()
                 } catch (e: Exception) {
                     android.util.Log.e(TAG, "JS Injection failed: ${e.message}", e)
                 }
+            } else if (_interceptionEnabled.value) {
+                android.util.Log.d(TAG, "Skipping JS injection on OAuth page: $url")
             }
 
             url?.let {
@@ -725,16 +962,36 @@ class TrafficInterceptWebView @JvmOverloads constructor(
          * Fängt ALLE Navigation-Requests ab (auch Redirects!).
          * Gibt false zurück damit WebView die Navigation durchführt,
          * aber wir loggen sie trotzdem.
+         *
+         * WICHTIG für OAuth:
+         * - OAuth-Redirects MÜSSEN durchgelassen werden (return false)
+         * - Cookies werden automatisch mitgesendet
+         * - JS-Injection wird auf OAuth-Seiten übersprungen
          */
         override fun shouldOverrideUrlLoading(
             view: WebView?,
             request: WebResourceRequest?
         ): Boolean {
             request?.let { req ->
+                val urlString = req.url.toString()
+
+                // OAuth-URLs erkennen und speziell behandeln
+                if (AuthAwareCookieManager.isOAuthUrl(urlString) ||
+                    AuthAwareCookieManager.isOAuthRedirect(urlString)) {
+                    android.util.Log.d(TAG, "OAuth redirect detected: $urlString")
+
+                    // Cookies vor dem Redirect persistieren
+                    AuthAwareCookieManager.persistCookies()
+
+                    // WICHTIG: return false damit WebView den Redirect durchführt
+                    // NIEMALS true zurückgeben, das würde den OAuth-Flow unterbrechen!
+                    return false
+                }
+
                 // Redirect/Navigation als Exchange erfassen
                 val exchange = CapturedExchange(
                     method = req.method ?: "GET",
-                    url = req.url.toString(),
+                    url = urlString,
                     requestHeaders = req.requestHeaders ?: emptyMap(),
                     requestBody = null,
                     responseStatus = null, // Wird durch Page-Load-Event ergänzt
@@ -747,7 +1004,7 @@ class TrafficInterceptWebView @JvmOverloads constructor(
                 // Als Navigation-Request markieren (nicht XHR/Fetch)
                 val action = UserAction(
                     type = if (req.isRedirect) ActionType.NAVIGATION else ActionType.CLICK,
-                    target = req.url.toString(),
+                    target = urlString,
                     value = if (req.isRedirect) "redirect" else "navigation",
                     timestamp = Clock.System.now(),
                     pageUrl = _currentUrl.value
@@ -845,6 +1102,77 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         } catch(e) {
             try { bridge.log('Bridge error: ' + e.message); } catch(e2) {}
         }
+    }
+
+    // ==================== COOKIE TRACKING ====================
+    // Überwacht document.cookie Änderungen für vollständiges Cookie-Tracking
+    try {
+        var cookieDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie') ||
+                               Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie');
+
+        if (cookieDescriptor && cookieDescriptor.set) {
+            var originalCookieSetter = cookieDescriptor.set;
+            var lastCookieValue = document.cookie;
+
+            Object.defineProperty(document, 'cookie', {
+                get: function() {
+                    return cookieDescriptor.get.call(document);
+                },
+                set: function(value) {
+                    // Cookie setzen
+                    originalCookieSetter.call(document, value);
+
+                    // Cookie parsen und an Bridge senden
+                    safeBridgeCall(function() {
+                        try {
+                            var parts = value.split(';');
+                            var nameValue = parts[0].split('=');
+                            if (nameValue.length < 2) return;
+
+                            var name = nameValue[0].trim();
+                            var cookieValue = nameValue.slice(1).join('=').trim();
+
+                            var domain = null;
+                            var path = null;
+                            var expires = null;
+                            var secure = false;
+                            var sameSite = null;
+
+                            for (var i = 1; i < parts.length; i++) {
+                                var attr = parts[i].trim();
+                                var attrParts = attr.split('=');
+                                var attrName = attrParts[0].trim().toLowerCase();
+                                var attrValue = attrParts.length > 1 ? attrParts[1].trim() : '';
+
+                                if (attrName === 'domain') domain = attrValue;
+                                else if (attrName === 'path') path = attrValue;
+                                else if (attrName === 'expires') expires = attrValue;
+                                else if (attrName === 'max-age') expires = 'max-age:' + attrValue;
+                                else if (attrName === 'secure') secure = true;
+                                else if (attrName === 'samesite') sameSite = attrValue;
+                            }
+
+                            // Prüfen ob Cookie gelöscht wird (expires in Vergangenheit)
+                            var eventType = 'set';
+                            if (expires && (expires.indexOf('1970') !== -1 || expires.indexOf('max-age:0') !== -1 || expires.indexOf('max-age:-') !== -1)) {
+                                eventType = 'deleted';
+                            }
+
+                            bridge.captureCookie(name, cookieValue, domain, path, expires, secure, sameSite, eventType);
+                        } catch(e) {
+                            bridge.log('Cookie parse error: ' + e.message);
+                        }
+                    });
+
+                    return value;
+                },
+                configurable: true
+            });
+
+            bridge.log('Cookie tracking installed');
+        }
+    } catch(e) {
+        try { bridge.log('Cookie tracking failed: ' + e.message); } catch(e2) {}
     }
 
     // ==================== XHR Interception (SAFE) ====================

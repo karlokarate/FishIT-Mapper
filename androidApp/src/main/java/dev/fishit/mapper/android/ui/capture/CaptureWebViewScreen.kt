@@ -96,6 +96,7 @@ fun CaptureWebViewScreen(
     val exchanges by webView.capturedExchanges.collectAsState()
     val userActions by webView.userActions.collectAsState()
     val pageEvents by webView.pageEvents.collectAsState()
+    val cookieEvents by webView.cookieEvents.collectAsState()
     val isLoading by webView.isLoading.collectAsState()
     val currentUrl by webView.currentUrl.collectAsState()
     val nextChainpointLabel by sessionManager.nextChainpointLabel.collectAsState()
@@ -131,6 +132,13 @@ fun CaptureWebViewScreen(
     LaunchedEffect(pageEvents) {
         if (isRecording && !isPaused) {
             sessionManager.addPageEvents(pageEvents)
+        }
+    }
+
+    // Cookie Events zur Session hinzufügen - für OAuth-Tracking
+    LaunchedEffect(cookieEvents) {
+        if (isRecording && !isPaused) {
+            sessionManager.addCookieEvents(cookieEvents)
         }
     }
 

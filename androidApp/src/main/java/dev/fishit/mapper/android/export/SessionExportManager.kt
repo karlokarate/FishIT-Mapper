@@ -90,6 +90,7 @@ class SessionExportManager(private val context: Context) {
         STATE_GRAPH(".md", "text/markdown", "State-Graph", "State-Graph pro User-Aktion"),
         TIMELINE(".json", "application/json", "Timeline", "Normalisierte Timeline (JSON)"),
         WEBSITE_MAP(".json", "application/json", "WebsiteMap", "Korrelation User-Actions → HTTP-Exchanges"),
+        COOKIES(".json", "application/json", "Cookies", "Cookie-Timeline & OAuth-Flow-Analyse"),
         ZIP(".zip", "application/zip", "ZIP Bundle", "Alle Formate in einem ZIP-Archiv")
     }
 
@@ -251,6 +252,7 @@ class SessionExportManager(private val context: Context) {
             ExportFormat.STATE_GRAPH -> generateStateGraphExport(session, engineExchanges)
             ExportFormat.TIMELINE -> generateTimelineExport(session, engineExchanges)
             ExportFormat.WEBSITE_MAP -> generateWebsiteMapExport(session)
+            ExportFormat.COOKIES -> generateCookiesExport(session)
             ExportFormat.ZIP -> "" // ZIP wird separat behandelt
         }
     }
@@ -289,6 +291,20 @@ class SessionExportManager(private val context: Context) {
                 if (index < session.userActions.size - 1) appendLine(",") else appendLine()
             }
 
+            appendLine("  ],")
+
+            // Cookie Events hinzufügen
+            appendLine("""  "cookieEvents": [""")
+            session.cookieEvents.forEachIndexed { index, cookie ->
+                appendLine("    {")
+                appendLine("""      "name": "${cookie.name.replace("\"", "\\\"")}",""")
+                appendLine("""      "domain": "${cookie.domain?.replace("\"", "\\\"") ?: ""}",""")
+                appendLine("""      "type": "${cookie.type}",""")
+                appendLine("""      "sourceType": "${cookie.sourceType}",""")
+                appendLine("""      "timestamp": "${cookie.timestamp}"""")
+                append("    }")
+                if (index < session.cookieEvents.size - 1) appendLine(",") else appendLine()
+            }
             appendLine("  ]")
             appendLine("}")
         }
@@ -558,6 +574,132 @@ class SessionExportManager(private val context: Context) {
         return json.encodeToString(websiteMap)
     }
 
+    /**
+     * Generiert eine detaillierte Cookie-Analyse.
+     *
+     * ## Features
+     * - Vollständige Cookie-Timeline
+     * - OAuth-Flow-Erkennung (Azure AD, MSAL)
+     * - Cookie-Korrelation mit HTTP-Exchanges
+     * - Session-Management-Analyse
+     */
+    private fun generateCookiesExport(session: CaptureSessionManager.CaptureSession): String {
+        val cookiesByDomain = session.cookieEvents.groupBy { it.domain ?: "unknown" }
+        val authCookies = session.cookieEvents.filter { cookie ->
+            cookie.name.contains("token", ignoreCase = true) ||
+            cookie.name.contains("auth", ignoreCase = true) ||
+            cookie.name.contains("session", ignoreCase = true) ||
+            cookie.name.contains("MSAL", ignoreCase = true) ||
+            cookie.name.contains("nonce", ignoreCase = true)
+        }
+
+        // Extrahiere Set-Cookie Headers aus Exchanges
+        val setCookieFromResponses = session.exchanges.flatMap { exchange ->
+            val setCookieHeaders = exchange.responseHeaders
+                ?.filterKeys { it.equals("Set-Cookie", ignoreCase = true) }
+                ?.values
+                ?.flatMap { it.split(",").map { c -> c.trim() } }
+                ?: emptyList()
+
+            setCookieHeaders.map { cookieHeader ->
+                mapOf(
+                    "exchangeId" to exchange.id,
+                    "url" to exchange.url,
+                    "status" to (exchange.responseStatus?.toString() ?: ""),
+                    "timestamp" to exchange.completedAt?.toString(),
+                    "setCookieHeader" to cookieHeader
+                )
+            }
+        }
+
+        return buildString {
+            appendLine("{")
+            appendLine("""  "sessionId": "${session.id}",""")
+            appendLine("""  "sessionName": "${session.name}",""")
+            appendLine("""  "analysis": {""")
+            appendLine("""    "totalCookieEvents": ${session.cookieEvents.size},""")
+            appendLine("""    "uniqueDomains": ${cookiesByDomain.keys.size},""")
+            appendLine("""    "authRelatedCookies": ${authCookies.size},""")
+            appendLine("""    "setCookieHeadersFromResponses": ${setCookieFromResponses.size}""")
+            appendLine("  },")
+
+            // Cookie Timeline
+            appendLine("""  "cookieTimeline": [""")
+            session.cookieEvents.sortedBy { it.timestamp }.forEachIndexed { index, cookie ->
+                appendLine("    {")
+                appendLine("""      "timestamp": "${cookie.timestamp}",""")
+                appendLine("""      "type": "${cookie.type}",""")
+                appendLine("""      "name": "${cookie.name.replace("\"", "\\\"")}",""")
+                appendLine("""      "domain": "${(cookie.domain ?: "unknown").replace("\"", "\\\"")}",""")
+                appendLine("""      "sourceType": "${cookie.sourceType}",""")
+                appendLine("""      "sourceUrl": "${cookie.sourceUrl.replace("\"", "\\\"")}",""")
+                appendLine("""      "path": "${cookie.path?.replace("\"", "\\\"") ?: "/"}",""")
+                appendLine("""      "secure": ${cookie.secure},""")
+                appendLine("""      "httpOnly": ${cookie.httpOnly},""")
+                appendLine("""      "sameSite": "${cookie.sameSite ?: "None"}",""")
+                appendLine("""      "expires": ${cookie.expires?.let { "\"$it\"" } ?: "null"},""")
+                appendLine("""      "value": "${cookie.value?.take(100)?.replace("\"", "\\\"") ?: ""}"${if (cookie.relatedRequestId != null) "," else ""}""")
+                cookie.relatedRequestId?.let {
+                    appendLine("""      "relatedRequestId": "$it"""")
+                }
+                append("    }")
+                if (index < session.cookieEvents.size - 1) appendLine(",") else appendLine()
+            }
+            appendLine("  ],")
+
+            // Cookies grouped by Domain
+            appendLine("""  "cookiesByDomain": {""")
+            cookiesByDomain.entries.forEachIndexed { domainIndex, (domain, cookies) ->
+                appendLine("""    "${domain.replace("\"", "\\\"")}": {""")
+                appendLine("""      "count": ${cookies.size},""")
+                appendLine("""      "cookies": [""")
+                cookies.distinctBy { it.name }.forEachIndexed { cookieIndex, cookie ->
+                    appendLine("""        {""")
+                    appendLine("""          "name": "${cookie.name.replace("\"", "\\\"")}",""")
+                    appendLine("""          "types": ${cookies.filter { it.name == cookie.name }.map { "\"${it.type}\"" }}""")
+                    append("        }")
+                    if (cookieIndex < cookies.distinctBy { it.name }.size - 1) appendLine(",") else appendLine()
+                }
+                appendLine("      ]")
+                append("    }")
+                if (domainIndex < cookiesByDomain.size - 1) appendLine(",") else appendLine()
+            }
+            appendLine("  },")
+
+            // Auth-Related Cookies (OAuth Flow)
+            appendLine("""  "authFlow": {""")
+            appendLine("""    "detected": ${authCookies.isNotEmpty()},""")
+            appendLine("""    "cookies": [""")
+            authCookies.forEachIndexed { index, cookie ->
+                appendLine("""      {""")
+                appendLine("""        "name": "${cookie.name.replace("\"", "\\\"")}",""")
+                appendLine("""        "domain": "${(cookie.domain ?: "unknown").replace("\"", "\\\"")}",""")
+                appendLine("""        "timestamp": "${cookie.timestamp}",""")
+                appendLine("""        "type": "${cookie.type}"""")
+                append("      }")
+                if (index < authCookies.size - 1) appendLine(",") else appendLine()
+            }
+            appendLine("    ]")
+            appendLine("  },")
+
+            // Set-Cookie from HTTP Responses
+            appendLine("""  "setCookieFromResponses": [""")
+            setCookieFromResponses.forEachIndexed { index, entry ->
+                appendLine("    {")
+                appendLine("""      "exchangeId": "${entry["exchangeId"]}",""")
+                appendLine("""      "url": "${entry["url"]?.toString()?.replace("\"", "\\\"") ?: ""}",""")
+                appendLine("""      "status": "${entry["status"]}",""")
+                appendLine("""      "timestamp": "${entry["timestamp"]}",""")
+                appendLine("""      "setCookieHeader": "${entry["setCookieHeader"]?.toString()?.replace("\"", "\\\"")?.take(200) ?: ""}"  """)
+                append("    }")
+                if (index < setCookieFromResponses.size - 1) appendLine(",") else appendLine()
+            }
+            appendLine("  ]")
+
+            appendLine("}")
+        }
+    }
+
     private fun createBlueprintFromExchanges(
         session: CaptureSessionManager.CaptureSession,
         exchanges: List<EngineExchange>
@@ -698,7 +840,8 @@ class SessionExportManager(private val context: Context) {
             ExportFormat.MERMAID_CORRELATION to "correlation_diagram.md",
             ExportFormat.STATE_GRAPH to "state_graph.md",
             ExportFormat.TIMELINE to "normalized_timeline.json",
-            ExportFormat.WEBSITE_MAP to "website_map.json"
+            ExportFormat.WEBSITE_MAP to "website_map.json",
+            ExportFormat.COOKIES to "cookies_analysis.json"
         )
 
         for ((format, fileName) in formats) {
@@ -756,6 +899,8 @@ class SessionExportManager(private val context: Context) {
             ExportFormat.MERMAID_CORRELATION,
             ExportFormat.STATE_GRAPH,
             ExportFormat.TIMELINE,
+            ExportFormat.WEBSITE_MAP,
+            ExportFormat.COOKIES,
             ExportFormat.ZIP
         )
     }

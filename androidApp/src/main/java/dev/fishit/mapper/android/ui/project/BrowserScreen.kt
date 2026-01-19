@@ -6,6 +6,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.webkit.ConsoleMessage
+import android.webkit.CookieManager
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -33,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.fishit.mapper.android.webview.AuthAwareCookieManager
 import dev.fishit.mapper.android.webview.JavaScriptBridge
 import dev.fishit.mapper.android.webview.TrackingScript
 import dev.fishit.mapper.contract.ConsoleLevel
@@ -155,12 +157,34 @@ fun BrowserScreen(
                     // Database für WebAuthn Credentials
                     settings.databaseEnabled = true
 
+                    // OAuth Cookie Support konfigurieren
+                    AuthAwareCookieManager.configureWebViewForOAuth(this)
+                    AuthAwareCookieManager.registerSessionDomain("kolping-hochschule.de")
+                    AuthAwareCookieManager.registerSessionDomain("cms.kolping-hochschule.de")
+                    AuthAwareCookieManager.registerSessionDomain("app-kolping-prod-gateway.azurewebsites.net")
+
                     val mainHandler = Handler(Looper.getMainLooper())
 
                     webViewClient = object : WebViewClient() {
                         private var lastUrl: String? = null
 
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                            val urlString = request?.url?.toString()
+
+                            // OAuth URLs nicht überschreiben - WebView soll sie normal verarbeiten
+                            if (urlString != null && AuthAwareCookieManager.isOAuthUrl(urlString)) {
+                                Log.d(TAG, "OAuth URL detected, allowing WebView to handle: $urlString")
+                                AuthAwareCookieManager.persistCookies()
+                                return false
+                            }
+
+                            // OAuth Redirects erkennen und Cookies speichern
+                            if (urlString != null && AuthAwareCookieManager.isOAuthRedirect(urlString)) {
+                                Log.d(TAG, "OAuth redirect detected: $urlString")
+                                AuthAwareCookieManager.persistCookies()
+                                return false
+                            }
+
                             return false
                         }
 
@@ -197,6 +221,20 @@ fun BrowserScreen(
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             Log.d(TAG, "Page finished loading: $url")
+
+                            // OAuth URLs: Cookies persistieren, aber kein JS injizieren
+                            if (url != null && AuthAwareCookieManager.isOAuthUrl(url)) {
+                                Log.d(TAG, "OAuth page finished, persisting cookies: $url")
+                                AuthAwareCookieManager.persistCookies()
+                                return
+                            }
+
+                            // Nach OAuth-Redirect: Cookies synchronisieren
+                            if (url != null && AuthAwareCookieManager.isOAuthRedirect(url)) {
+                                Log.d(TAG, "OAuth redirect finished, syncing cookies: $url")
+                                AuthAwareCookieManager.persistCookies()
+                            }
+
                             // Always inject tracking script so it's available when recording starts mid-session
                             if (view != null) {
                                 view.evaluateJavascript(TrackingScript.getScript(), null)

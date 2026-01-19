@@ -20,5 +20,11 @@ shared/contract/src/generated/
 *.tar.gz
 *.rar
 
+# HTTP Traffic Captures (HTTPCatcher, mitmproxy, etc.)
+scripts/cms_requests/
+scripts/cms_traffic/
+*.hcy
+*.har
+
 # MCP Logs
 .github/copilot/mcp.log

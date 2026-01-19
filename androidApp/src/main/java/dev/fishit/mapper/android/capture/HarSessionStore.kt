@@ -204,6 +204,9 @@ class HarSessionStore(private val context: Context) {
 
                     // Page Events
                     put("pageEvents", buildPageEvents(session.pageEvents))
+
+                    // Cookie Events - vollständiges Cookie-Tracking
+                    put("cookieEvents", buildCookieEvents(session.cookieEvents))
                 })
             })
         }
@@ -386,6 +389,30 @@ class HarSessionStore(private val context: Context) {
         })
     }
 
+    /**
+     * Baut JSON-Array für Cookie-Events.
+     * Ermöglicht vollständige Nachverfolgung wann/wo/wie Cookies gesetzt werden.
+     */
+    private fun buildCookieEvents(events: List<TrafficInterceptWebView.CookieEvent>): JsonArray {
+        return JsonArray(events.map { event ->
+            buildJsonObject {
+                put("name", event.name)
+                put("value", event.value ?: "")
+                put("domain", event.domain ?: "")
+                put("path", event.path ?: "/")
+                put("expires", event.expires ?: "")
+                put("secure", event.secure)
+                put("httpOnly", event.httpOnly)
+                put("sameSite", event.sameSite ?: "")
+                put("eventType", event.type.name)
+                put("sourceType", event.sourceType.name)
+                put("sourceUrl", event.sourceUrl)
+                put("relatedRequestId", event.relatedRequestId ?: "")
+                put("timestamp", event.timestamp.toString())
+            }
+        })
+    }
+
     // ==================== HAR Parser ====================
 
     private fun parseHar(file: File, summary: HarSessionSummary): CaptureSessionManager.CaptureSession {
@@ -407,6 +434,10 @@ class HarSessionStore(private val context: Context) {
         val pageEvents = fishit?.get("pageEvents")?.jsonArray?.mapNotNull { parsePageEvent(it.jsonObject) }
             ?: emptyList()
 
+        // Cookie Events parsen
+        val cookieEvents = fishit?.get("cookieEvents")?.jsonArray?.mapNotNull { parseCookieEvent(it.jsonObject) }
+            ?: emptyList()
+
         return CaptureSessionManager.CaptureSession(
             id = summary.id,
             name = summary.name,
@@ -416,6 +447,7 @@ class HarSessionStore(private val context: Context) {
             exchanges = exchanges,
             userActions = actions,
             pageEvents = pageEvents,
+            cookieEvents = cookieEvents,
             notes = fishit?.get("notes")?.jsonPrimitive?.contentOrNull
         )
     }
@@ -476,6 +508,35 @@ class HarSessionStore(private val context: Context) {
         }
     }
 
+    /**
+     * Parst ein Cookie-Event aus JSON.
+     */
+    private fun parseCookieEvent(event: JsonObject): TrafficInterceptWebView.CookieEvent? {
+        return try {
+            TrafficInterceptWebView.CookieEvent(
+                name = event["name"]?.jsonPrimitive?.content ?: "",
+                value = event["value"]?.jsonPrimitive?.contentOrNull,
+                domain = event["domain"]?.jsonPrimitive?.contentOrNull,
+                path = event["path"]?.jsonPrimitive?.contentOrNull,
+                expires = event["expires"]?.jsonPrimitive?.contentOrNull,
+                secure = event["secure"]?.jsonPrimitive?.booleanOrNull ?: false,
+                httpOnly = event["httpOnly"]?.jsonPrimitive?.booleanOrNull ?: false,
+                sameSite = event["sameSite"]?.jsonPrimitive?.contentOrNull,
+                type = TrafficInterceptWebView.CookieEventType.valueOf(
+                    event["eventType"]?.jsonPrimitive?.content ?: "SET"
+                ),
+                sourceType = TrafficInterceptWebView.CookieSourceType.valueOf(
+                    event["sourceType"]?.jsonPrimitive?.content ?: "JAVASCRIPT"
+                ),
+                sourceUrl = event["sourceUrl"]?.jsonPrimitive?.content ?: "",
+                relatedRequestId = event["relatedRequestId"]?.jsonPrimitive?.contentOrNull,
+                timestamp = Instant.parse(event["timestamp"]?.jsonPrimitive?.content ?: Clock.System.now().toString())
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun createEmptySession(summary: HarSessionSummary) = CaptureSessionManager.CaptureSession(
         id = summary.id,
         name = summary.name,
@@ -484,7 +545,8 @@ class HarSessionStore(private val context: Context) {
         stoppedAt = summary.stoppedAt,
         exchanges = emptyList(),
         userActions = emptyList(),
-        pageEvents = emptyList()
+        pageEvents = emptyList(),
+        cookieEvents = emptyList()
     )
 
     // ==================== Index Management ====================
