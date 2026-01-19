@@ -56,8 +56,9 @@ fun FishitApp(container: AppContainer) {
                             onOpenSession = { sessionId ->
                                 navController.navigate("project/$projectId/session/$sessionId")
                             },
-                            onOpenCapture = { pid ->
-                                navController.navigate("capture/$pid")
+                            onOpenCapture = { pid, startUrl ->
+                                val encodedUrl = java.net.URLEncoder.encode(startUrl, "UTF-8")
+                                navController.navigate("capture/$pid?startUrl=$encodedUrl")
                             }
                         )
                     }
@@ -80,12 +81,23 @@ fun FishitApp(container: AppContainer) {
 
                     // Capture WebView Screen für Traffic Recording
                     composable(
-                        route = "capture/{projectId}",
-                        arguments = listOf(navArgument("projectId") { type = NavType.StringType })
+                        route = "capture/{projectId}?startUrl={startUrl}",
+                        arguments = listOf(
+                            navArgument("projectId") { type = NavType.StringType },
+                            navArgument("startUrl") {
+                                type = NavType.StringType
+                                defaultValue = "https://"
+                                nullable = true
+                            }
+                        )
                     ) { backStackEntry ->
                         val projectId = backStackEntry.arguments?.getString("projectId") ?: return@composable
+                        val startUrl = backStackEntry.arguments?.getString("startUrl")?.let {
+                            java.net.URLDecoder.decode(it, "UTF-8")
+                        } ?: "https://"
 
                         CaptureWebViewScreen(
+                            startUrl = startUrl,
                             onExportSession = { session ->
                                 // Session wurde beendet - zurück zum Projekt
                                 // TODO: Session speichern und in Sessions-Tab anzeigen

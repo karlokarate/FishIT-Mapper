@@ -56,6 +56,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CaptureWebViewScreen(
+    startUrl: String = "https://",
     onExportSession: (CaptureSessionManager.CaptureSession) -> Unit,
     onBack: () -> Unit
 ) {
@@ -66,8 +67,10 @@ fun CaptureWebViewScreen(
     val webView = remember { TrafficInterceptWebView(context) }
     val sessionManager = remember { CaptureSessionManager(context) }
 
-    // State
-    var urlInput by remember { mutableStateOf("https://") }
+    // State - URL Input startet mit der übergebenen Start-URL (wird NICHT automatisch geladen!)
+    var urlInput by remember { mutableStateOf(startUrl) }
+    // Track ob WebView schon eine URL geladen hat (verhindert doppeltes Laden)
+    var hasLoadedInitialUrl by remember { mutableStateOf(false) }
     var showSessionDialog by remember { mutableStateOf(false) }
     var showStatsPanel by remember { mutableStateOf(false) }
     var showChainpointDialog by remember { mutableStateOf(false) }
@@ -134,7 +137,10 @@ fun CaptureWebViewScreen(
         // 3. Session starten BEVOR die URL geladen wird
         sessionManager.startSession(sessionName, url)
 
-        // 4. URL frisch laden - JETZT werden alle Requests erfasst!
+        // 4. Markiere dass wir jetzt eine URL geladen haben
+        hasLoadedInitialUrl = true
+
+        // 5. URL frisch laden - JETZT werden alle Requests erfasst!
         val fullUrl = if (url.startsWith("http")) url else "https://$url"
         webView.loadUrl(fullUrl)
     }
@@ -230,23 +236,31 @@ fun CaptureWebViewScreen(
                             else "https://$urlInput"
                             webView.loadUrl(url)
                         } else {
-                            // Nicht Recording: Warnung zeigen, dass Traffic nicht erfasst wird
-                            val url = if (urlInput.startsWith("http")) urlInput
-                            else "https://$urlInput"
-                            webView.loadUrl(url)
+                            // NICHT Recording: Zeige Recording-Dialog statt URL zu laden!
+                            // So wird GARANTIERT der initiale Request erfasst
+                            pendingRecordUrl = urlInput
+                            showSessionDialog = true
                         }
                     },
-                    onBack = { webView.goBack() },
-                    onForward = { webView.goForward() },
+                    onBack = {
+                        if (isRecording) {
+                            webView.goBack()
+                        }
+                    },
+                    onForward = {
+                        if (isRecording) {
+                            webView.goForward()
+                        }
+                    },
                     onRefresh = {
                         if (isRecording) {
                             // Cache leeren und neu laden
                             webView.clearCache(true)
+                            webView.reload()
                         }
-                        webView.reload()
                     },
-                    canGoBack = webView.canGoBack(),
-                    canGoForward = webView.canGoForward(),
+                    canGoBack = webView.canGoBack() && isRecording,
+                    canGoForward = webView.canGoForward() && isRecording,
                     isLoading = isLoading,
                     isRecording = isRecording,
                     onStartRecording = {
@@ -309,6 +323,43 @@ fun CaptureWebViewScreen(
                     view.isFocusableInTouchMode = true
                 }
             )
+
+            // "Waiting for Recording" Overlay - zeigt an dass noch nicht geladen wird
+            if (!isRecording && !hasLoadedInitialUrl) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.FiberManualRecord,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "Drücke ▶ Record um zu starten",
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                        Text(
+                            "Die URL wird erst geladen wenn Recording aktiv ist,\ndamit alle initialen Requests erfasst werden.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Text(
+                            urlInput,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
 
             // Loading Indicator
             if (isLoading) {

@@ -44,7 +44,7 @@ fun ProjectHomeScreen(
     projectId: String,
     onBack: () -> Unit,
     onOpenSession: (sessionId: String) -> Unit,
-    onOpenCapture: ((projectId: String) -> Unit)? = null
+    onOpenCapture: ((projectId: String, startUrl: String) -> Unit)? = null
 ) {
     val container = LocalAppContainer.current
     val vm: ProjectViewModel = viewModel(
@@ -83,7 +83,8 @@ fun ProjectHomeScreen(
                     selected = tab == ProjectTab.Capture,
                     onClick = {
                         if (onOpenCapture != null) {
-                            onOpenCapture(projectId)
+                            val startUrl = state.meta?.startUrl ?: "https://"
+                            onOpenCapture(projectId, startUrl)
                         } else {
                             tab = ProjectTab.Capture
                         }
@@ -154,7 +155,10 @@ fun ProjectHomeScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     if (onOpenCapture != null) {
-                                        Button(onClick = { onOpenCapture(projectId) }) {
+                                        Button(onClick = {
+                                            val startUrl = state.meta?.startUrl ?: "https://"
+                                            onOpenCapture(projectId, startUrl)
+                                        }) {
                                             Text("Capture öffnen")
                                         }
                                     }
