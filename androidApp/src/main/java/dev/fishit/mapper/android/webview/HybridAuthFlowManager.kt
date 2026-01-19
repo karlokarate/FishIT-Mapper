@@ -55,6 +55,16 @@ class HybridAuthFlowManager(
         SESSION_RESTORED     // Session in WebView wiederhergestellt
     }
 
+    companion object {
+        private const val TAG = "HybridAuthFlowManager"
+        
+        /**
+         * Maximale Anzahl Decision Points, um unbegrenztes Memory-Wachstum zu vermeiden.
+         * Ältere Decision Points werden automatisch entfernt.
+         */
+        private const val MAX_DECISION_POINTS = 100
+    }
+
     /**
      * Decision Point - Entscheidungspunkt im Auth-Flow.
      */
@@ -96,6 +106,9 @@ class HybridAuthFlowManager(
     fun onPageStarted(webView: android.webkit.WebView, url: String) {
         Log.d(TAG, "Page started: $url")
 
+        // Reset WebAuthn detector für neue Seite (Issue #7)
+        webAuthnDetector.reset()
+
         // State aktualisieren
         _flowContext.value = _flowContext.value.copy(
             currentUrl = url
@@ -119,7 +132,7 @@ class HybridAuthFlowManager(
         Log.w(TAG, "⚠️ WebAuthn required! URL: $url, Trigger: $trigger")
 
         // Decision Point loggen
-        val decisionPoint = DecisionPoint(
+        val detectionPoint = DecisionPoint(
             id = "dp_${Clock.System.now().toEpochMilliseconds()}",
             timestamp = Clock.System.now(),
             state = FlowState.WEBAUTHN_DETECTED,
@@ -133,12 +146,29 @@ class HybridAuthFlowManager(
             currentUrl = url,
             webAuthnTrigger = trigger,
             cookiesBeforeTransition = currentCookies,
-            decisionPoints = _flowContext.value.decisionPoints + decisionPoint
+            decisionPoints = addDecisionPoint(detectionPoint)
         )
 
-        // Prüfe ob Custom Tabs verfügbar ist
+        // Prüfe ob Custom Tabs verfügbar ist (Issue #6)
         if (!customTabsManager.isCustomTabsAvailable()) {
             Log.e(TAG, "Custom Tabs not available - cannot handle WebAuthn")
+            
+            // Decision Point für fehlgeschlagenen WebAuthn-Flow via Custom Tabs loggen
+            val failureDecisionPoint = DecisionPoint(
+                id = "dp_${Clock.System.now().toEpochMilliseconds()}",
+                timestamp = Clock.System.now(),
+                state = FlowState.WEBVIEW_ACTIVE,
+                trigger = "custom_tabs_unavailable",
+                url = url,
+                cookies = currentCookies,
+                outcome = "failed"
+            )
+
+            _flowContext.value = _flowContext.value.copy(
+                state = FlowState.WEBVIEW_ACTIVE,
+                decisionPoints = addDecisionPoint(failureDecisionPoint)
+            )
+            
             return false
         }
 
@@ -176,7 +206,7 @@ class HybridAuthFlowManager(
         _flowContext.value = _flowContext.value.copy(
             state = FlowState.CUSTOM_TAB_ACTIVE,
             customTabLaunchedAt = Clock.System.now(),
-            decisionPoints = _flowContext.value.decisionPoints + decisionPoint
+            decisionPoints = addDecisionPoint(decisionPoint)
         )
     }
 
@@ -196,10 +226,10 @@ class HybridAuthFlowManager(
 
         Log.d(TAG, "Synced ${updatedCookies.size} cookies from Custom Tab")
 
-        // Cookies zu WebView übertragen
+        // Cookies zu WebView übertragen (Issue #16: simplified cookie string)
         val cookieManager = android.webkit.CookieManager.getInstance()
         updatedCookies.forEach { (name, value) ->
-            val cookieString = "$name=$value; Path=/; Domain=${extractDomain(currentUrl)}"
+            val cookieString = CookieUtils.createSimpleCookieString(name, value)
             cookieManager.setCookie(currentUrl, cookieString)
         }
         cookieManager.flush()
@@ -217,7 +247,7 @@ class HybridAuthFlowManager(
 
         _flowContext.value = _flowContext.value.copy(
             state = FlowState.SESSION_RESTORED,
-            decisionPoints = _flowContext.value.decisionPoints + decisionPoint
+            decisionPoints = addDecisionPoint(decisionPoint)
         )
 
         // WebView zur URL neu laden (mit neuen Cookies)
@@ -247,7 +277,7 @@ class HybridAuthFlowManager(
 
         _flowContext.value = _flowContext.value.copy(
             state = FlowState.WEBVIEW_ACTIVE,
-            decisionPoints = _flowContext.value.decisionPoints + decisionPoint
+            decisionPoints = addDecisionPoint(decisionPoint)
         )
 
         customTabsManager.completeCustomTabFlow()
@@ -262,6 +292,22 @@ class HybridAuthFlowManager(
     }
 
     /**
+     * Fügt einen Decision Point hinzu und begrenzt die Gesamtzahl auf MAX_DECISION_POINTS.
+     * Älteste Punkte werden automatisch entfernt.
+     */
+    private fun addDecisionPoint(decisionPoint: DecisionPoint): List<DecisionPoint> {
+        val currentPoints = _flowContext.value.decisionPoints
+        val newPoints = currentPoints + decisionPoint
+        
+        // Begrenze auf MAX_DECISION_POINTS (behalte die neuesten)
+        return if (newPoints.size > MAX_DECISION_POINTS) {
+            newPoints.takeLast(MAX_DECISION_POINTS)
+        } else {
+            newPoints
+        }
+    }
+
+    /**
      * Setzt Flow zurück (z.B. bei neuer Session).
      */
     fun reset() {
@@ -272,20 +318,17 @@ class HybridAuthFlowManager(
 
     /**
      * Injiziert Bridge-Methoden für WebAuthn-Detection in WebView.
-     * Nutzt das vorhandene "FishIT" JavaScript Interface.
+     * Verwendet ein separates JavaScript Interface mit eigenem Namen.
      * WICHTIG: Wird NACH TrafficInterceptWebView Setup aufgerufen,
-     * um das bestehende Interface zu erweitern.
+     * um WebAuthn-spezifische Hooks bereitzustellen, ohne das bestehende
+     * "FishIT" Interface zu überschreiben.
      */
     fun setupWebViewBridge(webView: android.webkit.WebView) {
         // JavaScript Interface für WebAuthn Detection
-        // Nutzt das gleiche "FishIT" Interface wie TrafficInterceptWebView
-        // für konsistente API
-        try {
-            webView.addJavascriptInterface(WebAuthnBridge(), "FishIT")
-        } catch (e: Exception) {
-            // Interface bereits vorhanden - das ist okay
-            Log.d(TAG, "FishIT interface already exists, extending functionality")
-        }
+        // Eigener Interface-Name, um Konflikte mit dem bestehenden "FishIT"
+        // Interface von TrafficInterceptWebView zu vermeiden
+        webView.addJavascriptInterface(WebAuthnBridge(), "FishIT_WebAuthn")
+        Log.d(TAG, "WebAuthn bridge registered as 'FishIT_WebAuthn'")
     }
 
     /**
@@ -308,25 +351,11 @@ class HybridAuthFlowManager(
             // Cookies aus WebView extrahieren
             val cookieManager = android.webkit.CookieManager.getInstance()
             val cookieString = cookieManager.getCookie(currentUrl)
-            val cookies = parseCookieString(cookieString)
+            val cookies = CookieUtils.parseCookieString(cookieString)
 
             // Zu Custom Tabs wechseln
             onWebAuthnRequired(currentUrl, trigger, cookies)
         }
-    }
-
-    /**
-     * Parst Cookie-String zu Map.
-     */
-    private fun parseCookieString(cookieString: String?): Map<String, String> {
-        if (cookieString.isNullOrBlank()) return emptyMap()
-
-        return cookieString.split(";")
-            .mapNotNull { cookie ->
-                val parts = cookie.trim().split("=", limit = 2)
-                if (parts.size == 2) parts[0] to parts[1] else null
-            }
-            .toMap()
     }
 
     /**

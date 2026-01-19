@@ -141,7 +141,7 @@ class WebAuthnDetector {
     if (window.__fishit_webauthn_detector) return;
     window.__fishit_webauthn_detector = true;
     
-    var bridge = window.FishIT;
+    var bridge = window.FishIT_WebAuthn;
     if (!bridge) {
         console.warn('[WebAuthn Detector] Bridge not found');
         return;

@@ -2,6 +2,7 @@ package dev.fishit.mapper.android.import.httpcanary
 
 import android.util.Log
 import dev.fishit.mapper.android.webview.HybridAuthFlowManager
+import kotlin.math.abs
 // Explicit import to avoid confusion with TrafficInterceptWebView.CapturedExchange
 import dev.fishit.mapper.android.import.httpcanary.CapturedExchange as HttpCanaryCapturedExchange
 

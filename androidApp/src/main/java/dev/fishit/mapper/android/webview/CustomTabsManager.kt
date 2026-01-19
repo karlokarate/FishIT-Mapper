@@ -164,23 +164,18 @@ class CustomTabsManager(private val context: Context) {
     fun syncCookiesFromCustomTabs(url: String): Map<String, String> {
         Log.d(TAG, "Syncing cookies from Custom Tabs for $url")
 
-        val cookies = mutableMapOf<String, String>()
-
         try {
             // Alle Cookies für URL abrufen
             val cookieString = cookieManager.getCookie(url)
             if (cookieString != null) {
                 Log.d(TAG, "Retrieved cookies: ${cookieString.take(200)}")
 
-                // Cookie-String parsen
-                cookieString.split(";").forEach { cookie ->
-                    val parts = cookie.trim().split("=", limit = 2)
-                    if (parts.size == 2) {
-                        cookies[parts[0]] = parts[1]
-                    }
-                }
+                // Cookie-String parsen (Issue #10: use shared utility with attribute filtering)
+                val cookies = CookieUtils.parseCookieString(cookieString)
 
                 Log.d(TAG, "Parsed ${cookies.size} cookies: ${cookies.keys.joinToString()}")
+                _status.value = _status.value.copy(cookiesSynced = true)
+                return cookies
             } else {
                 Log.w(TAG, "No cookies found for $url")
             }
@@ -190,7 +185,7 @@ class CustomTabsManager(private val context: Context) {
             Log.e(TAG, "Failed to sync cookies from Custom Tabs", e)
         }
 
-        return cookies
+        return emptyMap()
     }
 
     /**
