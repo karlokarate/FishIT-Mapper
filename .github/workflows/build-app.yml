@@ -102,7 +102,7 @@ jobs:
         env:
           KEYSTORE_FILE: keystore.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'fishit-mapper' }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         id: build-release
 
