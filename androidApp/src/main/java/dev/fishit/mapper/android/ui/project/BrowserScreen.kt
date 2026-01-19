@@ -156,9 +156,6 @@ fun BrowserScreen(
                     settings.setSupportMultipleWindows(true)
                     settings.javaScriptCanOpenWindowsAutomatically = true
 
-                    // Database für WebAuthn Credentials
-                    settings.databaseEnabled = true
-
                     // OAuth Cookie Support konfigurieren
                     AuthAwareCookieManager.configureWebViewForOAuth(this)
                     AuthAwareCookieManager.registerSessionDomain("kolping-hochschule.de")

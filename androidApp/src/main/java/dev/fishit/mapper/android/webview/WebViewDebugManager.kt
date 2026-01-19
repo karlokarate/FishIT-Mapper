@@ -110,10 +110,9 @@ object WebViewDebugManager {
             ) {
                 // Den WebView selbst nicht als Overlay zählen
                 if (current === webView) {
-                    if (current is android.view.ViewGroup) {
-                        for (i in 0 until current.childCount) {
-                            traverseViewHierarchy(current.getChildAt(i), depth + 1)
-                        }
+                    // WebView is always a ViewGroup, so we can directly iterate children
+                    for (i in 0 until (current as android.view.ViewGroup).childCount) {
+                        traverseViewHierarchy(current.getChildAt(i), depth + 1)
                     }
                     return
                 }

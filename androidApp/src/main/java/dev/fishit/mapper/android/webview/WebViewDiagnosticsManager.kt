@@ -154,6 +154,7 @@ object WebViewDiagnosticsManager {
             userAgent = webView?.settings?.userAgentString,
             javaScriptEnabled = webView?.settings?.javaScriptEnabled ?: false,
             domStorageEnabled = webView?.settings?.domStorageEnabled ?: false,
+            @Suppress("DEPRECATION")
             databaseEnabled = webView?.settings?.databaseEnabled ?: false,
             cookiesEnabled = cookieManager.acceptCookie(),
             thirdPartyCookiesEnabled = webView?.let { 

@@ -74,7 +74,7 @@ fun GraphDiffScreen(
             )
         }
         
-        Divider()
+        HorizontalDivider()
         
         // Show diff results
         if (diffResult != null) {

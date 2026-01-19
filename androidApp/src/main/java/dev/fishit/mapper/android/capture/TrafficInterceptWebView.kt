@@ -214,7 +214,6 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         // JavaScript aktivieren (erforderlich für Interception)
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        settings.databaseEnabled = true
 
         // WICHTIG für WebAuthn: Multiple Windows Support aktivieren
         // WebAuthn-Dialoge benötigen dies, sonst erscheint ein grauer Overlay
