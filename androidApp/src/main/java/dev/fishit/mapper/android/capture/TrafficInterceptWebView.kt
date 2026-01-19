@@ -418,7 +418,8 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             // Detect WebAuthn errors and trigger external browser fallback
             if (level == "ERROR" && detectWebAuthnError(message)) {
                 android.util.Log.w(TAG, "⚠️ WebAuthn error detected, triggering external browser fallback")
-                val currentPageUrl = url ?: "about:blank"
+                // Use getUrl() to get the actual current page URL, not the JS source URL
+                val currentPageUrl = this@TrafficInterceptWebView.url ?: "about:blank"
                 _webAuthnError.value = WebAuthnErrorEvent(
                     url = currentPageUrl,
                     errorMessage = message
@@ -591,10 +592,23 @@ class TrafficInterceptWebView @JvmOverloads constructor(
      * @param url The URL to open in external browser
      */
     fun launchInExternalBrowser(url: String) {
+        // Validate URL
+        if (url.isBlank() || url == "about:blank") {
+            android.util.Log.w(TAG, "Cannot launch empty or blank URL in external browser")
+            return
+        }
+        
         try {
+            // Validate URL format
+            val uri = android.net.Uri.parse(url)
+            if (uri.scheme.isNullOrEmpty() || uri.host.isNullOrEmpty()) {
+                android.util.Log.w(TAG, "Invalid URL format: $url")
+                return
+            }
+            
             android.util.Log.d(TAG, "Launching URL in external browser: $url")
             
-            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
             intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             
             context.startActivity(intent)
