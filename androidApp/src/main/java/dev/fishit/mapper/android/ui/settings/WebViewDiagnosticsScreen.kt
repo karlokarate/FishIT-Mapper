@@ -56,20 +56,7 @@ fun WebViewDiagnosticsScreen(onBack: () -> Unit) {
             )
         }
     ) { padding ->
-        if (diagnostics == null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
-                    Spacer(Modifier.height(16.dp))
-                    Text("Lade Diagnostics...")
-                }
-            }
-        } else {
+        diagnostics?.let { data ->
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -80,11 +67,11 @@ fun WebViewDiagnosticsScreen(onBack: () -> Unit) {
                 // WebView Info Section
                 item {
                     DiagnosticsSection(title = "WebView Information") {
-                        DiagnosticItem("Package", diagnostics!!.webViewPackage ?: "Unknown")
-                        DiagnosticItem("Version", diagnostics!!.webViewVersion ?: "Unknown")
+                        DiagnosticItem("Package", data.webViewPackage ?: "Unknown")
+                        DiagnosticItem("Version", data.webViewVersion ?: "Unknown")
                         DiagnosticItem(
                             "User Agent",
-                            diagnostics!!.userAgent ?: "Unknown",
+                            data.userAgent ?: "Unknown",
                             maxLines = 3
                         )
                     }
@@ -93,12 +80,12 @@ fun WebViewDiagnosticsScreen(onBack: () -> Unit) {
                 // Settings Section
                 item {
                     DiagnosticsSection(title = "WebView Settings") {
-                        SettingItem("JavaScript", diagnostics!!.javaScriptEnabled)
-                        SettingItem("DOM Storage", diagnostics!!.domStorageEnabled)
-                        SettingItem("Database", diagnostics!!.databaseEnabled)
-                        SettingItem("Cookies", diagnostics!!.cookiesEnabled)
-                        SettingItem("3rd-Party Cookies", diagnostics!!.thirdPartyCookiesEnabled)
-                        SettingItem("Multiple Windows", diagnostics!!.multipleWindowsSupported)
+                        SettingItem("JavaScript", data.javaScriptEnabled)
+                        SettingItem("DOM Storage", data.domStorageEnabled)
+                        SettingItem("Database", data.databaseEnabled)
+                        SettingItem("Cookies", data.cookiesEnabled)
+                        SettingItem("3rd-Party Cookies", data.thirdPartyCookiesEnabled)
+                        SettingItem("Multiple Windows", data.multipleWindowsSupported)
                     }
                 }
 
@@ -115,7 +102,7 @@ fun WebViewDiagnosticsScreen(onBack: () -> Unit) {
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Text(
-                                "${diagnostics!!.cookieCount}",
+                                "${data.cookieCount}",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -127,12 +114,12 @@ fun WebViewDiagnosticsScreen(onBack: () -> Unit) {
                 // Console Logs Section
                 item {
                     Text(
-                        "Console Logs (${diagnostics!!.consoleLogs.size})",
+                        "Console Logs (${data.consoleLogs.size})",
                         style = MaterialTheme.typography.titleLarge
                     )
                 }
 
-                if (diagnostics!!.consoleLogs.isEmpty()) {
+                if (data.consoleLogs.isEmpty()) {
                     item {
                         InfoCard(
                             icon = Icons.Default.Info,
@@ -140,7 +127,7 @@ fun WebViewDiagnosticsScreen(onBack: () -> Unit) {
                         )
                     }
                 } else {
-                    items(diagnostics!!.consoleLogs.reversed()) { log ->
+                    items(data.consoleLogs.reversed()) { log ->
                         ConsoleLogItem(log)
                     }
                 }
@@ -149,22 +136,22 @@ fun WebViewDiagnosticsScreen(onBack: () -> Unit) {
                 item {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Error Logs (${diagnostics!!.errorLogs.size})",
+                        "Error Logs (${data.errorLogs.size})",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.error
                     )
                 }
 
-                if (diagnostics!!.errorLogs.isEmpty()) {
+                if (data.errorLogs.isEmpty()) {
                     item {
                         InfoCard(
                             icon = Icons.Default.CheckCircle,
                             message = "Keine Fehler gefunden. WebView funktioniert einwandfrei.",
-                            color = Color(0xFF4CAF50)
+                            color = MaterialTheme.colorScheme.tertiary
                         )
                     }
                 } else {
-                    items(diagnostics!!.errorLogs.reversed()) { error ->
+                    items(data.errorLogs.reversed()) { error ->
                         ErrorLogItem(error)
                     }
                 }
@@ -173,10 +160,23 @@ fun WebViewDiagnosticsScreen(onBack: () -> Unit) {
                 item {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Zuletzt aktualisiert: ${formatTimestamp(diagnostics!!.lastUpdated)}",
+                        "Zuletzt aktualisiert: ${formatTimestamp(data.lastUpdated)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        } ?: run {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator()
+                    Spacer(Modifier.height(16.dp))
+                    Text("Lade Diagnostics...")
                 }
             }
         }
@@ -245,7 +245,7 @@ private fun SettingItem(label: String, enabled: Boolean) {
         Icon(
             if (enabled) Icons.Default.CheckCircle else Icons.Default.Cancel,
             contentDescription = if (enabled) "Aktiviert" else "Deaktiviert",
-            tint = if (enabled) Color(0xFF4CAF50) else Color(0xFFF44336)
+            tint = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
         )
     }
 }
@@ -257,7 +257,7 @@ private fun ConsoleLogItem(log: WebViewDiagnosticsManager.ConsoleLog) {
         colors = CardDefaults.cardColors(
             containerColor = when (log.level) {
                 "ERROR" -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-                "WARN" -> Color(0xFFFF9800).copy(alpha = 0.2f)
+                "WARN" -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
                 else -> MaterialTheme.colorScheme.surfaceVariant
             }
         )
@@ -275,7 +275,7 @@ private fun ConsoleLogItem(log: WebViewDiagnosticsManager.ConsoleLog) {
                 Surface(
                     color = when (log.level) {
                         "ERROR" -> MaterialTheme.colorScheme.error
-                        "WARN" -> Color(0xFFFF9800)
+                        "WARN" -> MaterialTheme.colorScheme.tertiary
                         else -> MaterialTheme.colorScheme.primary
                     },
                     shape = RoundedCornerShape(4.dp)

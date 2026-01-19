@@ -89,11 +89,21 @@ object WebViewDiagnosticsManager {
     private const val MAX_ERROR_LOGS = 50
 
     /**
-     * Initialisiert den Diagnostics Manager.
-     * Sollte beim App-Start oder vor der ersten WebView-Nutzung aufgerufen werden.
+     * Initialisiert den Diagnostics Manager ohne konkrete WebView-Instanz.
+     *
+     * Hinweis: Diese Variante erfasst nur Basisinformationen (Paket, Version, Cookies),
+     * aber **keine** WebView-spezifischen Einstellungen. Für vollständige Diagnosedaten
+     * sollte stattdessen [updateDiagnosticsData] mit einer WebView-Instanz verwendet werden.
+     *
+     * @deprecated Verwende updateDiagnosticsData(context, webView) für vollständige Diagnosedaten
      */
+    @Deprecated(
+        message = "Verwende updateDiagnosticsData(context, webView) für vollständige WebView-Diagnosedaten",
+        replaceWith = ReplaceWith("updateDiagnosticsData(context, webView)")
+    )
     fun initialize(context: Context) {
-        updateDiagnosticsData(context)
+        // Keine Diagnostics-Update ohne WebView-Instanz,
+        // um irreführende Default-Werte zu vermeiden
     }
 
     /**
@@ -140,7 +150,10 @@ object WebViewDiagnosticsManager {
         val packageInfo = WebView.getCurrentWebViewPackage()
         val cookieManager = CookieManager.getInstance()
 
-        // Cookie-Anzahl ermitteln (approximation über bekannte Domains)
+        // Cookie-Anzahl ermitteln (Approximation über bekannte Test-Domains)
+        // HINWEIS: Dies ist nur eine grobe Schätzung, da die Android CookieManager API
+        // keine Methode zum Zählen aller Cookies bereitstellt. Wir prüfen nur einige
+        // bekannte Domains als Indikator. Die tatsächliche Anzahl kann höher sein.
         val cookieCount = try {
             // Zähle Cookies für bekannte Test-Domains
             val testDomains = listOf("google.com", "microsoft.com", "github.com")

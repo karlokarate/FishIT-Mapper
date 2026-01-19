@@ -112,7 +112,8 @@ For production OAuth flows, **use AppAuth-Android instead of WebView**:
 
 ```gradle
 dependencies {
-    implementation 'net.openid:appauth:0.11.1'
+    // Check for latest version at: https://github.com/openid/AppAuth-Android/releases
+    implementation 'net.openid:appauth:0.11.1'  // Update to latest stable version
 }
 ```
 

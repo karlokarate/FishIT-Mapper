@@ -89,41 +89,71 @@ object WebViewDebugManager {
      * 
      * Ein Overlay kann Touch-Events abfangen und verhindern,
      * dass sie den WebView erreichen.
+     *
+     * Statt nur Geschwister-Views im selben Parent zu prüfen,
+     * wird hier die komplette View-Hierarchie ab dem Root-View
+     * durchsucht, um auch Overlays in übergeordneten Layouts
+     * (z.B. Dialoge, Vollbild-Overlays) zu erfassen.
      */
     fun detectOverlays(webView: android.webkit.WebView): List<OverlayInfo> {
         val overlays = mutableListOf<OverlayInfo>()
         
         try {
-            val parent = webView.parent as? android.view.ViewGroup ?: return emptyList()
+            val rootView = webView.rootView as? android.view.ViewGroup ?: return emptyList()
+            val webViewBounds = webView.getBoundsOnScreen()
             
-            // Finde alle Views die über dem WebView liegen
-            val webViewIndex = parent.indexOfChild(webView)
-            
-            for (i in webViewIndex + 1 until parent.childCount) {
-                val sibling = parent.getChildAt(i)
+            // Durchsuche die komplette View-Hierarchie nach interaktiven,
+            // sichtbaren Views, die den WebView überlappen.
+            fun traverseViewHierarchy(
+                current: android.view.View,
+                depth: Int = 0
+            ) {
+                // Den WebView selbst nicht als Overlay zählen
+                if (current === webView) {
+                    if (current is android.view.ViewGroup) {
+                        for (i in 0 until current.childCount) {
+                            traverseViewHierarchy(current.getChildAt(i), depth + 1)
+                        }
+                    }
+                    return
+                }
                 
-                // Prüfe ob der sibling clickable ist oder einen OnTouchListener hat
-                val isInteractive = sibling.isClickable || 
-                                   sibling.hasOnClickListeners() ||
-                                   sibling.hasOnTouchListeners()
-                
-                // Prüfe Visibility
-                val isVisible = sibling.visibility == android.view.View.VISIBLE
+                val isVisible = current.visibility == android.view.View.VISIBLE && current.alpha > 0f
+                val isInteractive = current.isClickable || 
+                                   current.hasOnClickListeners() ||
+                                   current.hasOnTouchListeners()
                 
                 if (isVisible && isInteractive) {
-                    overlays.add(
-                        OverlayInfo(
-                            className = sibling.javaClass.simpleName,
-                            index = i,
-                            isClickable = sibling.isClickable,
-                            hasClickListener = sibling.hasOnClickListeners(),
-                            hasTouchListener = sibling.hasOnTouchListeners(),
-                            alpha = sibling.alpha,
-                            bounds = sibling.getBoundsOnScreen()
+                    val currentBounds = current.getBoundsOnScreen()
+                    val intersection = android.graphics.Rect(currentBounds)
+                    val intersects = intersection.intersect(webViewBounds)
+                    
+                    if (intersects) {
+                        val parent = current.parent as? android.view.ViewGroup
+                        val indexInParent = parent?.indexOfChild(current) ?: -1
+                        
+                        overlays.add(
+                            OverlayInfo(
+                                className = current.javaClass.simpleName,
+                                index = indexInParent,
+                                isClickable = current.isClickable,
+                                hasClickListener = current.hasOnClickListeners(),
+                                hasTouchListener = current.hasOnTouchListeners(),
+                                alpha = current.alpha,
+                                bounds = currentBounds
+                            )
                         )
-                    )
+                    }
+                }
+                
+                if (current is android.view.ViewGroup) {
+                    for (i in 0 until current.childCount) {
+                        traverseViewHierarchy(current.getChildAt(i), depth + 1)
+                    }
                 }
             }
+            
+            traverseViewHierarchy(rootView)
         } catch (e: Exception) {
             android.util.Log.e("WebViewDebugManager", "Error detecting overlays: ${e.message}", e)
         }
@@ -190,14 +220,27 @@ private fun android.view.View.getBoundsOnScreen(): android.graphics.Rect {
 
 /**
  * Extension function um zu prüfen ob ein View einen OnTouchListener hat.
+ *
+ * Hinweis:
+ * Diese Implementierung verwendet Reflection, um auf das private Feld `mOnTouchListener`
+ * zuzugreifen, da Android keine öffentliche API dafür bereitstellt. Dies ist notwendig
+ * für die korrekte Overlay-Erkennung. Die Reflection ist robust implementiert mit
+ * try-catch, um bei Änderungen in zukünftigen Android-Versionen nicht zu crashen.
+ *
+ * Bei Problemen mit R8/ProGuard: Füge folgende Keep-Rule hinzu:
+ * -keepclassmembers class android.view.View {
+ *     android.view.View$OnTouchListener mOnTouchListener;
+ * }
  */
 private fun android.view.View.hasOnTouchListeners(): Boolean {
     return try {
-        // Reflection um private Field zu lesen
+        // Reflection um private Field zu lesen - notwendig für Overlay-Detection
         val field = android.view.View::class.java.getDeclaredField("mOnTouchListener")
         field.isAccessible = true
         field.get(this) != null
     } catch (e: Exception) {
+        // Falls Reflection fehlschlägt (z.B. durch Obfuscation), konservativ false zurückgeben
+        android.util.Log.d("WebViewDebugManager", "hasOnTouchListeners Reflection failed: ${e.message}")
         false
     }
 }
