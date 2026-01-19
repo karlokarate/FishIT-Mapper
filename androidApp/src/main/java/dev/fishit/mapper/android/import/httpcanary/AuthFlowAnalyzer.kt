@@ -2,6 +2,8 @@ package dev.fishit.mapper.android.import.httpcanary
 
 import android.util.Log
 import dev.fishit.mapper.android.webview.HybridAuthFlowManager
+// Explicit import to avoid confusion with TrafficInterceptWebView.CapturedExchange
+import dev.fishit.mapper.android.import.httpcanary.CapturedExchange as HttpCanaryCapturedExchange
 
 /**
  * Auth Flow Analyzer für HTTP Canary Daten.
@@ -79,7 +81,7 @@ class AuthFlowAnalyzer {
      */
     data class DecisionPointCorrelation(
         val decisionPoint: HybridAuthFlowManager.DecisionPoint,
-        val correlatedRequests: List<CapturedExchange>,
+        val correlatedRequests: List<HttpCanaryCapturedExchange>,
         val timeWindowMs: Long
     )
 
@@ -91,7 +93,7 @@ class AuthFlowAnalyzer {
      * @return Auth Flow Analyse
      */
     fun analyzeAuthFlow(
-        exchanges: List<CapturedExchange>,
+        exchanges: List<HttpCanaryCapturedExchange>,
         decisionPoints: List<HybridAuthFlowManager.DecisionPoint> = emptyList()
     ): AuthFlowAnalysis {
         Log.d(TAG, "Analyzing auth flow from ${exchanges.size} exchanges")
@@ -124,7 +126,7 @@ class AuthFlowAnalyzer {
      * Analysiert Redirect-Chain.
      * Findet 301/302/303/307/308 Redirects und baut Chain auf.
      */
-    private fun analyzeRedirectChain(exchanges: List<CapturedExchange>): List<RedirectStep> {
+    private fun analyzeRedirectChain(exchanges: List<HttpCanaryCapturedExchange>): List<RedirectStep> {
         val redirects = mutableListOf<RedirectStep>()
         
         exchanges.sortedBy { it.startedAt.toEpochMilliseconds() }.forEach { exchange ->
@@ -168,7 +170,7 @@ class AuthFlowAnalyzer {
     /**
      * Findet WebAuthn Indikatoren in Requests und Responses.
      */
-    private fun findWebAuthnIndicators(exchanges: List<CapturedExchange>): List<WebAuthnIndicator> {
+    private fun findWebAuthnIndicators(exchanges: List<HttpCanaryCapturedExchange>): List<WebAuthnIndicator> {
         val indicators = mutableListOf<WebAuthnIndicator>()
         
         exchanges.forEach { exchange ->
@@ -223,7 +225,7 @@ class AuthFlowAnalyzer {
     /**
      * Analysiert Session-Übergänge anhand von Cookie-Änderungen.
      */
-    private fun analyzeSessionTransitions(exchanges: List<CapturedExchange>): List<SessionTransition> {
+    private fun analyzeSessionTransitions(exchanges: List<HttpCanaryCapturedExchange>): List<SessionTransition> {
         val transitions = mutableListOf<SessionTransition>()
         var previousCookies = setOf<String>()
         
@@ -265,7 +267,7 @@ class AuthFlowAnalyzer {
      * Findet alle Requests die in zeitlicher Nähe zu einem Decision Point stattfanden.
      */
     private fun correlateDecisionPoints(
-        exchanges: List<CapturedExchange>,
+        exchanges: List<HttpCanaryCapturedExchange>,
         decisionPoints: List<HybridAuthFlowManager.DecisionPoint>
     ): List<DecisionPointCorrelation> {
         val correlations = mutableListOf<DecisionPointCorrelation>()

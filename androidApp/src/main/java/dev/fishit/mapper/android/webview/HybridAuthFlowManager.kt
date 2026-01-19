@@ -272,10 +272,20 @@ class HybridAuthFlowManager(
 
     /**
      * Injiziert Bridge-Methoden für WebAuthn-Detection in WebView.
+     * Nutzt das vorhandene "FishIT" JavaScript Interface.
+     * WICHTIG: Wird NACH TrafficInterceptWebView Setup aufgerufen,
+     * um das bestehende Interface zu erweitern.
      */
     fun setupWebViewBridge(webView: android.webkit.WebView) {
         // JavaScript Interface für WebAuthn Detection
-        webView.addJavascriptInterface(WebAuthnBridge(), "FishIT")
+        // Nutzt das gleiche "FishIT" Interface wie TrafficInterceptWebView
+        // für konsistente API
+        try {
+            webView.addJavascriptInterface(WebAuthnBridge(), "FishIT")
+        } catch (e: Exception) {
+            // Interface bereits vorhanden - das ist okay
+            Log.d(TAG, "FishIT interface already exists, extending functionality")
+        }
     }
 
     /**

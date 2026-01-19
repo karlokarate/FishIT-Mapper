@@ -51,7 +51,8 @@ class WebAuthnDetector {
      * Gibt an ob WebAuthn aktuell benötigt wird.
      * True wenn API verfügbar ist UND verwendet wird.
      */
-    val webAuthnRequired: StateFlow<Boolean> = MutableStateFlow(false)
+    private val _webAuthnRequired = MutableStateFlow(false)
+    val webAuthnRequired: StateFlow<Boolean> = _webAuthnRequired.asStateFlow()
 
     /**
      * Bekannte WebAuthn/FIDO2 Provider URLs.
@@ -108,7 +109,7 @@ class WebAuthnDetector {
             triggerUrl = url,
             triggerElement = element
         )
-        (webAuthnRequired as MutableStateFlow).value = true
+        _webAuthnRequired.value = true
         Log.w(TAG, "⚠️ WebAuthn API USED - should switch to Custom Tabs! URL: $url, Element: $element")
     }
 
@@ -117,7 +118,7 @@ class WebAuthnDetector {
      */
     fun reset() {
         _webAuthnStatus.value = WebAuthnStatus()
-        (webAuthnRequired as MutableStateFlow).value = false
+        _webAuthnRequired.value = false
         Log.d(TAG, "WebAuthn detector reset")
     }
 
