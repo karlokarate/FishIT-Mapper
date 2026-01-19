@@ -201,7 +201,7 @@ Für Production-Apps empfehlen wir:
 
 - [Android App Signing Dokumentation](https://developer.android.com/studio/publish/app-signing)
 - [GitHub Secrets Dokumentation](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
-- [Keytool Dokumentation](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/keytool.html)
+- [Keytool Dokumentation (Java 17)](https://docs.oracle.com/en/java/javase/17/docs/specs/man/keytool.html)
 - [Google Play App Signing](https://developer.android.com/studio/publish/app-signing#app-signing-google-play)
 
 ## 🔄 Keystore erneuern
