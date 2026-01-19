@@ -189,6 +189,19 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         get() = _hybridAuthFlowManager.flowContext
 
     /**
+     * WebAuthn error event - emitted when WebAuthn is required but not supported.
+     * UI should react to this by offering to open in external browser.
+     */
+    data class WebAuthnErrorEvent(
+        val url: String,
+        val errorMessage: String,
+        val timestamp: kotlinx.datetime.Instant = kotlinx.datetime.Clock.System.now()
+    )
+
+    private val _webAuthnError = MutableStateFlow<WebAuthnErrorEvent?>(null)
+    val webAuthnError: StateFlow<WebAuthnErrorEvent?> = _webAuthnError.asStateFlow()
+
+    /**
      * Aktiviert/Deaktiviert Traffic-Interception.
      * Bei Deaktivierung wird die Seite neu geladen um die JS-Hooks zu entfernen.
      */
@@ -402,6 +415,16 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             // Log to diagnostics manager
             WebViewDiagnosticsManager.logConsoleMessage(level, message, sourceUrl)
             
+            // Detect WebAuthn errors and trigger external browser fallback
+            if (level == "ERROR" && detectWebAuthnError(message)) {
+                android.util.Log.w(TAG, "⚠️ WebAuthn error detected, triggering external browser fallback")
+                val currentPageUrl = url ?: "about:blank"
+                _webAuthnError.value = WebAuthnErrorEvent(
+                    url = currentPageUrl,
+                    errorMessage = message
+                )
+            }
+            
             return true
         }
 
@@ -536,6 +559,57 @@ class TrafficInterceptWebView @JvmOverloads constructor(
      */
     fun getAuthFlowDecisionPoints(): List<dev.fishit.mapper.android.webview.HybridAuthFlowManager.DecisionPoint> {
         return _hybridAuthFlowManager.exportDecisionPoints()
+    }
+
+    /**
+     * Detects if a console error message is related to WebAuthn not being supported.
+     * 
+     * Common patterns:
+     * - "WebAuthn is not supported"
+     * - "PublicKeyCredential is not defined"
+     * - "navigator.credentials is undefined"
+     */
+    private fun detectWebAuthnError(message: String): Boolean {
+        val webAuthnErrorPatterns = listOf(
+            "webauthn.*not supported",
+            "publickeycredential.*not.*defined",
+            "navigator\\.credentials.*undefined",
+            "webauthn.*unavailable",
+            "fido.*not supported"
+        )
+        
+        val lowerMessage = message.lowercase()
+        return webAuthnErrorPatterns.any { pattern ->
+            lowerMessage.contains(Regex(pattern))
+        }
+    }
+
+    /**
+     * Launches the current URL in an external browser as fallback when WebAuthn is not supported.
+     * This is used when the website requires WebAuthn but the WebView doesn't support it.
+     * 
+     * @param url The URL to open in external browser
+     */
+    fun launchInExternalBrowser(url: String) {
+        try {
+            android.util.Log.d(TAG, "Launching URL in external browser: $url")
+            
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            
+            context.startActivity(intent)
+            android.util.Log.d(TAG, "External browser launched successfully")
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Failed to launch external browser", e)
+        }
+    }
+
+    /**
+     * Clears the WebAuthn error state.
+     * Should be called after the error has been handled by the UI.
+     */
+    fun clearWebAuthnError() {
+        _webAuthnError.value = null
     }
 
     /**

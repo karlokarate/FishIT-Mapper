@@ -79,6 +79,8 @@ fun CaptureWebViewScreen(
     var showSessionEditor by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var showSessionsList by remember { mutableStateOf(false) }
+    var showWebAuthnErrorDialog by remember { mutableStateOf(false) }
+    var webAuthnErrorUrl by remember { mutableStateOf<String?>(null) }
     var pendingRecordUrl by remember { mutableStateOf<String?>(null) }
     var snackbarMessage by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -122,9 +124,19 @@ fun CaptureWebViewScreen(
     val nextChainpointLabel by sessionManager.nextChainpointLabel.collectAsState()
     val chainpointLabels by sessionManager.chainpointLabels.collectAsState()
     val interceptionEnabled by webView.interceptionEnabled.collectAsState()
+    val webAuthnError by webView.webAuthnError.collectAsState()
     
     // Hybrid Auth Flow Status
     val hybridAuthFlowContext by webView.hybridAuthFlowContext.collectAsState()
+
+    // Handle WebAuthn errors - show dialog to open in external browser
+    LaunchedEffect(webAuthnError) {
+        webAuthnError?.let { error ->
+            android.util.Log.d("CaptureWebView", "WebAuthn error detected: ${error.errorMessage}")
+            webAuthnErrorUrl = error.url
+            showWebAuthnErrorDialog = true
+        }
+    }
 
     // Interception mit Recording-State synchronisieren
     LaunchedEffect(isRecording, isPaused) {
@@ -632,6 +644,24 @@ fun CaptureWebViewScreen(
             onConfirm = { label ->
                 sessionManager.setNextChainpointLabel(label)
                 showChainpointDialog = false
+            }
+        )
+    }
+
+    // WebAuthn Error Dialog
+    if (showWebAuthnErrorDialog) {
+        WebAuthnErrorDialog(
+            url = webAuthnErrorUrl ?: "",
+            onDismiss = {
+                showWebAuthnErrorDialog = false
+                webView.clearWebAuthnError()
+            },
+            onOpenInBrowser = {
+                webAuthnErrorUrl?.let { url ->
+                    webView.launchInExternalBrowser(url)
+                    showWebAuthnErrorDialog = false
+                    webView.clearWebAuthnError()
+                }
             }
         )
     }
@@ -1941,4 +1971,76 @@ private fun formatDuration(durationMs: Long): String {
         minutes > 0 -> "${minutes}m ${seconds % 60}s"
         else -> "${seconds}s"
     }
+}
+
+/**
+ * Dialog zum Anzeigen von WebAuthn-Fehlern mit Option zum Öffnen im externen Browser.
+ * 
+ * Wird angezeigt wenn die Website WebAuthn benötigt, aber der WebView diese Technologie nicht unterstützt.
+ */
+@Composable
+private fun WebAuthnErrorDialog(
+    url: String,
+    onDismiss: () -> Unit,
+    onOpenInBrowser: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error
+            )
+        },
+        title = {
+            Text("WebAuthn nicht unterstützt")
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "Diese Website benötigt WebAuthn/FIDO2 für die Anmeldung, " +
+                    "welches in der WebView nicht verfügbar ist.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Möchten Sie die Seite im Standard-Browser öffnen?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    url,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onOpenInBrowser,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Icon(
+                    Icons.Default.OpenInBrowser,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Im Browser öffnen")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Abbrechen")
+            }
+        }
+    )
 }
