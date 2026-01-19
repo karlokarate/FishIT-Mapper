@@ -37,6 +37,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import dev.fishit.mapper.android.webview.AuthAwareCookieManager
 import dev.fishit.mapper.android.webview.JavaScriptBridge
 import dev.fishit.mapper.android.webview.TrackingScript
+import dev.fishit.mapper.android.webview.WebViewDiagnosticsManager
 import dev.fishit.mapper.contract.ConsoleLevel
 import dev.fishit.mapper.contract.ConsoleMessageEvent
 import dev.fishit.mapper.contract.NavigationEvent
@@ -112,6 +113,9 @@ fun BrowserScreen(
                 .fillMaxSize(),
             factory = {
                 WebView(context).apply {
+                    // Initialize diagnostics
+                    WebViewDiagnosticsManager.initialize(context)
+                    
                     // WICHTIG: Focus-Handling für Tastatur
                     isFocusable = true
                     isFocusableInTouchMode = true
@@ -194,7 +198,76 @@ fun BrowserScreen(
                             error: WebResourceError?
                         ) {
                             super.onReceivedError(view, request, error)
-                            Log.e(TAG, "WebView error: ${error?.description} for ${request?.url}")
+                            val url = request?.url?.toString()
+                            val errorDescription = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                                error?.description?.toString() ?: "Unknown error"
+                            } else {
+                                "Unknown error"
+                            }
+                            val errorCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                                error?.errorCode
+                            } else {
+                                null
+                            }
+                            
+                            Log.e(TAG, "WebView error: $errorDescription for $url (code: $errorCode)")
+                            
+                            WebViewDiagnosticsManager.logError(
+                                type = WebViewDiagnosticsManager.ErrorType.WEB_RESOURCE_ERROR,
+                                description = errorDescription,
+                                failingUrl = url,
+                                errorCode = errorCode
+                            )
+                        }
+                        
+                        override fun onReceivedHttpError(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                            errorResponse: WebResourceResponse?
+                        ) {
+                            super.onReceivedHttpError(view, request, errorResponse)
+                            
+                            val url = request?.url?.toString()
+                            val statusCode = errorResponse?.statusCode ?: 0
+                            val reasonPhrase = errorResponse?.reasonPhrase ?: "Unknown"
+                            
+                            Log.w(TAG, "HTTP Error: $statusCode $reasonPhrase for $url")
+                            
+                            WebViewDiagnosticsManager.logError(
+                                type = WebViewDiagnosticsManager.ErrorType.HTTP_ERROR,
+                                description = "$statusCode $reasonPhrase",
+                                failingUrl = url,
+                                errorCode = statusCode
+                            )
+                        }
+                        
+                        @android.annotation.SuppressLint("WebViewClientOnReceivedSslError")
+                        override fun onReceivedSslError(
+                            view: WebView?,
+                            handler: android.webkit.SslErrorHandler?,
+                            error: android.net.http.SslError?
+                        ) {
+                            val errorType = when (error?.primaryError) {
+                                android.net.http.SslError.SSL_NOTYETVALID -> "Certificate not yet valid"
+                                android.net.http.SslError.SSL_EXPIRED -> "Certificate expired"
+                                android.net.http.SslError.SSL_IDMISMATCH -> "Certificate hostname mismatch"
+                                android.net.http.SslError.SSL_UNTRUSTED -> "Certificate authority not trusted"
+                                android.net.http.SslError.SSL_DATE_INVALID -> "Certificate date invalid"
+                                android.net.http.SslError.SSL_INVALID -> "Generic SSL error"
+                                else -> "Unknown SSL error"
+                            }
+                            
+                            Log.w(TAG, "SSL Error: $errorType for ${error?.url}")
+                            
+                            WebViewDiagnosticsManager.logError(
+                                type = WebViewDiagnosticsManager.ErrorType.SSL_ERROR,
+                                description = errorType,
+                                failingUrl = error?.url,
+                                errorCode = error?.primaryError
+                            )
+                            
+                            // Proceed anyway (for development/testing)
+                            handler?.proceed()
                         }
 
                         override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
@@ -290,6 +363,14 @@ fun BrowserScreen(
                                 ConsoleMessage.MessageLevel.DEBUG -> ConsoleLevel.Info
                                 else -> ConsoleLevel.Info
                             }
+                            
+                            // Also log to diagnostics manager
+                            val levelStr = when (msg.messageLevel()) {
+                                ConsoleMessage.MessageLevel.ERROR -> "ERROR"
+                                ConsoleMessage.MessageLevel.WARNING -> "WARN"
+                                else -> "LOG"
+                            }
+                            WebViewDiagnosticsManager.logConsoleMessage(levelStr, msg.message(), msg.sourceId())
 
                             val event = ConsoleMessageEvent(
                                 id = IdGenerator.newEventId(),
@@ -364,6 +445,9 @@ fun BrowserScreen(
 
                     loadUrl(urlText.trim())
                     webViewHolder[0] = this
+                    
+                    // Update diagnostics with WebView configuration
+                    WebViewDiagnosticsManager.updateDiagnosticsData(context, this)
                 }
             },
             update = { webView ->

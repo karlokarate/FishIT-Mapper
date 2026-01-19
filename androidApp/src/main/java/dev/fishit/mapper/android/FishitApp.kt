@@ -19,6 +19,7 @@ import dev.fishit.mapper.android.ui.projects.ProjectsScreen
 import dev.fishit.mapper.android.ui.project.ProjectHomeScreen
 import dev.fishit.mapper.android.ui.session.SessionDetailScreen
 import dev.fishit.mapper.android.ui.settings.SettingsScreen
+import dev.fishit.mapper.android.ui.settings.WebViewDiagnosticsScreen
 
 @Composable
 fun FishitApp(container: AppContainer) {
@@ -41,6 +42,15 @@ fun FishitApp(container: AppContainer) {
 
                     composable("settings") {
                         SettingsScreen(
+                            onBack = { navController.popBackStack() },
+                            onOpenDiagnostics = {
+                                navController.navigate("diagnostics")
+                            }
+                        )
+                    }
+
+                    composable("diagnostics") {
+                        WebViewDiagnosticsScreen(
                             onBack = { navController.popBackStack() }
                         )
                     }

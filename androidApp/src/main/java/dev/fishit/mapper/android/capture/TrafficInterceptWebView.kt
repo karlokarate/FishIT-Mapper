@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.util.AttributeSet
 import android.webkit.*
 import dev.fishit.mapper.android.webview.AuthAwareCookieManager
+import dev.fishit.mapper.android.webview.WebViewDiagnosticsManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -210,6 +211,9 @@ class TrafficInterceptWebView @JvmOverloads constructor(
     }
 
     private fun setupWebView() {
+        // Initialize diagnostics manager
+        WebViewDiagnosticsManager.initialize(context)
+        
         // JavaScript aktivieren (erforderlich für Interception)
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
@@ -219,6 +223,7 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         // WebAuthn-Dialoge benötigen dies, sonst erscheint ein grauer Overlay
         settings.setSupportMultipleWindows(true)
         settings.javaScriptCanOpenWindowsAutomatically = true
+        android.util.Log.d(TAG, "Multiple windows support enabled for WebAuthn/OAuth dialogs")
 
         // WICHTIG: Mixed Content erlauben (HTTPS-Seiten mit HTTP-Ressourcen)
         settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
@@ -227,6 +232,7 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         android.webkit.CookieManager.getInstance().apply {
             setAcceptCookie(true)
             setAcceptThirdPartyCookies(this@TrafficInterceptWebView, true)
+            android.util.Log.d(TAG, "Third-party cookies enabled for OAuth/SSO support")
         }
 
         // OAuth-spezifische Cookie-Konfiguration
@@ -272,6 +278,9 @@ class TrafficInterceptWebView @JvmOverloads constructor(
 
         // WebChromeClient für erweiterte Features
         webChromeClient = FullFeaturedChromeClient()
+        
+        // Update diagnostics data with current WebView configuration
+        WebViewDiagnosticsManager.updateDiagnosticsData(context, this)
     }
 
     /**
@@ -322,6 +331,7 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             result: JsResult?
         ): Boolean {
             android.util.Log.d(TAG, "[JS Alert] $message")
+            WebViewDiagnosticsManager.logConsoleMessage("ALERT", message ?: "", url)
             result?.confirm()
             return true
         }
@@ -333,6 +343,7 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             result: JsResult?
         ): Boolean {
             android.util.Log.d(TAG, "[JS Confirm] $message")
+            WebViewDiagnosticsManager.logConsoleMessage("CONFIRM", message ?: "", url)
             result?.confirm()
             return true
         }
@@ -345,12 +356,19 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             result: JsPromptResult?
         ): Boolean {
             android.util.Log.d(TAG, "[JS Prompt] $message")
+            WebViewDiagnosticsManager.logConsoleMessage("PROMPT", message ?: "", url)
             result?.confirm(defaultValue ?: "")
             return true
         }
 
         // Permission Request (Kamera, Mikrofon, etc.)
         override fun onPermissionRequest(request: PermissionRequest?) {
+            android.util.Log.d(TAG, "Permission request: ${request?.resources?.joinToString()}")
+            WebViewDiagnosticsManager.logConsoleMessage(
+                "PERMISSION",
+                "Permission requested: ${request?.resources?.joinToString()}",
+                request?.origin?.toString()
+            )
             // Alle Permissions erlauben (für Video-Calls, WebRTC, etc.)
             request?.grant(request.resources)
         }
@@ -362,7 +380,14 @@ class TrafficInterceptWebView @JvmOverloads constructor(
                 ConsoleMessage.MessageLevel.WARNING -> "WARN"
                 else -> "LOG"
             }
-            android.util.Log.d(TAG, "[JS $level] ${consoleMessage?.message()}")
+            val message = consoleMessage?.message() ?: ""
+            val sourceUrl = consoleMessage?.sourceId()
+            
+            android.util.Log.d(TAG, "[JS $level] $message")
+            
+            // Log to diagnostics manager
+            WebViewDiagnosticsManager.logConsoleMessage(level, message, sourceUrl)
+            
             return true
         }
 
@@ -906,15 +931,62 @@ class TrafficInterceptWebView @JvmOverloads constructor(
         ) {
             super.onReceivedError(view, request, error)
 
-            request?.url?.toString()?.let { url ->
+            val url = request?.url?.toString()
+            val errorDescription = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                error?.description?.toString() ?: "Unknown error"
+            } else {
+                "Unknown error"
+            }
+            val errorCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                error?.errorCode
+            } else {
+                null
+            }
+
+            android.util.Log.e(TAG, "WebView error: $errorDescription for $url (code: $errorCode)")
+            
+            // Log to diagnostics manager
+            WebViewDiagnosticsManager.logError(
+                type = WebViewDiagnosticsManager.ErrorType.WEB_RESOURCE_ERROR,
+                description = errorDescription,
+                failingUrl = url,
+                errorCode = errorCode
+            )
+
+            url?.let {
                 val event = PageEvent(
-                    url = url,
-                    title = error?.description?.toString(),
+                    url = it,
+                    title = errorDescription,
                     timestamp = Clock.System.now(),
                     type = PageEventType.ERROR
                 )
                 _pageEvents.value = _pageEvents.value + event
             }
+        }
+        
+        /**
+         * HTTP-Fehler behandeln (404, 500, etc.)
+         */
+        override fun onReceivedHttpError(
+            view: WebView?,
+            request: WebResourceRequest?,
+            errorResponse: WebResourceResponse?
+        ) {
+            super.onReceivedHttpError(view, request, errorResponse)
+            
+            val url = request?.url?.toString()
+            val statusCode = errorResponse?.statusCode ?: 0
+            val reasonPhrase = errorResponse?.reasonPhrase ?: "Unknown"
+            
+            android.util.Log.w(TAG, "HTTP Error: $statusCode $reasonPhrase for $url")
+            
+            // Log to diagnostics manager
+            WebViewDiagnosticsManager.logError(
+                type = WebViewDiagnosticsManager.ErrorType.HTTP_ERROR,
+                description = "$statusCode $reasonPhrase",
+                failingUrl = url,
+                errorCode = statusCode
+            )
         }
 
         /**
@@ -927,8 +999,26 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             handler: android.webkit.SslErrorHandler?,
             error: android.net.http.SslError?
         ) {
+            val errorType = when (error?.primaryError) {
+                android.net.http.SslError.SSL_NOTYETVALID -> "Certificate not yet valid"
+                android.net.http.SslError.SSL_EXPIRED -> "Certificate expired"
+                android.net.http.SslError.SSL_IDMISMATCH -> "Certificate hostname mismatch"
+                android.net.http.SslError.SSL_UNTRUSTED -> "Certificate authority not trusted"
+                android.net.http.SslError.SSL_DATE_INVALID -> "Certificate date invalid"
+                android.net.http.SslError.SSL_INVALID -> "Generic SSL error"
+                else -> "Unknown SSL error"
+            }
+            
             // SSL-Fehler loggen
-            android.util.Log.w(TAG, "SSL Error: ${error?.primaryError} for ${error?.url}")
+            android.util.Log.w(TAG, "SSL Error: $errorType (${error?.primaryError}) for ${error?.url}")
+            
+            // Log to diagnostics manager
+            WebViewDiagnosticsManager.logError(
+                type = WebViewDiagnosticsManager.ErrorType.SSL_ERROR,
+                description = errorType,
+                failingUrl = error?.url,
+                errorCode = error?.primaryError
+            )
 
             // Im Debug-Modus: SSL-Fehler ignorieren um Traffic zu capturen
             // HINWEIS: Für Produktion sollte hier ein User-Dialog kommen
@@ -937,7 +1027,7 @@ class TrafficInterceptWebView @JvmOverloads constructor(
             error?.url?.let { url ->
                 val event = PageEvent(
                     url = url,
-                    title = "SSL Error: ${error.primaryError}",
+                    title = "SSL Error: $errorType",
                     timestamp = Clock.System.now(),
                     type = PageEventType.ERROR
                 )
