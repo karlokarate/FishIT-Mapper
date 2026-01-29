@@ -113,8 +113,8 @@ fun FishitApp(
                             startUrl = startUrl,
                             customTabReturnState = customTabReturnState,
                             onExportSession = { session ->
-                                // Session wurde beendet - zurück zum Projekt
-                                // TODO: Session speichern und in Sessions-Tab anzeigen
+                                // Session was stopped and automatically saved as HAR file
+                                // The session is now accessible via the sessions list in CaptureWebViewScreen
                                 navController.popBackStack()
                             },
                             onBack = { navController.popBackStack() }

@@ -48,6 +48,7 @@ fun ProjectHomeScreen(
 ) {
     val container = LocalAppContainer.current
     val vm: ProjectViewModel = viewModel(
+        key = projectId, // Ensure a new ViewModel for each project
         factory = SimpleVmFactory {
             ProjectViewModel(
                 projectId = ProjectId(projectId),
