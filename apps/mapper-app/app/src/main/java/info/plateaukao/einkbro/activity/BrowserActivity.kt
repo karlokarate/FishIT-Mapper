@@ -15,6 +15,7 @@ import android.content.Intent.ACTION_VIEW
 import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Point
@@ -73,6 +74,7 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.lifecycle.lifecycleScope
+import dev.fishit.mapper.wave01.debug.RuntimeToolkitTelemetry
 import info.plateaukao.einkbro.R
 import info.plateaukao.einkbro.browser.AlbumController
 import info.plateaukao.einkbro.browser.BrowserContainer
@@ -1322,6 +1324,9 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
                 ebWebView.resumeTimers()
             }
         }
+        if (this::captureToggleButton.isInitialized) {
+            updateCaptureToggleUi(RuntimeToolkitTelemetry.isCaptureEnabled(this))
+        }
     }
 
     override fun onDestroy() {
@@ -1758,7 +1763,7 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
                 "url" to url
             )
         )
-        trackedLoadUrl(url, "intent_send_or_process")
+        ebWebView.loadUrl(url)
     }
 
     private fun trackedAddAlbum(url: String, source: String) {
@@ -1769,7 +1774,7 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
                 "url" to url
             )
         )
-        trackedAddAlbum(url, "intent_send_or_process")
+        addAlbum(url = url)
     }
 
     private fun initSavedTabs(whenNoSavedTabs: (() -> Unit)? = null) {
@@ -1809,6 +1814,7 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
             }
         }
         initFAB()
+        initCaptureOverlayButton()
         if (config.enableNavButtonGesture) {
             val onNavButtonTouchListener = object : SwipeTouchListener(this@BrowserActivity) {
                 override fun onSwipeTop() = gestureHandler.handle(config.navGestureUp)
@@ -1992,6 +1998,8 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
         }
 
     private lateinit var fabImageViewController: FabImageViewController
+    private lateinit var captureToggleButton: TextView
+
     private fun initFAB() {
         fabImageViewController = FabImageViewController(
             orientation,
@@ -2005,6 +2013,73 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
                 }
             }
         )
+    }
+
+    private fun initCaptureOverlayButton() {
+        captureToggleButton = findViewById(R.id.fab_capture_toggle)
+        if (!isMapperDebuggableBuild()) {
+            captureToggleButton.visibility = GONE
+            return
+        }
+
+        captureToggleButton.visibility = VISIBLE
+        captureToggleButton.contentDescription = getString(R.string.mapper_capture_button_desc)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            captureToggleButton.tooltipText = getString(R.string.mapper_capture_button_desc)
+        }
+        updateCaptureToggleUi(RuntimeToolkitTelemetry.isCaptureEnabled(this))
+        captureToggleButton.setOnClickListener {
+            val isEnabled = RuntimeToolkitTelemetry.isCaptureEnabled(this)
+            if (isEnabled) {
+                RuntimeToolkitTelemetry.stopCaptureSession(this, source = "floating_button")
+                updateCaptureToggleUi(false)
+                EBToast.showShort(this, getString(R.string.mapper_capture_stopped))
+            } else {
+                RuntimeToolkitTelemetry.startCaptureSession(this, source = "floating_button")
+                updateCaptureToggleUi(true)
+                EBToast.showShort(this, getString(R.string.mapper_capture_started))
+            }
+        }
+        captureToggleButton.setOnLongClickListener {
+            lifecycleScope.launch {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        RuntimeToolkitTelemetry.exportRuntimeArtifacts(this@BrowserActivity)
+                    }
+                }.onSuccess { exportFile ->
+                    EBToast.showShort(
+                        this@BrowserActivity,
+                        getString(R.string.mapper_capture_exported, exportFile.absolutePath)
+                    )
+                }.onFailure { throwable ->
+                    EBToast.showShort(
+                        this@BrowserActivity,
+                        getString(
+                            R.string.mapper_capture_export_failed,
+                            throwable.message ?: "unknown"
+                        )
+                    )
+                }
+            }
+            true
+        }
+    }
+
+    private fun updateCaptureToggleUi(captureEnabled: Boolean) {
+        if (!this::captureToggleButton.isInitialized) return
+        if (captureEnabled) {
+            captureToggleButton.text = getString(R.string.mapper_capture_label_on)
+            captureToggleButton.contentDescription = getString(R.string.mapper_capture_button_desc_on)
+            captureToggleButton.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
+        } else {
+            captureToggleButton.text = getString(R.string.mapper_capture_label_off)
+            captureToggleButton.contentDescription = getString(R.string.mapper_capture_button_desc_off)
+            captureToggleButton.setTextColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
+        }
+    }
+
+    private fun isMapperDebuggableBuild(): Boolean {
+        return (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
 
     private val gestureHandler: GestureHandler by lazy { GestureHandler(this) }

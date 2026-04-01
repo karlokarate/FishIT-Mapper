@@ -645,4 +645,13 @@
     <string name="setting_summary_text_wrap_reflow">Reflow text when zooming</string>
     <string name="setting_title_zoom_in_custom_view">Zoom in Custom View</string>
     <string name="setting_summary_zoom_in_custom_view">Enable 2-finger zoom in fullscreen mode (default: false)</string>
+    <string name="mapper_capture_started">Capture started</string>
+    <string name="mapper_capture_stopped">Capture stopped</string>
+    <string name="mapper_capture_exported">Artifacts exported: %1$s</string>
+    <string name="mapper_capture_export_failed">Artifact export failed: %1$s</string>
+    <string name="mapper_capture_button_desc">Runtime capture control (tap start/stop, long-press export)</string>
+    <string name="mapper_capture_button_desc_on">Runtime capture is active (tap to stop, long-press export)</string>
+    <string name="mapper_capture_button_desc_off">Runtime capture is paused (tap to start, long-press export)</string>
+    <string name="mapper_capture_label_on">REC</string>
+    <string name="mapper_capture_label_off">OFF</string>
 </resources>

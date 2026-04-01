@@ -10,11 +10,15 @@ import android.webkit.CookieManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.security.MessageDigest
 import java.time.Instant
 import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 object RuntimeToolkitTelemetry {
     private const val TAG = "PIPELAB/RTK"
@@ -31,6 +35,7 @@ object RuntimeToolkitTelemetry {
     private const val SETTING_SCOPE_MODE = "scope.mode"
     private const val SETTING_TARGET_HOST_FAMILY = "scope.target_host_family"
     private const val SETTING_ACTIVE_PHASE_ID = "probe.active_phase"
+    private const val SETTING_CAPTURE_ENABLED = "capture.enabled"
 
     private const val PREF_COOKIE_SNAPSHOT = "mapper_toolkit_cookie_snapshot"
     private const val MAX_RECENT_REQUEST_IDS = 4096
@@ -66,6 +71,11 @@ object RuntimeToolkitTelemetry {
         val requestId: String,
         var duplicateCount: Int,
         var lastSeenMonoNs: Long,
+    )
+
+    private data class MimeResolution(
+        val mimeType: String?,
+        val source: String,
     )
 
     fun ensureRunId(context: Context, preferred: String? = null): String {
@@ -320,6 +330,12 @@ object RuntimeToolkitTelemetry {
             null
         }
         val bodyHash = if (rawBody != null && rawBody.isNotEmpty()) sha256(rawBody) else null
+        val resolvedMime = resolveMimeType(
+            url = url,
+            explicitMimeType = mimeType,
+            headers = headers,
+            rawBody = rawBody,
+        )
 
         logEvent(
             context = context,
@@ -340,8 +356,9 @@ object RuntimeToolkitTelemetry {
                 "status_code" to statusCode,
                 "http_status" to statusCode,
                 "reason" to reason,
-                "mime" to mimeType,
-                "mime_type" to mimeType,
+                "mime" to resolvedMime.mimeType,
+                "mime_type" to resolvedMime.mimeType,
+                "mime_source" to resolvedMime.source,
                 "headers" to headers,
                 "body_preview" to bodyPreview,
                 "response_store_path" to responsePath,
@@ -537,7 +554,40 @@ object RuntimeToolkitTelemetry {
             "scope_mode" to (prefs.getString(SETTING_SCOPE_MODE, DEFAULT_SCOPE_MODE) ?: DEFAULT_SCOPE_MODE),
             "target_host_family" to (prefs.getString(SETTING_TARGET_HOST_FAMILY, "") ?: ""),
             "active_phase_id" to (prefs.getString(SETTING_ACTIVE_PHASE_ID, "unscoped") ?: "unscoped"),
+            "capture_enabled" to prefs.getBoolean(SETTING_CAPTURE_ENABLED, true),
         )
+    }
+
+    fun isCaptureEnabled(context: Context): Boolean {
+        return runtimeSettings(context).getBoolean(SETTING_CAPTURE_ENABLED, true)
+    }
+
+    fun setCaptureEnabled(context: Context, enabled: Boolean) {
+        runtimeSettings(context).edit().putBoolean(SETTING_CAPTURE_ENABLED, enabled).commit()
+    }
+
+    fun startCaptureSession(context: Context, source: String = "in_app_overlay") {
+        setCaptureEnabled(context, true)
+        logExtractionEvent(
+            context = context,
+            operation = "session_start",
+            payload = mapOf(
+                "source" to source,
+                "capture_enabled" to true,
+            ),
+        )
+    }
+
+    fun stopCaptureSession(context: Context, source: String = "in_app_overlay") {
+        logExtractionEvent(
+            context = context,
+            operation = "session_stop",
+            payload = mapOf(
+                "source" to source,
+                "capture_enabled" to false,
+            ),
+        )
+        setCaptureEnabled(context, false)
     }
 
     fun emitAck(op: String, status: String, payload: Map<String, Any?> = emptyMap()) {
@@ -638,6 +688,41 @@ object RuntimeToolkitTelemetry {
 
     fun runtimeRoot(context: Context): File = File(context.filesDir, "runtime-toolkit")
 
+    fun exportRuntimeArtifacts(context: Context): File {
+        val root = runtimeRoot(context)
+        val exportDir = File(root, "exports")
+        if (!exportDir.exists()) exportDir.mkdirs()
+
+        val exportCandidates = if (root.exists()) {
+            root.walkTopDown()
+                .filter { it.isFile }
+                .filterNot { it.absolutePath.startsWith(exportDir.absolutePath) }
+                .toList()
+        } else {
+            emptyList()
+        }
+        if (exportCandidates.isEmpty()) {
+            throw IllegalStateException("No runtime artifacts available to export")
+        }
+
+        val fileName = "runtime_export_${System.currentTimeMillis()}.zip"
+        val output = File(exportDir, fileName)
+
+        synchronized(ioLock) {
+            ZipOutputStream(FileOutputStream(output)).use { zip ->
+                exportCandidates.forEach { file ->
+                    val relativePath = root.toPath().relativize(file.toPath()).toString()
+                    zip.putNextEntry(ZipEntry(relativePath))
+                    FileInputStream(file).use { input ->
+                        input.copyTo(zip)
+                    }
+                    zip.closeEntry()
+                }
+            }
+        }
+        return output
+    }
+
     private fun eventFile(context: Context): File {
         val dir = File(runtimeRoot(context), "events")
         if (!dir.exists()) dir.mkdirs()
@@ -663,6 +748,7 @@ object RuntimeToolkitTelemetry {
         payload: Map<String, Any?>,
         explicitEventId: String? = null,
     ) {
+        if (!isCaptureEnabled(context) && eventType != "extraction_event") return
         val runId = ensureRunId(context)
         val event = JSONObject().apply {
             put("schema_version", 1)
@@ -744,6 +830,89 @@ object RuntimeToolkitTelemetry {
         val queryKeys = uri.queryParameterNames.toList().sorted()
         val queryShape = if (queryKeys.isEmpty()) "" else "?" + queryKeys.joinToString("&")
         return "$scheme://$host$path$queryShape"
+    }
+
+    private fun resolveMimeType(
+        url: String,
+        explicitMimeType: String?,
+        headers: Map<String, String>,
+        rawBody: ByteArray?,
+    ): MimeResolution {
+        normalizeMime(explicitMimeType)?.let { return MimeResolution(mimeType = it, source = "explicit") }
+
+        val headerMime = headers.entries.firstOrNull { it.key.equals("content-type", ignoreCase = true) }?.value
+        normalizeMime(headerMime)?.let { return MimeResolution(mimeType = it, source = "response_header") }
+
+        inferMimeFromUrl(url)?.let { return MimeResolution(mimeType = it, source = "url_extension") }
+        inferMimeFromBody(rawBody)?.let { return MimeResolution(mimeType = it, source = "body_sniffed") }
+
+        return MimeResolution(mimeType = null, source = "unknown")
+    }
+
+    private fun normalizeMime(raw: String?): String? {
+        val cleaned = raw
+            ?.substringBefore(';')
+            ?.trim()
+            ?.lowercase(Locale.ROOT)
+            .orEmpty()
+        return cleaned.ifBlank { null }
+    }
+
+    private fun inferMimeFromUrl(url: String): String? {
+        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return null
+        val lastPathSegment = uri.lastPathSegment.orEmpty()
+        val ext = lastPathSegment.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        if (ext.isBlank()) return null
+        return when (ext) {
+            "webm" -> "video/webm"
+            "m3u8" -> "application/vnd.apple.mpegurl"
+            "mpd" -> "application/dash+xml"
+            "mp4", "m4v" -> "video/mp4"
+            "m4a" -> "audio/mp4"
+            "m4s" -> "video/iso.segment"
+            "ts" -> "video/mp2t"
+            "vtt" -> "text/vtt"
+            "json" -> "application/json"
+            "xml" -> "application/xml"
+            "html", "htm" -> "text/html"
+            "js", "mjs" -> "text/javascript"
+            "txt" -> "text/plain"
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "gif" -> "image/gif"
+            "svg" -> "image/svg+xml"
+            "woff" -> "font/woff"
+            "woff2" -> "font/woff2"
+            else -> null
+        }
+    }
+
+    private fun inferMimeFromBody(rawBody: ByteArray?): String? {
+        if (rawBody == null || rawBody.isEmpty()) return null
+
+        if (
+            rawBody.size >= 4 &&
+            rawBody[0] == 0x1A.toByte() &&
+            rawBody[1] == 0x45.toByte() &&
+            rawBody[2] == 0xDF.toByte() &&
+            rawBody[3] == 0xA3.toByte()
+        ) {
+            return "video/webm"
+        }
+
+        val probe = runCatching {
+            String(rawBody, 0, minOf(rawBody.size, 256), Charsets.UTF_8)
+        }.getOrDefault("")
+            .trimStart()
+
+        if (probe.startsWith("#EXTM3U")) return "application/vnd.apple.mpegurl"
+        if (probe.startsWith("{") || probe.startsWith("[")) return "application/json"
+        if (probe.startsWith("<?xml")) return "application/xml"
+        if (probe.startsWith("<MPD")) return "application/dash+xml"
+        if (probe.startsWith("<!DOCTYPE html", ignoreCase = true) || probe.startsWith("<html", ignoreCase = true)) {
+            return "text/html"
+        }
+        return null
     }
 
     private fun requestFingerprint(

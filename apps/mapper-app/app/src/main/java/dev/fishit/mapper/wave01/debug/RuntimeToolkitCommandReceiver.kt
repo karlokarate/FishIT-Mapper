@@ -102,14 +102,7 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
         )
 
         RuntimeToolkitTelemetry.setRunAndContext(context, runId, correlation)
-        RuntimeToolkitTelemetry.logExtractionEvent(
-            context = context,
-            operation = "session_start",
-            payload = mapOf(
-                "run_id" to runId,
-                "runtime_settings" to RuntimeToolkitTelemetry.runtimeSettingsSnapshot(context),
-            ),
-        )
+        RuntimeToolkitTelemetry.startCaptureSession(context, source = "adb_receiver")
         RuntimeToolkitTelemetry.emitAck(
             OP_SESSION_START,
             "ok",
@@ -121,7 +114,7 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
     }
 
     private fun handleSessionStop(context: Context) {
-        RuntimeToolkitTelemetry.logExtractionEvent(context, "session_stop")
+        RuntimeToolkitTelemetry.stopCaptureSession(context, source = "adb_receiver")
         RuntimeToolkitTelemetry.emitAck(OP_SESSION_STOP, "ok")
     }
 

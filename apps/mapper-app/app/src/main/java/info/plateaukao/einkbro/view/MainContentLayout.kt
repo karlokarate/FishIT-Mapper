@@ -35,6 +35,7 @@ class MainContentLayout(
     val touchAreaLeftDrag: View,
     val mainProgressBar: ProgressBar,
     val fabImageButtonNav: TextView,
+    val fabCaptureToggle: TextView,
     val translationLanguage: TextView,
     val remoteTextSearch: ImageButton,
     val externalSearchClose: ImageButton,
@@ -292,6 +293,22 @@ class MainContentLayout(
             }
             root.addView(fabImageButtonNav)
 
+            val fabCaptureToggle = TextView(context).apply {
+                id = R.id.fab_capture_toggle
+                layoutParams = ConstraintLayout.LayoutParams(
+                    dpToPx(context, 72), dpToPx(context, 72)
+                )
+                background = ContextCompat.getDrawable(context, R.drawable.roundcorner)
+                gravity = android.view.Gravity.CENTER
+                setShadowLayer(1.4f, 1.2f, 1.0f, android.graphics.Color.WHITE)
+                setTextColor(ContextCompat.getColor(context, android.R.color.holo_red_dark))
+                textSize = 14f
+                text = context.getString(R.string.mapper_capture_label_off)
+                contentDescription = context.getString(R.string.mapper_capture_button_desc)
+                visibility = View.GONE
+            }
+            root.addView(fabCaptureToggle)
+
             // translation_language
             val translationLanguage = TextView(context).apply {
                 id = R.id.translation_language
@@ -425,6 +442,12 @@ class MainContentLayout(
             constraintSet.connect(fabImageButtonNav.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
             constraintSet.connect(fabImageButtonNav.id, ConstraintSet.BOTTOM, swipeRefreshLayout.id, ConstraintSet.BOTTOM)
 
+            // fab_capture_toggle: end to parent, bottom to swipe_refresh_layout.bottom with larger end margin
+            constraintSet.connect(fabCaptureToggle.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+            constraintSet.connect(fabCaptureToggle.id, ConstraintSet.BOTTOM, swipeRefreshLayout.id, ConstraintSet.BOTTOM)
+            constraintSet.setMargin(fabCaptureToggle.id, ConstraintSet.END, dpToPx(context, 92))
+            constraintSet.setMargin(fabCaptureToggle.id, ConstraintSet.BOTTOM, dpToPx(context, 12))
+
             // translation_language: end to parent, bottom to parent
             constraintSet.connect(translationLanguage.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
             constraintSet.connect(translationLanguage.id, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
@@ -459,6 +482,7 @@ class MainContentLayout(
                 touchAreaLeftDrag = touchAreaLeftDrag,
                 mainProgressBar = mainProgressBar,
                 fabImageButtonNav = fabImageButtonNav,
+                fabCaptureToggle = fabCaptureToggle,
                 translationLanguage = translationLanguage,
                 remoteTextSearch = remoteTextSearch,
                 externalSearchClose = externalSearchClose,
