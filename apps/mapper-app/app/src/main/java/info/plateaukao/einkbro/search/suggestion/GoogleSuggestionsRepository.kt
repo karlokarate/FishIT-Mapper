@@ -1,12 +1,16 @@
 package info.plateaukao.einkbro.search.suggestion
 
+import dev.fishit.mapper.wave01.debug.RuntimeToolkitOkHttp
+import info.plateaukao.einkbro.EinkBroApplication
 import okhttp3.HttpUrl
 import okhttp3.ResponseBody
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
 class GoogleSuggestionsRepository : SearchSuggestionsRepository {
-    private val okHttpClient: okhttp3.OkHttpClient by lazy { okhttp3.OkHttpClient() }
+    private val okHttpClient: okhttp3.OkHttpClient by lazy {
+        RuntimeToolkitOkHttp.newClient(EinkBroApplication.instance, "suggestion_google")
+    }
 
     // https://suggestqueries.google.com/complete/search?output=toolbar&hl={language}&q={query}
     private fun createQueryUrl(query: String, language: String): HttpUrl = HttpUrl.Builder()

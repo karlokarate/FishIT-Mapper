@@ -39,6 +39,71 @@
       "supersedes": [],
       "superseded_by": null,
       "summary": "generate --check, decision-guard, and hard-cutover-guard are mandatory local gates."
+    },
+    {
+      "id": "DEC-0004",
+      "aliases": [
+        "ADR-0004",
+        "MAPPER-TOOLKIT-NO-LEGACY-BACKCOMPAT"
+      ],
+      "title": "Mapper-Toolkit v2 ships without FishIT-Player backward-compatibility guarantees",
+      "status": "accepted",
+      "date": "2026-04-01",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Runtime tooling is now centered on Mapper-Toolkit contracts and portable workflows; legacy FishIT-Player specific functions and path conventions are not a compatibility target."
+    },
+    {
+      "id": "DEC-0005",
+      "aliases": [
+        "ADR-0005",
+        "MAPPER-TOOLKIT-PORTABLE-TUI-FIRST"
+      ],
+      "title": "Mapper-Toolkit UX baseline is portable Linux CLI plus arrow-key terminal UI",
+      "status": "accepted",
+      "date": "2026-04-01",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Toolkit delivery must include a bootstrap installer and a user-friendly terminal interface that can be navigated with arrow keys while orchestrating underlying scripts."
+    },
+    {
+      "id": "DEC-0006",
+      "aliases": [
+        "ADR-0006",
+        "MAPPER-TOOLKIT-TEXTUAL-MAINPY-DEFAULT"
+      ],
+      "title": "Mapper-Toolkit default UX is a Textual main.py TUI with contract-backed command matrix",
+      "status": "accepted",
+      "date": "2026-04-01",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "The default tui entrypoint is scripts/device/toolkit/main.py; users execute commands through screen actions and parameter dialogs without shell input, while a per-screen command matrix is rendered from a central contract catalog."
+    },
+    {
+      "id": "DEC-0007",
+      "aliases": [
+        "ADR-0007",
+        "MAPPER-TOOLKIT-LIVE-TRIAGE-CONSOLE-FIRST"
+      ],
+      "title": "Mapper-Toolkit prioritizes a live triage console for mapping-engineer runtime diagnosis",
+      "status": "accepted",
+      "date": "2026-04-01",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Triage becomes a first-class workflow with presets, anomaly rules, and incident bundles to accelerate UI↔backend correlation debugging and mapping output generation."
+    },
+    {
+      "id": "DEC-0008",
+      "aliases": [
+        "ADR-0008",
+        "MAPPER-TOOLKIT-DETERMINISTIC-REPLAY-GUARDRAILS"
+      ],
+      "title": "Mapper-Toolkit replay stage uses named baselines and warn-then-block regression policy",
+      "status": "accepted",
+      "date": "2026-04-01",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Replay and validation are first-class workflows: seeds from triage/incident-pack are replayed and diffed against named versioned baselines, with local advisory reporting and CI blocking on critical assertion failures."
     }
   ]
 }

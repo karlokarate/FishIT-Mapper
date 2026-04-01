@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
+import dev.fishit.mapper.wave01.debug.RuntimeToolkitOkHttp
 import info.plateaukao.einkbro.preference.ConfigManager
 import info.plateaukao.einkbro.util.TranslationLanguage
 import kotlinx.coroutines.Dispatchers.IO
@@ -38,9 +39,9 @@ import javax.crypto.spec.SecretKeySpec
 
 
 class TranslateRepository : KoinComponent {
-    private val client = OkHttpClient()
     private val config: ConfigManager by inject()
     private val context: Context by inject()
+    private val client by lazy { RuntimeToolkitOkHttp.newClient(context, "translate_repository") }
 
     private val imageCacheDir: File by lazy {
         File(context.cacheDir, "translated_images").also { it.mkdirs() }
@@ -463,4 +464,3 @@ data class ImageTranslateResult(
     val imageId: String,
     val renderedImage: String,
 )
-

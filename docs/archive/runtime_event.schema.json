@@ -1,0 +1,49 @@
+// GENERATED FILE - DO NOT EDIT DIRECTLY.
+// source: contracts/runtime_event.schema.json
+// regenerate via: ./scripts/generate.sh
+
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mapper-toolkit/runtime_event.schema.json",
+  "title": "Mapper-Toolkit Runtime Event",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "event_id",
+    "event_type",
+    "ts_utc",
+    "ts_mono_ns",
+    "trace_id",
+    "span_id",
+    "action_id",
+    "device",
+    "app"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "event_id": { "type": "string", "minLength": 1 },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "ui_action_event",
+        "network_request_event",
+        "network_response_event",
+        "cookie_event",
+        "auth_event",
+        "correlation_event",
+        "extraction_event"
+      ]
+    },
+    "ts_utc": { "type": "string", "format": "date-time" },
+    "ts_mono_ns": { "type": ["integer", "number"] },
+    "trace_id": { "type": "string" },
+    "span_id": { "type": "string" },
+    "action_id": { "type": "string" },
+    "device": { "type": "object" },
+    "app": { "type": "object" },
+    "payload": { "type": ["object", "array", "string", "number", "boolean", "null"] }
+  },
+  "additionalProperties": true
+}

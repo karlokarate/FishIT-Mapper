@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "contract_id": "mapper-toolkit-v2",
+  "status": "active",
+  "scope": "adb_runtime_toolkit_ui_backend_full_correlation_portable_cli_tui",
+  "defaults": {
+    "capture_strategy": "hybrid",
+    "device_basis": "non_root_physical",
+    "raw_data_policy": "full_raw",
+    "raw_retention": "unbounded_local",
+    "legacy_player_backward_compatibility": false,
+    "toolkit_name": "Mapper-Toolkit",
+    "platform": "linux_terminal",
+    "terminal_ui_mode": "arrow_key_tui",
+    "default_tui_entrypoint": "scripts/device/toolkit/main.py",
+    "legacy_tui_fallback": "scripts/device/toolkit/mapper_toolkit_tui.sh",
+    "terminal_command_input_required_inside_tui": false
+  },
+  "cli_surface": {
+    "session": ["start", "stop", "status", "doctor", "resume"],
+    "ui": ["open-screen", "open-url", "open-detail", "tap", "flow-run", "anchor-scan"],
+    "capture": ["start", "stop", "snapshot", "lanes", "mitm_on", "mitm_off", "mitm_status"],
+    "trace": ["query", "tail", "export", "correlate", "diff"],
+    "triage": ["start", "tail", "focus", "anomalies", "bookmark", "incident-pack", "stop"],
+    "replay": ["seed", "baseline-create", "baseline-list", "run", "diff", "report"],
+    "cookies": ["timeline", "set-events", "refresh-events", "domain-view"],
+    "headers": ["infer-required", "token-deps", "auth-chain"],
+    "responses": ["raw", "filter", "grep", "sample"],
+    "mapping": ["candidate-endpoints", "field-matrix", "profile-draft", "replay-seed"],
+    "housekeeping": ["pack", "compress", "purge", "reindex"]
+  },
+  "event_types": [
+    "ui_action_event",
+    "network_request_event",
+    "network_response_event",
+    "cookie_event",
+    "auth_event",
+    "correlation_event",
+    "extraction_event",
+    "triage_alert_event"
+  ],
+  "required_core_fields": [
+    "schema_version",
+    "run_id",
+    "event_id",
+    "event_type",
+    "ts_utc",
+    "ts_mono_ns",
+    "trace_id",
+    "span_id",
+    "action_id",
+    "device",
+    "app"
+  ],
+  "required_outputs": [
+    "runtime_events.jsonl",
+    "correlation_index.jsonl",
+    "response_store/",
+    "cookie_timeline.json",
+    "required_headers_report.json",
+    "field_matrix.json",
+    "endpoint_candidates.json",
+    "site_profile.draft.json",
+    "replay_seed.json",
+    "replay_results.jsonl",
+    "replay_report.json",
+    "baseline_manifest.json",
+    "baseline_diff.json",
+    "triage_alerts.jsonl",
+    "triage_bookmarks.json",
+    "triage_session_state.json",
+    "incident_bundle/"
+  ],
+  "external_tools": {
+    "recommended": [
+      "mitmproxy",
+      "mitmweb",
+      "playwright",
+      "duckdb",
+      "jq",
+      "perfetto"
+    ],
+    "optional_expert": ["frida"]
+  }
+}

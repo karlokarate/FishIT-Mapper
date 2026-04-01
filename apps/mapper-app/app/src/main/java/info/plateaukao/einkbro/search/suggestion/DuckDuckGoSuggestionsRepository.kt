@@ -1,5 +1,7 @@
 package info.plateaukao.einkbro.search.suggestion
 
+import dev.fishit.mapper.wave01.debug.RuntimeToolkitOkHttp
+import info.plateaukao.einkbro.EinkBroApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
@@ -7,7 +9,9 @@ import okhttp3.HttpUrl
 import okhttp3.ResponseBody
 
 class DuckDuckGoSuggestionsRepository : SearchSuggestionsRepository {
-    private val okHttpClient: okhttp3.OkHttpClient by lazy { okhttp3.OkHttpClient() }
+    private val okHttpClient: okhttp3.OkHttpClient by lazy {
+        RuntimeToolkitOkHttp.newClient(EinkBroApplication.instance, "suggestion_duckduckgo")
+    }
     private val json = Json { ignoreUnknownKeys = true }
 
     // https://duckduckgo.com/ac/?q={query}&type=list

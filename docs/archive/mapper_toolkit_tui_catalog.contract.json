@@ -1,0 +1,1592 @@
+// GENERATED FILE - DO NOT EDIT DIRECTLY.
+// source: contracts/mapper_toolkit_tui_catalog.json
+// regenerate via: ./scripts/generate.sh
+
+{
+  "version": 1,
+  "catalog_id": "mapper-toolkit-tui-command-catalog",
+  "screens": [
+    {
+      "id": "home",
+      "title": "Home"
+    },
+    {
+      "id": "session",
+      "title": "Session"
+    },
+    {
+      "id": "ui",
+      "title": "UI"
+    },
+    {
+      "id": "capture",
+      "title": "Capture"
+    },
+    {
+      "id": "trace",
+      "title": "Trace"
+    },
+    {
+      "id": "triage",
+      "title": "Triage"
+    },
+    {
+      "id": "replay",
+      "title": "Replay"
+    },
+    {
+      "id": "cookies",
+      "title": "Cookies"
+    },
+    {
+      "id": "headers",
+      "title": "Headers"
+    },
+    {
+      "id": "responses",
+      "title": "Responses"
+    },
+    {
+      "id": "mapping",
+      "title": "Mapping"
+    },
+    {
+      "id": "housekeeping",
+      "title": "Housekeeping"
+    },
+    {
+      "id": "settings",
+      "title": "Settings"
+    }
+  ],
+  "commands": [
+    {
+      "id": "home.connect_device",
+      "screen": "home",
+      "title": "Connect Device",
+      "description": "Connect ADB to a device serial or host:port.",
+      "safety": "normal",
+      "argv": [
+        "connect"
+      ],
+      "params": [
+        {
+          "key": "device",
+          "label": "Device serial or host:port",
+          "type": "string",
+          "required": true,
+          "flag": "--device",
+          "example": "10.0.0.25:5555"
+        }
+      ]
+    },
+    {
+      "id": "home.doctor",
+      "screen": "home",
+      "title": "Doctor",
+      "description": "Run environment and receiver diagnostics.",
+      "safety": "normal",
+      "argv": [
+        "doctor"
+      ],
+      "params": []
+    },
+    {
+      "id": "session.start",
+      "screen": "session",
+      "title": "Start Session",
+      "description": "Start a new runtime session and capture lane.",
+      "safety": "normal",
+      "argv": [
+        "session",
+        "start"
+      ],
+      "params": [
+        {
+          "key": "profile",
+          "label": "Profile",
+          "type": "choice",
+          "required": false,
+          "flag": "--profile",
+          "default": "full",
+          "choices": [
+            "full"
+          ]
+        },
+        {
+          "key": "device",
+          "label": "Device serial (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--device",
+          "example": "emulator-5554"
+        }
+      ]
+    },
+    {
+      "id": "session.stop",
+      "screen": "session",
+      "title": "Stop Session",
+      "description": "Stop the current runtime session.",
+      "safety": "normal",
+      "argv": [
+        "session",
+        "stop"
+      ],
+      "params": [
+        {
+          "key": "device",
+          "label": "Device serial (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--device"
+        }
+      ]
+    },
+    {
+      "id": "session.status",
+      "screen": "session",
+      "title": "Session Status",
+      "description": "Show state file and capture lane status.",
+      "safety": "normal",
+      "argv": [
+        "session",
+        "status"
+      ],
+      "params": []
+    },
+    {
+      "id": "session.doctor",
+      "screen": "session",
+      "title": "Session Doctor",
+      "description": "Run doctor via session command group.",
+      "safety": "normal",
+      "argv": [
+        "session",
+        "doctor"
+      ],
+      "params": []
+    },
+    {
+      "id": "session.resume",
+      "screen": "session",
+      "title": "Resume to Screen",
+      "description": "Bring app foreground and jump to target screen.",
+      "safety": "normal",
+      "argv": [
+        "session",
+        "resume"
+      ],
+      "params": [
+        {
+          "key": "target",
+          "label": "Target screen",
+          "type": "choice",
+          "required": false,
+          "flag": "--target",
+          "default": "home",
+          "choices": [
+            "home",
+            "search",
+            "library",
+            "settings",
+            "refresh"
+          ]
+        },
+        {
+          "key": "device",
+          "label": "Device serial (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--device"
+        }
+      ]
+    },
+    {
+      "id": "ui.open_screen",
+      "screen": "ui",
+      "title": "Open Screen",
+      "description": "Open mapped app screen by debug receiver.",
+      "safety": "normal",
+      "argv": [
+        "ui",
+        "open-screen"
+      ],
+      "params": [
+        {
+          "key": "screen",
+          "label": "Screen",
+          "type": "choice",
+          "required": true,
+          "positional": true,
+          "choices": [
+            "home",
+            "search",
+            "library",
+            "settings",
+            "refresh"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui.open_url",
+      "screen": "ui",
+      "title": "Open URL",
+      "description": "Open URL in app via debug receiver.",
+      "safety": "normal",
+      "argv": [
+        "ui",
+        "open-url"
+      ],
+      "params": [
+        {
+          "key": "url",
+          "label": "URL",
+          "type": "string",
+          "required": true,
+          "positional": true,
+          "example": "https://example.org"
+        }
+      ]
+    },
+    {
+      "id": "ui.open_detail",
+      "screen": "ui",
+      "title": "Open Detail",
+      "description": "Open detail context by work key/title.",
+      "safety": "normal",
+      "argv": [
+        "ui",
+        "open-detail"
+      ],
+      "params": [
+        {
+          "key": "work_key",
+          "label": "Work key (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--work-key"
+        },
+        {
+          "key": "title",
+          "label": "Title (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--title"
+        },
+        {
+          "key": "source_type",
+          "label": "Source type",
+          "type": "choice",
+          "required": false,
+          "flag": "--source-type",
+          "default": "UNKNOWN",
+          "choices": [
+            "UNKNOWN",
+            "TELEGRAM",
+            "XTREAM"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui.tap",
+      "screen": "ui",
+      "title": "Tap by Regex",
+      "description": "Tap UI anchor by regex matching label.",
+      "safety": "normal",
+      "argv": [
+        "ui",
+        "tap"
+      ],
+      "params": [
+        {
+          "key": "match",
+          "label": "Regex match",
+          "type": "string",
+          "required": true,
+          "flag": "--match",
+          "example": "^Search$"
+        }
+      ]
+    },
+    {
+      "id": "ui.anchor_scan",
+      "screen": "ui",
+      "title": "Anchor Scan",
+      "description": "Scan and list clickable anchors.",
+      "safety": "normal",
+      "argv": [
+        "ui",
+        "anchor-scan"
+      ],
+      "params": []
+    },
+    {
+      "id": "ui.flow_run",
+      "screen": "ui",
+      "title": "Flow Run",
+      "description": "Run a predefined UI flow script.",
+      "safety": "normal",
+      "argv": [
+        "ui",
+        "flow-run"
+      ],
+      "params": [
+        {
+          "key": "flow_script",
+          "label": "Flow script path",
+          "type": "string",
+          "required": true,
+          "positional": true,
+          "example": "scripts/device/flows/sample_flow.sh"
+        }
+      ]
+    },
+    {
+      "id": "capture.start",
+      "screen": "capture",
+      "title": "Start Capture",
+      "description": "Start capture lanes and runtime session.",
+      "safety": "normal",
+      "argv": [
+        "capture",
+        "start"
+      ],
+      "params": [
+        {
+          "key": "profile",
+          "label": "Profile",
+          "type": "choice",
+          "required": false,
+          "flag": "--profile",
+          "default": "full",
+          "choices": [
+            "full"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "capture.stop",
+      "screen": "capture",
+      "title": "Stop Capture",
+      "description": "Stop capture and session lanes.",
+      "safety": "normal",
+      "argv": [
+        "capture",
+        "stop"
+      ],
+      "params": []
+    },
+    {
+      "id": "capture.snapshot",
+      "screen": "capture",
+      "title": "Snapshot",
+      "description": "Pull events/response store and derive indexes.",
+      "safety": "normal",
+      "argv": [
+        "capture",
+        "snapshot"
+      ],
+      "params": []
+    },
+    {
+      "id": "capture.lanes",
+      "screen": "capture",
+      "title": "Lanes",
+      "description": "List running tmux capture lanes.",
+      "safety": "normal",
+      "argv": [
+        "capture",
+        "lanes"
+      ],
+      "params": []
+    },
+    {
+      "id": "capture.mitm_on",
+      "screen": "capture",
+      "title": "MITM On",
+      "description": "Start mitmproxy bridge lane.",
+      "safety": "normal",
+      "argv": [
+        "capture",
+        "mitm",
+        "on"
+      ],
+      "params": []
+    },
+    {
+      "id": "capture.mitm_off",
+      "screen": "capture",
+      "title": "MITM Off",
+      "description": "Stop mitmproxy bridge lane.",
+      "safety": "normal",
+      "argv": [
+        "capture",
+        "mitm",
+        "off"
+      ],
+      "params": []
+    },
+    {
+      "id": "capture.mitm_status",
+      "screen": "capture",
+      "title": "MITM Status",
+      "description": "Show mitmproxy bridge status.",
+      "safety": "normal",
+      "argv": [
+        "capture",
+        "mitm",
+        "status"
+      ],
+      "params": []
+    },
+    {
+      "id": "trace.query",
+      "screen": "trace",
+      "title": "Trace Query",
+      "description": "Query trace events with DSL filters.",
+      "safety": "normal",
+      "argv": [
+        "trace",
+        "query"
+      ],
+      "params": [
+        {
+          "key": "domain",
+          "label": "Domain filter",
+          "type": "string",
+          "required": false,
+          "flag": "--domain"
+        },
+        {
+          "key": "path",
+          "label": "Path filter",
+          "type": "string",
+          "required": false,
+          "flag": "--path"
+        },
+        {
+          "key": "method",
+          "label": "Method",
+          "type": "choice",
+          "required": false,
+          "flag": "--method",
+          "choices": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        {
+          "key": "status",
+          "label": "HTTP status",
+          "type": "int",
+          "required": false,
+          "flag": "--status"
+        },
+        {
+          "key": "action_id",
+          "label": "Action ID",
+          "type": "string",
+          "required": false,
+          "flag": "--action-id"
+        },
+        {
+          "key": "screen_id",
+          "label": "Screen ID",
+          "type": "string",
+          "required": false,
+          "flag": "--screen-id"
+        },
+        {
+          "key": "limit",
+          "label": "Limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "100"
+        }
+      ]
+    },
+    {
+      "id": "trace.tail",
+      "screen": "trace",
+      "title": "Trace Tail",
+      "description": "Tail recent trace events.",
+      "safety": "normal",
+      "argv": [
+        "trace",
+        "tail"
+      ],
+      "params": [
+        {
+          "key": "limit",
+          "label": "Tail size",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "50"
+        }
+      ]
+    },
+    {
+      "id": "trace.export",
+      "screen": "trace",
+      "title": "Trace Export",
+      "description": "Export filtered trace events as JSONL.",
+      "safety": "normal",
+      "argv": [
+        "trace",
+        "export"
+      ],
+      "params": [
+        {
+          "key": "domain",
+          "label": "Domain filter",
+          "type": "string",
+          "required": false,
+          "flag": "--domain"
+        },
+        {
+          "key": "limit",
+          "label": "Limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "1000"
+        }
+      ]
+    },
+    {
+      "id": "trace.correlate",
+      "screen": "trace",
+      "title": "Trace Correlate",
+      "description": "Build UI↔network correlation index.",
+      "safety": "normal",
+      "argv": [
+        "trace",
+        "correlate"
+      ],
+      "params": []
+    },
+    {
+      "id": "trace.diff",
+      "screen": "trace",
+      "title": "Trace Diff",
+      "description": "Diff two trace export JSONL files.",
+      "safety": "normal",
+      "argv": [
+        "trace",
+        "diff"
+      ],
+      "params": [
+        {
+          "key": "left",
+          "label": "Left JSONL path",
+          "type": "string",
+          "required": true,
+          "flag": "--left"
+        },
+        {
+          "key": "right",
+          "label": "Right JSONL path",
+          "type": "string",
+          "required": true,
+          "flag": "--right"
+        }
+      ]
+    },
+    {
+      "id": "triage.start",
+      "screen": "triage",
+      "title": "Start Triage",
+      "description": "Start live triage session and build current anomaly set.",
+      "safety": "normal",
+      "argv": [
+        "triage",
+        "start"
+      ],
+      "params": [
+        {
+          "key": "preset",
+          "label": "Usecase preset",
+          "type": "choice",
+          "required": false,
+          "flag": "--preset",
+          "choices": [
+            "auth-loop",
+            "cookie-rotation",
+            "missing-header",
+            "response-shape-drift",
+            "endpoint-change"
+          ]
+        },
+        {
+          "key": "window_limit",
+          "label": "Live window size",
+          "type": "int",
+          "required": false,
+          "flag": "--window-limit",
+          "default": "400"
+        },
+        {
+          "key": "sampling_rate",
+          "label": "Sampling rate",
+          "type": "int",
+          "required": false,
+          "flag": "--sampling-rate",
+          "default": "1"
+        }
+      ]
+    },
+    {
+      "id": "triage.tail",
+      "screen": "triage",
+      "title": "Live Tail",
+      "description": "Tail live triage stream using current focus/session settings.",
+      "safety": "normal",
+      "argv": [
+        "triage",
+        "tail"
+      ],
+      "params": [
+        {
+          "key": "limit",
+          "label": "Tail size",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "80"
+        }
+      ]
+    },
+    {
+      "id": "triage.focus",
+      "screen": "triage",
+      "title": "Focus View",
+      "description": "Focus triage to a usecase, trace chain, or filter scope.",
+      "safety": "normal",
+      "argv": [
+        "triage",
+        "focus"
+      ],
+      "params": [
+        {
+          "key": "preset",
+          "label": "Usecase preset",
+          "type": "choice",
+          "required": false,
+          "flag": "--preset",
+          "choices": [
+            "auth-loop",
+            "cookie-rotation",
+            "missing-header",
+            "response-shape-drift",
+            "endpoint-change"
+          ]
+        },
+        {
+          "key": "trace_id",
+          "label": "Trace ID",
+          "type": "string",
+          "required": false,
+          "flag": "--trace-id"
+        },
+        {
+          "key": "action_id",
+          "label": "Action ID",
+          "type": "string",
+          "required": false,
+          "flag": "--action-id"
+        },
+        {
+          "key": "screen_id",
+          "label": "Screen ID",
+          "type": "string",
+          "required": false,
+          "flag": "--screen-id"
+        },
+        {
+          "key": "domain",
+          "label": "Domain filter",
+          "type": "string",
+          "required": false,
+          "flag": "--domain"
+        },
+        {
+          "key": "path",
+          "label": "Path filter",
+          "type": "string",
+          "required": false,
+          "flag": "--path"
+        },
+        {
+          "key": "limit",
+          "label": "Limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "400"
+        }
+      ]
+    },
+    {
+      "id": "triage.anomalies",
+      "screen": "triage",
+      "title": "Anomaly Hotlist",
+      "description": "Show sorted anomaly alerts by severity and recency.",
+      "safety": "normal",
+      "argv": [
+        "triage",
+        "anomalies"
+      ],
+      "params": [
+        {
+          "key": "severity",
+          "label": "Severity",
+          "type": "choice",
+          "required": false,
+          "flag": "--severity",
+          "choices": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        {
+          "key": "limit",
+          "label": "Limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "50"
+        }
+      ]
+    },
+    {
+      "id": "triage.bookmark",
+      "screen": "triage",
+      "title": "Bookmark Chain",
+      "description": "Bookmark a triage-relevant event or correlated chain.",
+      "safety": "normal",
+      "argv": [
+        "triage",
+        "bookmark"
+      ],
+      "params": [
+        {
+          "key": "event_id",
+          "label": "Event ID",
+          "type": "string",
+          "required": false,
+          "flag": "--event-id"
+        },
+        {
+          "key": "trace_id",
+          "label": "Trace ID",
+          "type": "string",
+          "required": false,
+          "flag": "--trace-id"
+        },
+        {
+          "key": "action_id",
+          "label": "Action ID",
+          "type": "string",
+          "required": false,
+          "flag": "--action-id"
+        },
+        {
+          "key": "note",
+          "label": "Bookmark note",
+          "type": "string",
+          "required": false,
+          "flag": "--note",
+          "example": "token refresh before success"
+        }
+      ]
+    },
+    {
+      "id": "triage.incident_pack",
+      "screen": "triage",
+      "title": "Export Incident Pack",
+      "description": "Build reproducible incident bundle with correlated artifacts.",
+      "safety": "normal",
+      "argv": [
+        "triage",
+        "incident-pack"
+      ],
+      "params": [
+        {
+          "key": "incident_id",
+          "label": "Incident ID",
+          "type": "string",
+          "required": false,
+          "flag": "--incident-id"
+        },
+        {
+          "key": "preset",
+          "label": "Usecase preset",
+          "type": "choice",
+          "required": false,
+          "flag": "--preset",
+          "choices": [
+            "auth-loop",
+            "cookie-rotation",
+            "missing-header",
+            "response-shape-drift",
+            "endpoint-change"
+          ]
+        },
+        {
+          "key": "event_id",
+          "label": "Event ID",
+          "type": "string",
+          "required": false,
+          "flag": "--event-id"
+        },
+        {
+          "key": "trace_id",
+          "label": "Trace ID",
+          "type": "string",
+          "required": false,
+          "flag": "--trace-id"
+        },
+        {
+          "key": "action_id",
+          "label": "Action ID",
+          "type": "string",
+          "required": false,
+          "flag": "--action-id"
+        },
+        {
+          "key": "limit",
+          "label": "Event limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "500"
+        }
+      ]
+    },
+    {
+      "id": "triage.stop",
+      "screen": "triage",
+      "title": "Stop Triage",
+      "description": "Stop current triage session.",
+      "safety": "normal",
+      "argv": [
+        "triage",
+        "stop"
+      ],
+      "params": []
+    },
+    {
+      "id": "replay.seed",
+      "screen": "replay",
+      "title": "Build Replay Seed",
+      "description": "Create replay seed from incident bundle or filtered runtime events.",
+      "safety": "normal",
+      "argv": [
+        "replay",
+        "seed"
+      ],
+      "params": [
+        {
+          "key": "incident_id",
+          "label": "Incident ID",
+          "type": "string",
+          "required": false,
+          "flag": "--incident-id"
+        },
+        {
+          "key": "preset",
+          "label": "Usecase preset",
+          "type": "choice",
+          "required": false,
+          "flag": "--preset",
+          "choices": [
+            "auth-loop",
+            "response-shape-drift",
+            "endpoint-change"
+          ]
+        },
+        {
+          "key": "trace_id",
+          "label": "Trace ID",
+          "type": "string",
+          "required": false,
+          "flag": "--trace-id"
+        },
+        {
+          "key": "action_id",
+          "label": "Action ID",
+          "type": "string",
+          "required": false,
+          "flag": "--action-id"
+        },
+        {
+          "key": "event_id",
+          "label": "Event ID",
+          "type": "string",
+          "required": false,
+          "flag": "--event-id"
+        },
+        {
+          "key": "limit",
+          "label": "Step limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "200"
+        }
+      ]
+    },
+    {
+      "id": "replay.baseline_create",
+      "screen": "replay",
+      "title": "Create Baseline",
+      "description": "Create a named replay baseline set from current selected events.",
+      "safety": "normal",
+      "argv": [
+        "replay",
+        "baseline-create"
+      ],
+      "params": [
+        {
+          "key": "baseline_name",
+          "label": "Baseline name",
+          "type": "string",
+          "required": true,
+          "flag": "--baseline-name",
+          "example": "auth-loop-main"
+        },
+        {
+          "key": "incident_id",
+          "label": "Incident ID",
+          "type": "string",
+          "required": false,
+          "flag": "--incident-id"
+        },
+        {
+          "key": "preset",
+          "label": "Usecase preset",
+          "type": "choice",
+          "required": false,
+          "flag": "--preset",
+          "choices": [
+            "auth-loop",
+            "response-shape-drift",
+            "endpoint-change"
+          ]
+        },
+        {
+          "key": "trace_id",
+          "label": "Trace ID",
+          "type": "string",
+          "required": false,
+          "flag": "--trace-id"
+        },
+        {
+          "key": "action_id",
+          "label": "Action ID",
+          "type": "string",
+          "required": false,
+          "flag": "--action-id"
+        },
+        {
+          "key": "limit",
+          "label": "Event limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "400"
+        }
+      ]
+    },
+    {
+      "id": "replay.baseline_list",
+      "screen": "replay",
+      "title": "List Baselines",
+      "description": "List available named baselines and active baseline reference.",
+      "safety": "normal",
+      "argv": [
+        "replay",
+        "baseline-list"
+      ],
+      "params": []
+    },
+    {
+      "id": "replay.run",
+      "screen": "replay",
+      "title": "Run Replay",
+      "description": "Execute deterministic replay runner using seed data.",
+      "safety": "normal",
+      "argv": [
+        "replay",
+        "run"
+      ],
+      "params": [
+        {
+          "key": "seed_path",
+          "label": "Seed path",
+          "type": "string",
+          "required": false,
+          "flag": "--seed-path",
+          "example": "logs/device/mapper-toolkit/current/replay_seed.json"
+        },
+        {
+          "key": "incident_id",
+          "label": "Incident ID",
+          "type": "string",
+          "required": false,
+          "flag": "--incident-id"
+        },
+        {
+          "key": "preset",
+          "label": "Usecase preset",
+          "type": "choice",
+          "required": false,
+          "flag": "--preset",
+          "choices": [
+            "auth-loop",
+            "response-shape-drift",
+            "endpoint-change"
+          ]
+        },
+        {
+          "key": "trace_id",
+          "label": "Trace ID",
+          "type": "string",
+          "required": false,
+          "flag": "--trace-id"
+        },
+        {
+          "key": "action_id",
+          "label": "Action ID",
+          "type": "string",
+          "required": false,
+          "flag": "--action-id"
+        },
+        {
+          "key": "limit",
+          "label": "Step limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "120"
+        },
+        {
+          "key": "timeout_ms",
+          "label": "Timeout per step (ms)",
+          "type": "int",
+          "required": false,
+          "flag": "--timeout-ms",
+          "default": "15000"
+        }
+      ]
+    },
+    {
+      "id": "replay.diff",
+      "screen": "replay",
+      "title": "Diff vs Baseline",
+      "description": "Compare selected runtime signature set against named baseline.",
+      "safety": "normal",
+      "argv": [
+        "replay",
+        "diff"
+      ],
+      "params": [
+        {
+          "key": "baseline_name",
+          "label": "Baseline name (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--baseline-name"
+        },
+        {
+          "key": "incident_id",
+          "label": "Incident ID",
+          "type": "string",
+          "required": false,
+          "flag": "--incident-id"
+        },
+        {
+          "key": "preset",
+          "label": "Usecase preset",
+          "type": "choice",
+          "required": false,
+          "flag": "--preset",
+          "choices": [
+            "auth-loop",
+            "response-shape-drift",
+            "endpoint-change"
+          ]
+        },
+        {
+          "key": "trace_id",
+          "label": "Trace ID",
+          "type": "string",
+          "required": false,
+          "flag": "--trace-id"
+        },
+        {
+          "key": "action_id",
+          "label": "Action ID",
+          "type": "string",
+          "required": false,
+          "flag": "--action-id"
+        },
+        {
+          "key": "limit",
+          "label": "Event limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "400"
+        },
+        {
+          "key": "ci_strict",
+          "label": "Enable CI strict mode",
+          "type": "choice",
+          "required": false,
+          "flag": "--ci-strict",
+          "takes_value": false,
+          "choices": [
+            "yes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "replay.report",
+      "screen": "replay",
+      "title": "Build Replay Report",
+      "description": "Build warn-then-block replay report combining diff and run metadata.",
+      "safety": "normal",
+      "argv": [
+        "replay",
+        "report"
+      ],
+      "params": [
+        {
+          "key": "baseline_name",
+          "label": "Baseline name (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--baseline-name"
+        },
+        {
+          "key": "incident_id",
+          "label": "Incident ID",
+          "type": "string",
+          "required": false,
+          "flag": "--incident-id"
+        },
+        {
+          "key": "preset",
+          "label": "Usecase preset",
+          "type": "choice",
+          "required": false,
+          "flag": "--preset",
+          "choices": [
+            "auth-loop",
+            "response-shape-drift",
+            "endpoint-change"
+          ]
+        },
+        {
+          "key": "trace_id",
+          "label": "Trace ID",
+          "type": "string",
+          "required": false,
+          "flag": "--trace-id"
+        },
+        {
+          "key": "action_id",
+          "label": "Action ID",
+          "type": "string",
+          "required": false,
+          "flag": "--action-id"
+        },
+        {
+          "key": "limit",
+          "label": "Event limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "400"
+        },
+        {
+          "key": "ci_strict",
+          "label": "Enable CI strict mode",
+          "type": "choice",
+          "required": false,
+          "flag": "--ci-strict",
+          "takes_value": false,
+          "choices": [
+            "yes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cookies.timeline",
+      "screen": "cookies",
+      "title": "Cookie Timeline",
+      "description": "Show cookie timeline and domain stats.",
+      "safety": "normal",
+      "argv": [
+        "cookies",
+        "timeline"
+      ],
+      "params": []
+    },
+    {
+      "id": "cookies.set_events",
+      "screen": "cookies",
+      "title": "Set Events",
+      "description": "Show cookie set events.",
+      "safety": "normal",
+      "argv": [
+        "cookies",
+        "set-events"
+      ],
+      "params": []
+    },
+    {
+      "id": "cookies.refresh_events",
+      "screen": "cookies",
+      "title": "Refresh Events",
+      "description": "Show cookie refresh/rotation events.",
+      "safety": "normal",
+      "argv": [
+        "cookies",
+        "refresh-events"
+      ],
+      "params": []
+    },
+    {
+      "id": "cookies.domain_view",
+      "screen": "cookies",
+      "title": "Domain View",
+      "description": "Show cookies grouped by domain.",
+      "safety": "normal",
+      "argv": [
+        "cookies",
+        "domain-view"
+      ],
+      "params": []
+    },
+    {
+      "id": "headers.infer_required",
+      "screen": "headers",
+      "title": "Infer Required Headers",
+      "description": "Infer frequently required headers per host.",
+      "safety": "normal",
+      "argv": [
+        "headers",
+        "infer-required"
+      ],
+      "params": []
+    },
+    {
+      "id": "headers.token_deps",
+      "screen": "headers",
+      "title": "Token Dependencies",
+      "description": "Inspect token/auth related header dependencies.",
+      "safety": "normal",
+      "argv": [
+        "headers",
+        "token-deps"
+      ],
+      "params": []
+    },
+    {
+      "id": "headers.auth_chain",
+      "screen": "headers",
+      "title": "Auth Chain",
+      "description": "Inspect auth-related event chain.",
+      "safety": "normal",
+      "argv": [
+        "headers",
+        "auth-chain"
+      ],
+      "params": []
+    },
+    {
+      "id": "responses.raw",
+      "screen": "responses",
+      "title": "Response Raw",
+      "description": "Show one response event by event ID.",
+      "safety": "normal",
+      "argv": [
+        "responses",
+        "raw"
+      ],
+      "params": [
+        {
+          "key": "event_id",
+          "label": "Event ID",
+          "type": "string",
+          "required": true,
+          "flag": "--event-id"
+        }
+      ]
+    },
+    {
+      "id": "responses.filter",
+      "screen": "responses",
+      "title": "Response Filter",
+      "description": "Filter response events by DSL.",
+      "safety": "normal",
+      "argv": [
+        "responses",
+        "filter"
+      ],
+      "params": [
+        {
+          "key": "domain",
+          "label": "Domain",
+          "type": "string",
+          "required": false,
+          "flag": "--domain"
+        },
+        {
+          "key": "path",
+          "label": "Path",
+          "type": "string",
+          "required": false,
+          "flag": "--path"
+        },
+        {
+          "key": "status",
+          "label": "Status",
+          "type": "int",
+          "required": false,
+          "flag": "--status"
+        },
+        {
+          "key": "mime",
+          "label": "MIME",
+          "type": "string",
+          "required": false,
+          "flag": "--mime"
+        },
+        {
+          "key": "limit",
+          "label": "Limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "50"
+        }
+      ]
+    },
+    {
+      "id": "responses.grep",
+      "screen": "responses",
+      "title": "Response Grep",
+      "description": "Regex-search response body previews.",
+      "safety": "normal",
+      "argv": [
+        "responses",
+        "grep"
+      ],
+      "params": [
+        {
+          "key": "body_regex",
+          "label": "Body regex",
+          "type": "string",
+          "required": true,
+          "flag": "--body-regex"
+        },
+        {
+          "key": "domain",
+          "label": "Domain",
+          "type": "string",
+          "required": false,
+          "flag": "--domain"
+        },
+        {
+          "key": "limit",
+          "label": "Limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "50"
+        }
+      ]
+    },
+    {
+      "id": "responses.sample",
+      "screen": "responses",
+      "title": "Response Sample",
+      "description": "Sample compact response entries.",
+      "safety": "normal",
+      "argv": [
+        "responses",
+        "sample"
+      ],
+      "params": [
+        {
+          "key": "limit",
+          "label": "Sample size",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "20"
+        }
+      ]
+    },
+    {
+      "id": "mapping.candidate_endpoints",
+      "screen": "mapping",
+      "title": "Candidate Endpoints",
+      "description": "Show inferred endpoint candidates.",
+      "safety": "normal",
+      "argv": [
+        "mapping",
+        "candidate-endpoints"
+      ],
+      "params": []
+    },
+    {
+      "id": "mapping.field_matrix",
+      "screen": "mapping",
+      "title": "Field Matrix",
+      "description": "Generate field matrix from responses.",
+      "safety": "normal",
+      "argv": [
+        "mapping",
+        "field-matrix"
+      ],
+      "params": []
+    },
+    {
+      "id": "mapping.profile_draft",
+      "screen": "mapping",
+      "title": "Profile Draft",
+      "description": "Generate site profile draft.",
+      "safety": "normal",
+      "argv": [
+        "mapping",
+        "profile-draft"
+      ],
+      "params": []
+    },
+    {
+      "id": "mapping.replay_seed",
+      "screen": "mapping",
+      "title": "Replay Seed",
+      "description": "Generate replay seed from captured requests.",
+      "safety": "normal",
+      "argv": [
+        "mapping",
+        "replay-seed"
+      ],
+      "params": []
+    },
+    {
+      "id": "housekeeping.pack",
+      "screen": "housekeeping",
+      "title": "Pack",
+      "description": "Create compressed runtime pack archive.",
+      "safety": "normal",
+      "argv": [
+        "housekeeping",
+        "pack"
+      ],
+      "params": []
+    },
+    {
+      "id": "housekeeping.compress",
+      "screen": "housekeeping",
+      "title": "Compress",
+      "description": "Create compressed runtime archive.",
+      "safety": "normal",
+      "argv": [
+        "housekeeping",
+        "compress"
+      ],
+      "params": []
+    },
+    {
+      "id": "housekeeping.reindex",
+      "screen": "housekeeping",
+      "title": "Reindex",
+      "description": "Rebuild derived indexes and reports.",
+      "safety": "normal",
+      "argv": [
+        "housekeeping",
+        "reindex"
+      ],
+      "params": []
+    },
+    {
+      "id": "housekeeping.purge",
+      "screen": "housekeeping",
+      "title": "Purge",
+      "description": "Delete runtime event/index stores in current run.",
+      "safety": "destructive",
+      "argv": [
+        "housekeeping",
+        "purge"
+      ],
+      "params": [
+        {
+          "key": "yes",
+          "label": "Confirm purge",
+          "type": "choice",
+          "required": true,
+          "flag": "--yes",
+          "takes_value": false,
+          "default": "yes",
+          "choices": [
+            "yes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "settings.bootstrap",
+      "screen": "settings",
+      "title": "Bootstrap Dependencies",
+      "description": "Install/update toolkit dependencies.",
+      "safety": "normal",
+      "argv": [
+        "bootstrap"
+      ],
+      "params": [
+        {
+          "key": "assume_yes",
+          "label": "Assume yes",
+          "type": "choice",
+          "required": false,
+          "flag": "--yes",
+          "takes_value": false,
+          "choices": [
+            "yes"
+          ],
+          "default": "yes"
+        }
+      ]
+    },
+    {
+      "id": "settings.doctor",
+      "screen": "settings",
+      "title": "Doctor",
+      "description": "Run doctor check from settings.",
+      "safety": "normal",
+      "argv": [
+        "doctor"
+      ],
+      "params": []
+    }
+  ]
+}

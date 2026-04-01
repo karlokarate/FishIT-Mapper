@@ -1,0 +1,33 @@
+// GENERATED FILE - DO NOT EDIT DIRECTLY.
+// source: contracts/correlation.schema.json
+// regenerate via: ./scripts/generate.sh
+
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mapper-toolkit/correlation.schema.json",
+  "title": "Mapper-Toolkit Correlation Entry",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "trace_id",
+    "action_id",
+    "linked_event_ids",
+    "generated_at_utc"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "trace_id": { "type": "string", "minLength": 1 },
+    "action_id": { "type": "string", "minLength": 1 },
+    "generated_at_utc": { "type": "string", "format": "date-time" },
+    "linked_event_ids": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "ui": { "type": ["object", "null"] },
+    "network": { "type": "array", "items": { "type": "object" } },
+    "cookies": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,62 @@
+// GENERATED FILE - DO NOT EDIT DIRECTLY.
+// source: contracts/replay_assertions.json
+// regenerate via: ./scripts/generate.sh
+
+{
+  "version": 1,
+  "contract_id": "mapper-toolkit-replay-assertions",
+  "policy": {
+    "mode": "warn_then_block",
+    "local_behavior": "advisory",
+    "ci_block_on": [
+      "critical"
+    ]
+  },
+  "assertions": [
+    {
+      "id": "auth_status_chain",
+      "severity": "critical",
+      "dimension": "auth_status_chain",
+      "description": "Core auth/status chain must remain compatible with baseline status family.",
+      "thresholds": {
+        "key_overlap_min": 0.75
+      }
+    },
+    {
+      "id": "required_headers",
+      "severity": "high",
+      "dimension": "required_headers",
+      "description": "Required header presence per host must not regress.",
+      "thresholds": {
+        "missing_allowed": 0
+      }
+    },
+    {
+      "id": "endpoint_shape",
+      "severity": "high",
+      "dimension": "endpoint_shape",
+      "description": "Endpoint-path overlap versus baseline must remain above threshold.",
+      "thresholds": {
+        "overlap_min": 0.6
+      }
+    },
+    {
+      "id": "field_matrix_signature",
+      "severity": "critical",
+      "dimension": "field_matrix_compatibility",
+      "description": "Field matrix signature should match baseline for strict parser compatibility.",
+      "thresholds": {
+        "exact_match": true
+      }
+    },
+    {
+      "id": "response_form_signature",
+      "severity": "medium",
+      "dimension": "response_form_signature",
+      "description": "Response-form signatures should retain minimum overlap with baseline.",
+      "thresholds": {
+        "overlap_min": 0.5
+      }
+    }
+  ]
+}

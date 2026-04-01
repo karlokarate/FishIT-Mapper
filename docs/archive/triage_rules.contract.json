@@ -1,0 +1,62 @@
+// GENERATED FILE - DO NOT EDIT DIRECTLY.
+// source: contracts/triage_rules.json
+// regenerate via: ./scripts/generate.sh
+
+{
+  "version": 1,
+  "contract_id": "mapper-toolkit-triage-rules",
+  "rules": [
+    {
+      "id": "auth_loop",
+      "title": "Auth loop / recover chain",
+      "severity_default": "high",
+      "enabled_default": true,
+      "thresholds": {
+        "needs_status_before_success": 1
+      },
+      "repro_hint": "Replay affected action and inspect token/cookie refresh transition around 401/403."
+    },
+    {
+      "id": "retry_storm",
+      "title": "Retry storm",
+      "severity_default": "medium",
+      "enabled_default": true,
+      "thresholds": {
+        "request_count": 4,
+        "window_seconds": 60
+      },
+      "repro_hint": "Inspect retry strategy, backoff and root response code chain."
+    },
+    {
+      "id": "redirect_loop",
+      "title": "Redirect loop",
+      "severity_default": "medium",
+      "enabled_default": true,
+      "thresholds": {
+        "redirect_count": 3
+      },
+      "repro_hint": "Inspect redirect targets and session state between hops."
+    },
+    {
+      "id": "cookie_churn",
+      "title": "Cookie churn",
+      "severity_default": "medium",
+      "enabled_default": true,
+      "thresholds": {
+        "event_count": 3,
+        "window_seconds": 120
+      },
+      "repro_hint": "Inspect Set-Cookie rotation/refresh patterns for affected domain."
+    },
+    {
+      "id": "schema_drift",
+      "title": "Response schema drift",
+      "severity_default": "high",
+      "enabled_default": true,
+      "thresholds": {
+        "variant_count": 2
+      },
+      "repro_hint": "Compare variant field sets and update parser/matrix guards."
+    }
+  ]
+}

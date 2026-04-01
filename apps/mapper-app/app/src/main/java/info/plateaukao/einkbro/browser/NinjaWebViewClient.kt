@@ -29,6 +29,7 @@ import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import dev.fishit.mapper.wave01.debug.RuntimeToolkitTelemetry
 import info.plateaukao.einkbro.R
 import info.plateaukao.einkbro.view.compose.MyTheme
 import info.plateaukao.einkbro.caption.DualCaptionProcessor
@@ -81,6 +82,14 @@ class EBWebViewClient(
         if (config.adBlock) {
             adFilter.performScript(view, url)
         }
+
+        RuntimeToolkitTelemetry.logUiObserved(
+            context = context,
+            actionName = "webview_page_started",
+            screenId = "browser",
+            payload = mapOf("url" to url),
+        )
+        RuntimeToolkitTelemetry.recordCookieSnapshot(context, url)
     }
 
     override fun onPageFinished(view: WebView, url: String) {
@@ -135,6 +144,14 @@ class EBWebViewClient(
         if (url != "about:blank") {
             onPageFinishedAction()
         }
+
+        RuntimeToolkitTelemetry.logUiObserved(
+            context = context,
+            actionName = "webview_page_finished",
+            screenId = "browser",
+            payload = mapOf("url" to url),
+        )
+        RuntimeToolkitTelemetry.recordCookieSnapshot(context, url)
     }
 
     private fun isTranslationDomain(url: String): Boolean {
@@ -240,6 +257,21 @@ class EBWebViewClient(
         request: WebResourceRequest?,
         error: WebResourceError?,
     ) {
+        RuntimeToolkitTelemetry.logNetworkResponse(
+            context = context,
+            source = "webview",
+            url = request?.url?.toString().orEmpty(),
+            method = request?.method ?: "GET",
+            statusCode = null,
+            reason = error?.description?.toString(),
+            mimeType = null,
+            headers = emptyMap(),
+            payload = mapOf(
+                "error_code" to (error?.errorCode ?: 0),
+                "is_main_frame" to (request?.isForMainFrame ?: false),
+            ),
+        )
+
         // if https is not available, try http
         if (error?.description == "net::ERR_SSL_PROTOCOL_ERROR" && request != null) {
             ebWebView.loadUrl(request.url.buildUpon().scheme("http").build().toString())
@@ -248,15 +280,60 @@ class EBWebViewClient(
         }
     }
 
+    override fun onReceivedHttpError(
+        view: WebView?,
+        request: WebResourceRequest?,
+        errorResponse: WebResourceResponse?,
+    ) {
+        super.onReceivedHttpError(view, request, errorResponse)
+        RuntimeToolkitTelemetry.logNetworkResponse(
+            context = context,
+            source = "webview",
+            url = request?.url?.toString().orEmpty(),
+            method = request?.method ?: "GET",
+            statusCode = errorResponse?.statusCode,
+            reason = errorResponse?.reasonPhrase,
+            mimeType = errorResponse?.mimeType,
+            headers = responseHeaders(errorResponse),
+            payload = mapOf(
+                "is_main_frame" to (request?.isForMainFrame ?: false),
+                "has_gesture" to (request?.hasGesture() ?: false),
+            ),
+        )
+        RuntimeToolkitTelemetry.recordCookieSnapshot(context, request?.url?.toString())
+    }
+
     @Deprecated("Deprecated in Java")
     @Suppress("DEPRECATION")
-    override fun shouldInterceptRequest(view: WebView, url: String): WebResourceResponse? =
-        handleWebRequest(view, Uri.parse(url)) ?: super.shouldInterceptRequest(view, url)
+    override fun shouldInterceptRequest(view: WebView, url: String): WebResourceResponse? {
+        RuntimeToolkitTelemetry.logNetworkRequest(
+            context = context,
+            source = "webview",
+            url = url,
+            method = "GET",
+            headers = emptyMap(),
+            payload = mapOf("api_variant" to "deprecated"),
+        )
+        return handleWebRequest(view, Uri.parse(url)) ?: super.shouldInterceptRequest(view, url)
+    }
 
     override fun shouldInterceptRequest(
         view: WebView,
         request: WebResourceRequest,
     ): WebResourceResponse? {
+        RuntimeToolkitTelemetry.logNetworkRequest(
+            context = context,
+            source = "webview",
+            url = request.url.toString(),
+            method = request.method,
+            headers = request.requestHeaders,
+            payload = mapOf(
+                "is_main_frame" to request.isForMainFrame,
+                "has_gesture" to request.hasGesture(),
+                "is_redirect" to request.isRedirect,
+            ),
+        )
+
         if (config.adBlock) {
             val result = adFilter.shouldIntercept(view, request)
             if (result.shouldBlock) {
@@ -293,6 +370,11 @@ class EBWebViewClient(
         }
 
         return null
+    }
+
+    private fun responseHeaders(response: WebResourceResponse?): Map<String, String> {
+        val headers = response?.responseHeaders ?: return emptyMap()
+        return headers.mapKeys { it.key.orEmpty() }.mapValues { it.value.orEmpty() }
     }
 
     private fun processCustomFontRequest(uri: Uri): WebResourceResponse? {

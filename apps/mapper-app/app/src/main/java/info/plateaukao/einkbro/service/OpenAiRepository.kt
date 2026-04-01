@@ -1,6 +1,8 @@
 package info.plateaukao.einkbro.service
 
 import android.util.Log
+import dev.fishit.mapper.wave01.debug.RuntimeToolkitOkHttp
+import info.plateaukao.einkbro.EinkBroApplication
 import info.plateaukao.einkbro.preference.ChatGPTActionInfo
 import info.plateaukao.einkbro.preference.ConfigManager
 import info.plateaukao.einkbro.preference.GptActionType
@@ -39,11 +41,14 @@ class OpenAiRepository : KoinComponent {
 
     private val apiKey: String = config.gptApiKey
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
-        .build()
+    private val client = RuntimeToolkitOkHttp.instrument(
+        EinkBroApplication.instance,
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS),
+        "openai_repository",
+    ).build()
     private val factory by lazy { EventSources.createFactory(client) }
 
     private val json = Json { ignoreUnknownKeys = true }

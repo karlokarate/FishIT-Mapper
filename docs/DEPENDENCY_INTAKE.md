@@ -31,7 +31,7 @@ Integration policy: `vendor_snapshot_pinned_commit`
 - status: `integrated`
 - notes: Runtime build baseline for Wave-01; third_party snapshot remains immutable reference.
 
-### dep-fishit-player-runtime-toolkit - FishIT Runtime Toolkit
+### dep-fishit-player-runtime-toolkit - Mapper-Toolkit Runtime Baseline
 - kind: `tool`
 - source_url: `https://github.com/karlokarate/FishIT-Player`
 - target_module: `device_runtime_toolkit`
@@ -40,7 +40,7 @@ Integration policy: `vendor_snapshot_pinned_commit`
 - local_path: `scripts/device`
 - license: `project_internal`
 - status: `integrated`
-- notes: Copied from FishIT-Player scripts/device and adapted for mapper app id and codespace defaults.
+- notes: Initial seed imported from FishIT-Player only; Mapper-Toolkit v2 now runs as independent portable CLI/TUI without FishIT-Player path/function backward-compatibility guarantees.
 
 ### dep-request-inspector-webview - Android-Request-Inspector-WebView
 - kind: `repo`
@@ -58,20 +58,64 @@ Integration policy: `vendor_snapshot_pinned_commit`
 - source_url: `https://github.com/mitmproxy/mitmproxy`
 - target_module: `tooling_mitmproxy`
 - integration_mode: `external_tool_reference`
-- pinned_ref: `TBD`
+- pinned_ref: `v11.0.2`
 - local_path: `third_party/mitmproxy`
 - license: `MIT`
-- status: `planned`
-- notes: Used as external tooling companion, not runtime app dependency.
+- status: `integrating`
+- notes: Hybrid capture optional path for full raw HTTP body/header tracing.
 
 ### dep-playwright - Playwright
 - kind: `tool`
 - source_url: `https://github.com/microsoft/playwright`
 - target_module: `tooling_playwright`
 - integration_mode: `external_tool_reference`
-- pinned_ref: `TBD`
+- pinned_ref: `v1.55.0`
 - local_path: `third_party/playwright`
 - license: `Apache-2.0`
+- status: `integrating`
+- notes: Replay and deterministic validation companion tool.
+
+### dep-textual - Textual
+- kind: `tool`
+- source_url: `https://github.com/Textualize/textual`
+- target_module: `tooling_mapper_toolkit_tui`
+- integration_mode: `external_tool_reference`
+- pinned_ref: `v8.2.1`
+- local_path: `third_party/textual`
+- license: `MIT`
+- status: `integrating`
+- notes: Primary Python TUI framework for main.py no-command-input user experience.
+
+### dep-duckdb - DuckDB
+- kind: `tool`
+- source_url: `https://github.com/duckdb/duckdb`
+- target_module: `tooling_query_analytics`
+- integration_mode: `external_tool_reference`
+- pinned_ref: `v1.2.2`
+- local_path: `third_party/duckdb`
+- license: `MIT`
 - status: `planned`
-- notes: Used for replay validation in external tooling loops.
+- notes: Large JSONL/Parquet analysis for field matrix and endpoint heuristics.
+
+### dep-jq - jq
+- kind: `tool`
+- source_url: `https://github.com/jqlang/jq`
+- target_module: `tooling_query_analytics`
+- integration_mode: `external_tool_reference`
+- pinned_ref: `jq-1.7.1`
+- local_path: `third_party/jq`
+- license: `MIT`
+- status: `planned`
+- notes: Fast local filtering pipeline in toolkit trace and response commands.
+
+### dep-perfetto - Perfetto
+- kind: `tool`
+- source_url: `https://github.com/google/perfetto`
+- target_module: `tooling_perfetto`
+- integration_mode: `external_tool_reference`
+- pinned_ref: `v49.0`
+- local_path: `third_party/perfetto`
+- license: `Apache-2.0`
+- status: `planned`
+- notes: Optional timing and latency traces for UI↔backend correlation windows.
 

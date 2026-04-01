@@ -49,6 +49,7 @@ import androidx.core.content.FileProvider
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetBehavior.BottomSheetCallback
 import com.google.android.material.bottomsheet.BottomSheetDialog
+import dev.fishit.mapper.wave01.debug.RuntimeToolkitOkHttp
 import info.plateaukao.einkbro.BuildConfig
 import info.plateaukao.einkbro.EinkBroApplication
 import info.plateaukao.einkbro.R
@@ -80,6 +81,7 @@ object HelperUnit {
     private val client = OkHttpClient.Builder()
         .followRedirects(true)
         .followSslRedirects(true)
+        .let { RuntimeToolkitOkHttp.instrument(EinkBroApplication.instance, it, "helper_unit") }
         .build()
 
 
@@ -862,4 +864,3 @@ fun String.pruneWebTitle(): String =
     } else {
         this
     }
-

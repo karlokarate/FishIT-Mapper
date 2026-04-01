@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "contract_id": "mapper-toolkit-replay-baselines",
+  "strategy": "named_baseline_set",
+  "storage": {
+    "manifest": "logs/device/mapper-toolkit/current/baseline_manifest.json",
+    "baseline_root": "logs/device/mapper-toolkit/current/replay/baselines"
+  },
+  "required_manifest_fields": [
+    "schema_version",
+    "generated_at_utc",
+    "policy",
+    "active_baseline",
+    "baselines"
+  ],
+  "required_baseline_fields": [
+    "schema_version",
+    "baseline_name",
+    "created_at_utc",
+    "preset",
+    "source",
+    "required_headers",
+    "endpoint_candidates",
+    "field_matrix_signature",
+    "status_chain_summary",
+    "sampled_responses",
+    "response_form_signature"
+  ],
+  "selection": {
+    "default": "active_or_latest",
+    "allow_name_override": true
+  },
+  "metadata": {
+    "baseline_name_required": true,
+    "preset_required": false,
+    "source_metadata_required": true
+  }
+}

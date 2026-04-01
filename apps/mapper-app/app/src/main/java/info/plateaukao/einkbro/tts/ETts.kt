@@ -1,6 +1,8 @@
 package info.plateaukao.einkbro.tts
 
 import android.util.Log
+import dev.fishit.mapper.wave01.debug.RuntimeToolkitOkHttp
+import info.plateaukao.einkbro.EinkBroApplication
 import info.plateaukao.einkbro.tts.entity.VoiceItem
 import okhttp3.Headers.Companion.toHeaders
 import okhttp3.OkHttpClient
@@ -36,11 +38,14 @@ class ETts {
     }
 
     private val okHttpClient by lazy {
-        OkHttpClient.Builder()
-            .readTimeout(15, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .build()
+        RuntimeToolkitOkHttp.instrument(
+            EinkBroApplication.instance,
+            OkHttpClient.Builder()
+                .readTimeout(15, TimeUnit.SECONDS)
+                .writeTimeout(15, TimeUnit.SECONDS)
+                .connectTimeout(15, TimeUnit.SECONDS),
+            "edge_tts",
+        ).build()
     }
 
     suspend fun tts(voice: VoiceItem, speed: Int, content: String): ByteArray? =

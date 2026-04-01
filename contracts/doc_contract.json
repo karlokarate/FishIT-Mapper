@@ -59,6 +59,62 @@
       "generated_outputs": [
         "docs/DEPENDENCY_INTAKE.md"
       ]
+    },
+    {
+      "id": "runtime.toolkit.v2",
+      "path": "contracts/runtime_toolkit_v2.json",
+      "generated_outputs": [
+        "docs/archive/runtime_toolkit_v2.contract.json"
+      ]
+    },
+    {
+      "id": "runtime.event.schema",
+      "path": "contracts/runtime_event.schema.json",
+      "generated_outputs": [
+        "docs/archive/runtime_event.schema.json"
+      ]
+    },
+    {
+      "id": "runtime.correlation.schema",
+      "path": "contracts/correlation.schema.json",
+      "generated_outputs": [
+        "docs/archive/correlation.schema.json"
+      ]
+    },
+    {
+      "id": "mapper.toolkit.tui.catalog",
+      "path": "contracts/mapper_toolkit_tui_catalog.json",
+      "generated_outputs": [
+        "docs/archive/mapper_toolkit_tui_catalog.contract.json"
+      ]
+    },
+    {
+      "id": "triage.rules",
+      "path": "contracts/triage_rules.json",
+      "generated_outputs": [
+        "docs/archive/triage_rules.contract.json"
+      ]
+    },
+    {
+      "id": "usecase.presets",
+      "path": "contracts/usecase_presets.json",
+      "generated_outputs": [
+        "docs/archive/usecase_presets.contract.json"
+      ]
+    },
+    {
+      "id": "replay.assertions",
+      "path": "contracts/replay_assertions.json",
+      "generated_outputs": [
+        "docs/archive/replay_assertions.contract.json"
+      ]
+    },
+    {
+      "id": "replay.baselines",
+      "path": "contracts/replay_baselines.json",
+      "generated_outputs": [
+        "docs/archive/replay_baselines.contract.json"
+      ]
     }
   ],
   "allowed_docs_paths": [

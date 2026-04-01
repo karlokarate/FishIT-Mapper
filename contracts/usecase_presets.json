@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "contract_id": "mapper-toolkit-usecase-presets",
+  "presets": [
+    {
+      "id": "auth-loop",
+      "label": "Auth Loop",
+      "description": "Find auth-recovery chains and token/cookie refresh transitions.",
+      "filters": {
+        "limit": 1500
+      },
+      "anomaly_rules": [
+        "auth_loop",
+        "retry_storm",
+        "cookie_churn"
+      ],
+      "target_outputs": [
+        "required_headers_report",
+        "endpoint_candidates",
+        "field_matrix",
+        "site_profile.draft",
+        "replay_seed"
+      ]
+    },
+    {
+      "id": "cookie-rotation",
+      "label": "Cookie Rotation",
+      "description": "Focus on cookie lifecycle changes and downstream request effects.",
+      "filters": {
+        "limit": 1200
+      },
+      "anomaly_rules": [
+        "cookie_churn",
+        "auth_loop"
+      ],
+      "target_outputs": [
+        "required_headers_report",
+        "endpoint_candidates"
+      ]
+    },
+    {
+      "id": "missing-header",
+      "label": "Missing Header",
+      "description": "Focus on request failures likely caused by missing auth/session headers.",
+      "filters": {
+        "status": "401",
+        "limit": 1000
+      },
+      "anomaly_rules": [
+        "auth_loop",
+        "retry_storm"
+      ],
+      "target_outputs": [
+        "required_headers_report",
+        "endpoint_candidates"
+      ]
+    },
+    {
+      "id": "response-shape-drift",
+      "label": "Response Shape Drift",
+      "description": "Find schema variants that break parser assumptions.",
+      "filters": {
+        "mime": "json",
+        "limit": 1200
+      },
+      "anomaly_rules": [
+        "schema_drift"
+      ],
+      "target_outputs": [
+        "field_matrix",
+        "endpoint_candidates",
+        "site_profile.draft"
+      ]
+    },
+    {
+      "id": "endpoint-change",
+      "label": "Endpoint Change",
+      "description": "Focus on endpoint/path changes and redirect drift patterns.",
+      "filters": {
+        "limit": 1500
+      },
+      "anomaly_rules": [
+        "redirect_loop",
+        "schema_drift"
+      ],
+      "target_outputs": [
+        "endpoint_candidates",
+        "field_matrix",
+        "replay_seed"
+      ]
+    }
+  ]
+}

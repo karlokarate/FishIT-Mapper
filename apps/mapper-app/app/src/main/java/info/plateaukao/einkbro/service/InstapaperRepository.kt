@@ -1,16 +1,18 @@
 package info.plateaukao.einkbro.service
 
 import android.util.Log
+import dev.fishit.mapper.wave01.debug.RuntimeToolkitOkHttp
+import info.plateaukao.einkbro.EinkBroApplication
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.koin.core.component.KoinComponent
 
 class InstapaperRepository : KoinComponent {
-    
-    private val client = OkHttpClient()
+    private val client by lazy {
+        RuntimeToolkitOkHttp.newClient(EinkBroApplication.instance, "instapaper_repository")
+    }
     
     suspend fun addUrl(
         url: String,

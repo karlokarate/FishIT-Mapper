@@ -60,6 +60,102 @@
         "<!-- regenerate via: ./scripts/generate.sh -->",
         ""
       ]
+    },
+    {
+      "id": "runtime-toolkit-v2-contract-archive",
+      "type": "copy_with_header",
+      "source": "contracts/runtime_toolkit_v2.json",
+      "target": "docs/archive/runtime_toolkit_v2.contract.json",
+      "header": [
+        "// GENERATED FILE - DO NOT EDIT DIRECTLY.",
+        "// source: contracts/runtime_toolkit_v2.json",
+        "// regenerate via: ./scripts/generate.sh",
+        ""
+      ]
+    },
+    {
+      "id": "runtime-event-schema-archive",
+      "type": "copy_with_header",
+      "source": "contracts/runtime_event.schema.json",
+      "target": "docs/archive/runtime_event.schema.json",
+      "header": [
+        "// GENERATED FILE - DO NOT EDIT DIRECTLY.",
+        "// source: contracts/runtime_event.schema.json",
+        "// regenerate via: ./scripts/generate.sh",
+        ""
+      ]
+    },
+    {
+      "id": "correlation-schema-archive",
+      "type": "copy_with_header",
+      "source": "contracts/correlation.schema.json",
+      "target": "docs/archive/correlation.schema.json",
+      "header": [
+        "// GENERATED FILE - DO NOT EDIT DIRECTLY.",
+        "// source: contracts/correlation.schema.json",
+        "// regenerate via: ./scripts/generate.sh",
+        ""
+      ]
+    },
+    {
+      "id": "mapper-toolkit-tui-catalog-archive",
+      "type": "copy_with_header",
+      "source": "contracts/mapper_toolkit_tui_catalog.json",
+      "target": "docs/archive/mapper_toolkit_tui_catalog.contract.json",
+      "header": [
+        "// GENERATED FILE - DO NOT EDIT DIRECTLY.",
+        "// source: contracts/mapper_toolkit_tui_catalog.json",
+        "// regenerate via: ./scripts/generate.sh",
+        ""
+      ]
+    },
+    {
+      "id": "triage-rules-archive",
+      "type": "copy_with_header",
+      "source": "contracts/triage_rules.json",
+      "target": "docs/archive/triage_rules.contract.json",
+      "header": [
+        "// GENERATED FILE - DO NOT EDIT DIRECTLY.",
+        "// source: contracts/triage_rules.json",
+        "// regenerate via: ./scripts/generate.sh",
+        ""
+      ]
+    },
+    {
+      "id": "usecase-presets-archive",
+      "type": "copy_with_header",
+      "source": "contracts/usecase_presets.json",
+      "target": "docs/archive/usecase_presets.contract.json",
+      "header": [
+        "// GENERATED FILE - DO NOT EDIT DIRECTLY.",
+        "// source: contracts/usecase_presets.json",
+        "// regenerate via: ./scripts/generate.sh",
+        ""
+      ]
+    },
+    {
+      "id": "replay-assertions-archive",
+      "type": "copy_with_header",
+      "source": "contracts/replay_assertions.json",
+      "target": "docs/archive/replay_assertions.contract.json",
+      "header": [
+        "// GENERATED FILE - DO NOT EDIT DIRECTLY.",
+        "// source: contracts/replay_assertions.json",
+        "// regenerate via: ./scripts/generate.sh",
+        ""
+      ]
+    },
+    {
+      "id": "replay-baselines-archive",
+      "type": "copy_with_header",
+      "source": "contracts/replay_baselines.json",
+      "target": "docs/archive/replay_baselines.contract.json",
+      "header": [
+        "// GENERATED FILE - DO NOT EDIT DIRECTLY.",
+        "// source: contracts/replay_baselines.json",
+        "// regenerate via: ./scripts/generate.sh",
+        ""
+      ]
     }
   ]
 }
