@@ -187,6 +187,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.koin.android.ext.android.inject
 import java.io.File
+import java.time.Instant
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.floor
@@ -337,6 +338,7 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
     private lateinit var createBookmarkFileLauncher: ActivityResultLauncher<Intent>
     private lateinit var fileChooserLauncher: ActivityResultLauncher<Intent>
     private lateinit var openEpubFilePickerLauncher: ActivityResultLauncher<Intent>
+    private lateinit var runtimeExportPickerLauncher: ActivityResultLauncher<Intent>
 
     // Classes
     private inner class VideoCompletionListener : OnCompletionListener,
@@ -1074,6 +1076,8 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
             IntentUnit.createResultLauncher(this) { handleWebViewFileChooser(it) }
         openEpubFilePickerLauncher =
             IntentUnit.createResultLauncher(this) { handleEpubUri(it) }
+        runtimeExportPickerLauncher =
+            IntentUnit.createResultLauncher(this) { handleRuntimeExportPickerResult(it) }
     }
 
     private fun handleEpubUri(result: ActivityResult) {
@@ -1102,6 +1106,53 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
             filePathCallback?.onReceiveValue(results)
         }
         filePathCallback = null
+    }
+
+    private fun promptRuntimeExportDestination() {
+        val filename = "mapper_runtime_export_${Instant.now().toString().replace(':', '-').replace('.', '-')}.zip"
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/zip"
+            putExtra(Intent.EXTRA_TITLE, filename)
+        }
+        runtimeExportPickerLauncher.launch(intent)
+    }
+
+    private fun handleRuntimeExportPickerResult(result: ActivityResult) {
+        if (result.resultCode != RESULT_OK) {
+            return
+        }
+        val destinationUri = result.data?.data
+        if (destinationUri == null) {
+            EBToast.showShort(this, getString(R.string.mapper_capture_export_failed, "no destination selected"))
+            return
+        }
+        lifecycleScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val exportFile = RuntimeToolkitTelemetry.exportRuntimeArtifacts(this@BrowserActivity)
+                    contentResolver.openOutputStream(destinationUri, "w").use { output ->
+                        requireNotNull(output) { "cannot open destination stream" }
+                        exportFile.inputStream().use { input ->
+                            input.copyTo(output)
+                        }
+                    }
+                }
+            }.onSuccess {
+                EBToast.showShort(
+                    this@BrowserActivity,
+                    getString(R.string.mapper_capture_exported, destinationUri.toString())
+                )
+            }.onFailure { throwable ->
+                EBToast.showShort(
+                    this@BrowserActivity,
+                    getString(
+                        R.string.mapper_capture_export_failed,
+                        throwable.message ?: "unknown"
+                    )
+                )
+            }
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -2041,26 +2092,7 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
             }
         }
         captureToggleButton.setOnLongClickListener {
-            lifecycleScope.launch {
-                runCatching {
-                    withContext(Dispatchers.IO) {
-                        RuntimeToolkitTelemetry.exportRuntimeArtifacts(this@BrowserActivity)
-                    }
-                }.onSuccess { exportFile ->
-                    EBToast.showShort(
-                        this@BrowserActivity,
-                        getString(R.string.mapper_capture_exported, exportFile.absolutePath)
-                    )
-                }.onFailure { throwable ->
-                    EBToast.showShort(
-                        this@BrowserActivity,
-                        getString(
-                            R.string.mapper_capture_export_failed,
-                            throwable.message ?: "unknown"
-                        )
-                    )
-                }
-            }
+            promptRuntimeExportDestination()
             true
         }
     }

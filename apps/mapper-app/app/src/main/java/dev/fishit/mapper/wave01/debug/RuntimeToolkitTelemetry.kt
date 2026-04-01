@@ -40,7 +40,7 @@ object RuntimeToolkitTelemetry {
     private const val PREF_COOKIE_SNAPSHOT = "mapper_toolkit_cookie_snapshot"
     private const val MAX_RECENT_REQUEST_IDS = 4096
     private const val MAX_DEDUP_REQUESTS = 8192
-    private const val DEDUP_BUCKET_NS = 1_500_000_000L
+    private const val DEDUP_BUCKET_NS = 150_000_000L
     private const val DEDUP_RETENTION_NS = 12_000_000_000L
     private const val DEFAULT_SCOPE_MODE = "strict_target"
 
@@ -65,6 +65,7 @@ object RuntimeToolkitTelemetry {
         val dedupOf: String?,
         val dedupCount: Int,
         val canonical: Boolean,
+        val responseObservable: Boolean,
     )
 
     private data class CanonicalRequest(
@@ -76,6 +77,19 @@ object RuntimeToolkitTelemetry {
     private data class MimeResolution(
         val mimeType: String?,
         val source: String,
+    )
+
+    private data class NetworkSemantic(
+        val classification: String,
+        val operation: String,
+        val labels: List<String>,
+        val graphqlOperation: String?,
+        val routeKind: String,
+        val mimeFamily: String?,
+        val mediaKind: String?,
+        val tracking: Boolean,
+        val authRelated: Boolean,
+        val playbackRelated: Boolean,
     )
 
     fun ensureRunId(context: Context, preferred: String? = null): String {
@@ -203,6 +217,48 @@ object RuntimeToolkitTelemetry {
         )
     }
 
+    fun navigationActionName(url: String?): String {
+        val semantic = classifyNetworkSemantics(
+            url = url.orEmpty(),
+            method = "GET",
+            mimeType = null,
+            statusCode = null,
+            headers = emptyMap(),
+            source = "webview_navigation",
+        )
+        return when (semantic.classification) {
+            "auth" -> "webview_auth_navigation"
+            "search" -> "webview_search_navigation"
+            "category" -> "webview_category_navigation"
+            "detail" -> "webview_detail_navigation"
+            "live" -> "webview_live_navigation"
+            "playback" -> "webview_playback_navigation"
+            "config" -> "webview_config_navigation"
+            else -> {
+                if (semantic.routeKind == "home") "webview_home_navigation" else "webview_navigation"
+            }
+        }
+    }
+
+    fun navigationSemanticPayload(url: String?): Map<String, Any?> {
+        val semantic = classifyNetworkSemantics(
+            url = url.orEmpty(),
+            method = "GET",
+            mimeType = null,
+            statusCode = null,
+            headers = emptyMap(),
+            source = "webview_navigation",
+        )
+        return mapOf(
+            "navigation_classification" to semantic.classification,
+            "navigation_operation" to semantic.operation,
+            "navigation_labels" to semantic.labels,
+            "route_kind" to semantic.routeKind,
+            "graphql_operation_name" to semantic.graphqlOperation,
+            "url" to url,
+        )
+    }
+
     fun logNetworkRequest(
         context: Context,
         source: String,
@@ -219,8 +275,19 @@ object RuntimeToolkitTelemetry {
         val hostClass = classifyHost(url = url, targetHosts = targetHosts, scopeMode = scopeMode(context))
         val normalizedUrl = normalizedUrl(url)
         val headerSubset = canonicalHeaderSubset(headers)
-        val requestFingerprint = requestFingerprint(method, normalizedUrl, source, headerSubset)
-        val dedupKey = "$requestFingerprint:${nowMonoNs / DEDUP_BUCKET_NS}"
+        val frameContext = canonicalFrameContext(source)
+        val responseObservable = isResponseObservableSource(source)
+        val semantic = classifyNetworkSemantics(
+            url = url,
+            method = method,
+            mimeType = null,
+            statusCode = null,
+            headers = headers,
+            source = source,
+        )
+        val requestFingerprint = requestFingerprint(method, normalizedUrl, frameContext, headerSubset)
+        val dedupFingerprint = strictRequestFingerprint(method, url, frameContext, headerSubset)
+        val dedupKey = "$dedupFingerprint:${nowMonoNs / DEDUP_BUCKET_NS}"
 
         synchronized(dedupLock) {
             pruneDedupRequests(nowMonoNs)
@@ -237,10 +304,21 @@ object RuntimeToolkitTelemetry {
                         "url" to normalizedUrl,
                         "method" to method.uppercase(Locale.ROOT),
                         "request_fingerprint" to requestFingerprint,
+                        "dedup_fingerprint" to dedupFingerprint,
                         "dedup_of" to existing.requestId,
                         "dedup_count" to existing.duplicateCount,
                         "phase_id" to phaseId,
                         "host_class" to hostClass,
+                        "response_observable" to responseObservable,
+                        "request_classification" to semantic.classification,
+                        "request_operation" to semantic.operation,
+                        "semantic_labels" to semantic.labels,
+                        "graphql_operation_name" to semantic.graphqlOperation,
+                        "route_kind" to semantic.routeKind,
+                        "media_kind" to semantic.mediaKind,
+                        "is_tracking" to semantic.tracking,
+                        "is_auth_related" to semantic.authRelated,
+                        "is_playback_related" to semantic.playbackRelated,
                     ),
                 )
                 return RequestLogResult(
@@ -252,6 +330,7 @@ object RuntimeToolkitTelemetry {
                     dedupOf = existing.requestId,
                     dedupCount = existing.duplicateCount,
                     canonical = false,
+                    responseObservable = responseObservable,
                 )
             }
         }
@@ -272,10 +351,23 @@ object RuntimeToolkitTelemetry {
             payload = payload + mapOf(
                 "request_id" to resolvedRequestId,
                 "request_fingerprint" to requestFingerprint,
+                "dedup_fingerprint" to dedupFingerprint,
                 "phase_id" to phaseId,
                 "host_class" to hostClass,
                 "normalized_url" to normalizedUrl,
+                "frame_context" to frameContext,
                 "source" to source,
+                "capture_channel" to source,
+                "response_observable" to responseObservable,
+                "request_classification" to semantic.classification,
+                "request_operation" to semantic.operation,
+                "semantic_labels" to semantic.labels,
+                "graphql_operation_name" to semantic.graphqlOperation,
+                "route_kind" to semantic.routeKind,
+                "media_kind" to semantic.mediaKind,
+                "is_tracking" to semantic.tracking,
+                "is_auth_related" to semantic.authRelated,
+                "is_playback_related" to semantic.playbackRelated,
                 "url" to url,
                 "method" to method,
                 "headers" to headers,
@@ -290,6 +382,7 @@ object RuntimeToolkitTelemetry {
             dedupOf = null,
             dedupCount = 0,
             canonical = true,
+            responseObservable = responseObservable,
         )
     }
 
@@ -316,7 +409,7 @@ object RuntimeToolkitTelemetry {
         val phaseId = activePhaseId(context)
         val hostClass = classifyHost(url = url, targetHosts = targetHostFamily(context), scopeMode = scopeMode(context))
         val normalizedUrl = normalizedUrl(url)
-        val requestFingerprint = requestFingerprint(method, normalizedUrl, source, canonicalHeaderSubset(headers))
+        val requestFingerprint = requestFingerprint(method, normalizedUrl, canonicalFrameContext(source), canonicalHeaderSubset(headers))
 
         val responsePath = if (rawBody != null && rawBody.isNotEmpty()) {
             storeRawBody(context, eventId, rawBody)
@@ -336,6 +429,14 @@ object RuntimeToolkitTelemetry {
             headers = headers,
             rawBody = rawBody,
         )
+        val semantic = classifyNetworkSemantics(
+            url = url,
+            method = method,
+            mimeType = resolvedMime.mimeType,
+            statusCode = statusCode,
+            headers = headers,
+            source = source,
+        )
 
         logEvent(
             context = context,
@@ -350,8 +451,19 @@ object RuntimeToolkitTelemetry {
                 "host_class" to hostClass,
                 "normalized_url" to normalizedUrl,
                 "source" to source,
+                "capture_channel" to source,
                 "url" to url,
                 "method" to method,
+                "response_classification" to semantic.classification,
+                "response_operation" to semantic.operation,
+                "semantic_labels" to semantic.labels,
+                "graphql_operation_name" to semantic.graphqlOperation,
+                "route_kind" to semantic.routeKind,
+                "media_kind" to semantic.mediaKind,
+                "mime_family" to semantic.mimeFamily,
+                "is_tracking" to semantic.tracking,
+                "is_auth_related" to semantic.authRelated,
+                "is_playback_related" to semantic.playbackRelated,
                 "status" to statusCode,
                 "status_code" to statusCode,
                 "http_status" to statusCode,
@@ -365,7 +477,17 @@ object RuntimeToolkitTelemetry {
                 "body_ref" to responsePath,
                 "response_size_bytes" to (rawBody?.size ?: 0),
                 "response_sha256" to bodyHash,
+                "response_observed" to true,
             ),
+        )
+        emitDerivedAuthEvents(
+            context = context,
+            semantic = semantic,
+            statusCode = statusCode,
+            url = url,
+            requestId = resolvedRequestId,
+            responseId = eventId,
+            headers = headers,
         )
         return eventId
     }
@@ -925,6 +1047,40 @@ object RuntimeToolkitTelemetry {
         return sha256(payload.toByteArray(Charsets.UTF_8))
     }
 
+    private fun strictRequestFingerprint(
+        method: String,
+        rawUrl: String,
+        frameContext: String,
+        headerSubset: Map<String, String>,
+    ): String {
+        val payload = "${method.uppercase(Locale.ROOT)}|${rawUrl.trim()}|$frameContext|${headerSubset.entries.joinToString(";") { "${it.key}=${it.value}" }}"
+        return sha256(payload.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun canonicalFrameContext(source: String): String {
+        val normalized = source.trim().lowercase(Locale.ROOT)
+        return when {
+            normalized.startsWith("webview_js_bridge") -> "webview"
+            normalized.startsWith("webview") -> "webview"
+            normalized.startsWith("native_replay_") -> "native_replay"
+            normalized.contains("okhttp") -> "okhttp"
+            else -> normalized
+        }
+    }
+
+    private fun isResponseObservableSource(source: String): Boolean {
+        val normalized = source.trim().lowercase(Locale.ROOT)
+        return when {
+            normalized.startsWith("webview_js_bridge") -> true
+            normalized.startsWith("native_replay_") -> true
+            normalized.startsWith("webview_main_frame_html") -> true
+            normalized.contains("okhttp") -> true
+            normalized.contains("repository") -> true
+            normalized.startsWith("webview") -> false
+            else -> true
+        }
+    }
+
     private fun classifyHost(url: String, targetHosts: List<String>, scopeMode: String): String {
         val host = runCatching { Uri.parse(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
         if (host.isBlank()) return "ignored"
@@ -933,6 +1089,284 @@ object RuntimeToolkitTelemetry {
             host == configured || host.endsWith(".$configured")
         }
         return if (isTarget) "target" else "external_noise"
+    }
+
+    private fun classifyNetworkSemantics(
+        url: String,
+        method: String,
+        mimeType: String?,
+        statusCode: Int?,
+        headers: Map<String, String>,
+        source: String,
+    ): NetworkSemantic {
+        val parsed = runCatching { Uri.parse(url) }.getOrNull()
+        val host = parsed?.host?.lowercase(Locale.ROOT).orEmpty()
+        val path = parsed?.path.orEmpty()
+        val pathLower = path.lowercase(Locale.ROOT)
+        val queryLower = parsed?.encodedQuery?.lowercase(Locale.ROOT).orEmpty()
+        val lowerUrl = url.lowercase(Locale.ROOT)
+        val normalizedMethod = method.uppercase(Locale.ROOT)
+        val extension = path.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        val graphqlOperation = parsed?.getQueryParameter("operationName")
+            ?.takeIf { it.isNotBlank() }
+
+        val labels = linkedSetOf<String>()
+        val hasGraphql = pathLower.endsWith("/graphql") || lowerUrl.contains("operationname=")
+        if (hasGraphql) labels += "graphql"
+        if (!graphqlOperation.isNullOrBlank()) labels += "graphql_operation"
+
+        val authRelated = containsAnyToken(
+            text = "$host $pathLower $queryLower",
+            tokens = listOf(
+                "/auth",
+                "/identity",
+                "/oauth",
+                "/login",
+                "/signin",
+                "/logout",
+                "/token",
+                "/session",
+                "/userinfo",
+                "/userdetails",
+                "/fsk",
+                "refresh",
+            ),
+        )
+        if (authRelated) labels += "auth"
+        val graphqlLower = graphqlOperation?.lowercase(Locale.ROOT).orEmpty()
+
+        val searchRelated = containsAnyToken(
+            text = "$pathLower $queryLower",
+            tokens = listOf("/search", "/suche", "search=", "query=", "q=", "suggest"),
+        ) || (!graphqlOperation.isNullOrBlank() && graphqlOperation.contains("search", ignoreCase = true))
+        if (searchRelated) labels += "search"
+
+        val categoryRelated = containsAnyToken(
+            text = "$pathLower $queryLower",
+            tokens = listOf("/kategorie", "/kategorien", "/category", "/genre", "collectionid", "cluster"),
+        ) || (!graphqlOperation.isNullOrBlank() && (
+            graphqlLower.contains("cluster") ||
+                (graphqlLower.contains("collection") && !graphqlLower.contains("byvideo"))
+            ))
+        if (categoryRelated) labels += "category"
+
+        val detailRelated = containsAnyToken(
+            text = pathLower,
+            tokens = listOf("/serien/", "/serie/", "/film", "/episode", "/sendung", "/doku", "/reportage", "/video/"),
+        ) || (!graphqlOperation.isNullOrBlank() && (
+            graphqlOperation.contains("details", ignoreCase = true) ||
+                graphqlOperation.contains("video", ignoreCase = true) ||
+                graphqlOperation.contains("smartcollection", ignoreCase = true)
+            ))
+        if (detailRelated) labels += "detail"
+
+        val liveRelated = containsAnyToken(
+            text = "$pathLower $queryLower",
+            tokens = listOf("/live", "/livetv", "onair", "/epg"),
+        ) || (!graphqlOperation.isNullOrBlank() && (
+            graphqlOperation.contains("activelive", ignoreCase = true) ||
+                graphqlOperation.contains("epg", ignoreCase = true)
+            ))
+        if (liveRelated) labels += "live"
+
+        val playbackByPath = containsAnyToken(
+            text = "$host $pathLower $queryLower",
+            tokens = listOf("/tmd/", "/ptmd/", "manifest", "playlist", "/stream/", "playbackhistory", "seamless-view-entries"),
+        )
+        val playbackByExt = extension in setOf("webm", "m3u8", "mpd", "m4s", "mp4", "ts", "aac", "m4a", "m4v")
+        val playbackByMime = mimeType?.lowercase(Locale.ROOT).orEmpty().let { mime ->
+            mime.startsWith("video/") ||
+                mime.startsWith("audio/") ||
+                mime.contains("mpegurl") ||
+                mime.contains("dash")
+        }
+        val playbackRelated = playbackByPath || playbackByExt || playbackByMime
+        val playbackStrongSignal = pathLower.contains("/tmd/") ||
+            pathLower.contains("/ptmd/") ||
+            extension in setOf("webm", "m3u8", "mpd", "m4s", "mp4", "ts", "aac", "m4a", "m4v")
+        if (playbackRelated) labels += "playback"
+
+        val tracking = containsAnyToken(
+            text = "$host $pathLower $queryLower",
+            tokens = listOf("track", "analytic", "telemetry", "metrics", "/event", "/collect", "beacon"),
+        ) || source.contains("analytics", ignoreCase = true)
+        if (tracking) labels += "tracking"
+
+        val configRelated = containsAnyToken(
+            text = "$pathLower $queryLower",
+            tokens = listOf("/config", "/configuration", "/settings", "/bootstrap", "appconfig"),
+        )
+        if (configRelated) labels += "config"
+
+        val assetRelated = extension in setOf(
+            "css",
+            "js",
+            "mjs",
+            "map",
+            "woff",
+            "woff2",
+            "ttf",
+            "otf",
+            "eot",
+            "png",
+            "jpg",
+            "jpeg",
+            "gif",
+            "svg",
+            "ico",
+            "webp",
+            "avif",
+        ) || pathLower.contains("/_next/static/")
+        if (assetRelated) labels += "asset"
+
+        val routeKind = when {
+            path.isBlank() || path == "/" -> "home"
+            assetRelated -> "asset"
+            searchRelated -> "search"
+            detailRelated -> "detail"
+            categoryRelated -> "category"
+            playbackRelated -> "playback"
+            liveRelated -> "live"
+            authRelated -> "auth"
+            configRelated -> "config"
+            else -> "generic"
+        }
+
+        val classificationOverride = when {
+            playbackStrongSignal -> "playback"
+            hasGraphql && (graphqlLower.contains("activelive") || graphqlLower == "getepg") -> "live"
+            hasGraphql && graphqlLower == "getsmartcollectionidsbyvideoids" -> "detail"
+            else -> null
+        }
+
+        val classification = classificationOverride ?: when {
+            authRelated -> "auth"
+            searchRelated -> "search"
+            detailRelated -> "detail"
+            categoryRelated -> "category"
+            liveRelated -> "live"
+            playbackRelated -> "playback"
+            configRelated -> "config"
+            tracking -> "tracking"
+            assetRelated -> "asset"
+            else -> "generic"
+        }
+
+        val operation = when (classification) {
+            "auth" -> when {
+                pathLower.contains("/fsk/pin") -> "auth_pin_verify"
+                pathLower.contains("/fsk/verification") -> "auth_age_verification"
+                pathLower.contains("/userinfo") -> "auth_userinfo"
+                pathLower.contains("/userdetails") -> "auth_userdetails"
+                pathLower.contains("logout") -> "auth_logout"
+                pathLower.contains("login") || pathLower.contains("signin") -> "auth_login"
+                pathLower.contains("refresh") || pathLower.contains("token") -> "auth_token_refresh"
+                else -> "auth_request"
+            }
+
+            "search" -> if (hasGraphql) "search_graphql_query" else "search_request"
+            "category" -> if (hasGraphql) "category_graphql_query" else "category_browse"
+            "detail" -> if (hasGraphql) "detail_graphql_query" else "detail_load"
+            "live" -> if (hasGraphql) "live_catalog_query" else "live_load"
+            "playback" -> when {
+                pathLower.contains("/playbackhistory") || pathLower.contains("seamless-view-entries") -> "playback_history_sync"
+                pathLower.contains("/tmd/") || pathLower.contains("/ptmd/") || pathLower.contains("manifest") || extension in setOf("m3u8", "mpd") -> "playback_manifest_fetch"
+                extension in setOf("webm", "mp4", "m4s", "ts", "aac", "m4a", "m4v") -> "playback_media_segment"
+                else -> "playback_request"
+            }
+
+            "config" -> "config_fetch"
+            "tracking" -> "tracking_event"
+            "asset" -> "asset_fetch"
+            else -> if (normalizedMethod == "POST" && hasGraphql) "graphql_query" else "network_request"
+        }
+
+        val mimeFamily = mimeType
+            ?.substringBefore('/')
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.lowercase(Locale.ROOT)
+        val mediaKind = when {
+            extension == "webm" || mimeType?.contains("webm", ignoreCase = true) == true -> "webm"
+            extension == "m3u8" || mimeType?.contains("mpegurl", ignoreCase = true) == true -> "hls_manifest"
+            extension == "mpd" || mimeType?.contains("dash", ignoreCase = true) == true -> "dash_manifest"
+            extension in setOf("m4s", "ts") -> "media_segment"
+            extension in setOf("mp4", "m4v") || mimeType?.contains("mp4", ignoreCase = true) == true -> "mp4"
+            else -> null
+        }
+        if (statusCode == 401 || statusCode == 403) labels += "auth_challenge"
+        if (statusCode != null && statusCode in 200..299) labels += "success"
+
+        return NetworkSemantic(
+            classification = classification,
+            operation = operation,
+            labels = labels.toList(),
+            graphqlOperation = graphqlOperation,
+            routeKind = routeKind,
+            mimeFamily = mimeFamily,
+            mediaKind = mediaKind,
+            tracking = tracking,
+            authRelated = authRelated,
+            playbackRelated = playbackRelated,
+        )
+    }
+
+    private fun emitDerivedAuthEvents(
+        context: Context,
+        semantic: NetworkSemantic,
+        statusCode: Int?,
+        url: String,
+        requestId: String?,
+        responseId: String?,
+        headers: Map<String, String>,
+    ) {
+        if (statusCode == 401 || statusCode == 403) {
+            logAuthEvent(
+                context = context,
+                operation = "auth_challenge",
+                payload = mapOf(
+                    "status_code" to statusCode,
+                    "url" to url,
+                    "request_id" to requestId,
+                    "response_id" to responseId,
+                ),
+            )
+            return
+        }
+
+        if (semantic.authRelated && statusCode != null && statusCode in 200..299) {
+            logAuthEvent(
+                context = context,
+                operation = "${semantic.operation}_success",
+                payload = mapOf(
+                    "status_code" to statusCode,
+                    "url" to url,
+                    "request_id" to requestId,
+                    "response_id" to responseId,
+                ),
+            )
+        }
+
+        if ((semantic.authRelated || semantic.playbackRelated) &&
+            headers.keys.any { it.equals("set-cookie", ignoreCase = true) || it.contains("token", ignoreCase = true) }
+        ) {
+            logAuthEvent(
+                context = context,
+                operation = "token_or_cookie_updated",
+                payload = mapOf(
+                    "url" to url,
+                    "request_id" to requestId,
+                    "response_id" to responseId,
+                    "headers_present" to headers.keys.map { it.lowercase(Locale.ROOT) },
+                ),
+            )
+        }
+    }
+
+    private fun containsAnyToken(text: String, tokens: List<String>): Boolean {
+        if (text.isBlank()) return false
+        val haystack = text.lowercase(Locale.ROOT)
+        return tokens.any { haystack.contains(it.lowercase(Locale.ROOT)) }
     }
 
     private fun pruneDedupRequests(nowMonoNs: Long) {

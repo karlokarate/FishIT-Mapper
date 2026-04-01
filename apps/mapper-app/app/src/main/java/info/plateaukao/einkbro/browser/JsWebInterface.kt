@@ -270,20 +270,6 @@ class JsWebInterface(private val webView: EBWebView) :
                 ),
             )
 
-            if (statusCode == 401 || statusCode == 403) {
-                RuntimeToolkitTelemetry.logAuthEvent(
-                    context = context,
-                    operation = "auth_state_changed",
-                    payload = mapOf(
-                        "status_code" to statusCode,
-                        "url" to url,
-                        "source" to "webview_js_bridge",
-                        "request_id" to requestId,
-                        "response_id" to responseId,
-                    ),
-                )
-            }
-
             responseHeaders.forEach { (headerKey, _) ->
                 if (shouldTrackProvenanceHeader(headerKey)) {
                     RuntimeToolkitTelemetry.logProvenanceEvent(
@@ -311,6 +297,81 @@ class JsWebInterface(private val webView: EBWebView) :
         }
     }
 
+    @JavascriptInterface
+    fun runtimeToolkitPlaybackEvent(rawJson: String?) {
+        if (rawJson.isNullOrBlank()) return
+        val context = webView.context.applicationContext
+        runCatching {
+            val event = JSONObject(rawJson)
+            val signal = event.optString("signal").ifBlank { "unknown" }.lowercase()
+            val mediaUrl = event.optString("mediaUrl").ifBlank { webView.url.orEmpty() }
+            val currentTime = optionalDouble(event, "currentTime")
+            val duration = optionalDouble(event, "duration")
+            val playbackRate = optionalDouble(event, "playbackRate")
+            val readyState = optionalInt(event, "readyState")
+            val networkState = optionalInt(event, "networkState")
+            val bufferedEnd = optionalDouble(event, "bufferedEnd")
+            val paused = event.optBoolean("paused", false)
+            val seeking = event.optBoolean("seeking", false)
+
+            val actionName = playbackActionName(
+                signal = signal,
+                seeking = seeking,
+                currentTime = currentTime,
+            )
+            val payload = mapOf(
+                "signal" to signal,
+                "playback_operation" to actionName,
+                "media_url" to mediaUrl,
+                "current_time" to currentTime,
+                "duration" to duration,
+                "playback_rate" to playbackRate,
+                "ready_state" to readyState,
+                "network_state" to networkState,
+                "buffered_end" to bufferedEnd,
+                "paused" to paused,
+                "seeking" to seeking,
+                "source" to "webview_js_playback",
+            )
+
+            if (isDiscretePlaybackSignal(signal)) {
+                val correlation = RuntimeToolkitTelemetry.beginUiAction(
+                    context = context,
+                    actionName = actionName,
+                    screenId = "browser",
+                    payload = payload + mapOf("result" to "started"),
+                )
+                RuntimeToolkitTelemetry.finishUiAction(
+                    context = context,
+                    correlation = correlation,
+                    actionName = actionName,
+                    result = "observed",
+                    payload = payload + mapOf("result" to "observed"),
+                )
+            } else {
+                RuntimeToolkitTelemetry.logUiObserved(
+                    context = context,
+                    actionName = actionName,
+                    payload = payload,
+                    screenId = "browser",
+                )
+            }
+
+            RuntimeToolkitTelemetry.logCorrelationEvent(
+                context = context,
+                operation = "playback_signal_correlated",
+                payload = payload,
+            )
+        }.onFailure { throwable ->
+            RuntimeToolkitTelemetry.logExtractionEvent(
+                context = context,
+                operation = "js_bridge_playback_event_failed",
+                payload = mapOf("message" to (throwable.message ?: "unknown")),
+            )
+            Log.w("JsWebInterface", "runtimeToolkitPlaybackEvent failed: ${throwable.message}")
+        }
+    }
+
     private fun jsonToStringMap(obj: JSONObject?): Map<String, String> {
         if (obj == null) return emptyMap()
         val out = linkedMapOf<String, String>()
@@ -327,6 +388,11 @@ class JsWebInterface(private val webView: EBWebView) :
         return runCatching { obj.getInt(key) }.getOrNull()
     }
 
+    private fun optionalDouble(obj: JSONObject, key: String): Double? {
+        if (!obj.has(key) || obj.isNull(key)) return null
+        return runCatching { obj.getDouble(key) }.getOrNull()
+    }
+
     private fun shouldTrackProvenanceHeader(headerKey: String): Boolean {
         val normalized = headerKey.lowercase()
         return normalized == "authorization" ||
@@ -334,6 +400,32 @@ class JsWebInterface(private val webView: EBWebView) :
             normalized == "set-cookie" ||
             normalized.contains("token") ||
             normalized.startsWith("x-")
+    }
+
+    private fun playbackActionName(
+        signal: String,
+        seeking: Boolean,
+        currentTime: Double?,
+    ): String {
+        return when (signal.lowercase()) {
+            "play" -> if ((currentTime ?: 0.0) > 0.75) "playback_resume" else "playback_start"
+            "pause" -> "playback_pause"
+            "seeking" -> "playback_seek_start"
+            "seeked" -> "playback_seek_complete"
+            "ended" -> "playback_stop"
+            "waiting" -> "playback_buffering"
+            "ratechange" -> "playback_rate_change"
+            "loadedmetadata" -> "playback_metadata_ready"
+            "timeupdate" -> if (seeking) "playback_seek_progress" else "playback_progress"
+            else -> "playback_signal_${signal.lowercase()}"
+        }
+    }
+
+    private fun isDiscretePlaybackSignal(signal: String): Boolean {
+        return when (signal.lowercase()) {
+            "play", "pause", "seeking", "seeked", "ended", "waiting", "ratechange", "loadedmetadata" -> true
+            else -> false
+        }
     }
 
     companion object {

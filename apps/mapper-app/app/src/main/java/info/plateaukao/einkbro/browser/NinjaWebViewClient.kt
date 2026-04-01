@@ -60,6 +60,7 @@ class EBWebViewClient(
     private val webContentPostProcessor = WebContentPostProcessor()
     private var hasAdBlock: Boolean = true
     private var activePageLoadCorrelation: RuntimeToolkitTelemetry.CorrelationContext? = null
+    private var activePageLoadActionName: String = "webview_navigation"
 
     private val adFilter: AdFilter = AdFilter.get()
 
@@ -86,11 +87,13 @@ class EBWebViewClient(
             adFilter.performScript(view, url)
         }
 
+        activePageLoadActionName = RuntimeToolkitTelemetry.navigationActionName(url)
+        val semanticPayload = RuntimeToolkitTelemetry.navigationSemanticPayload(url)
         activePageLoadCorrelation = RuntimeToolkitTelemetry.beginUiAction(
             context = context,
-            actionName = "webview_navigation",
+            actionName = activePageLoadActionName,
             screenId = "browser",
-            payload = mapOf(
+            payload = semanticPayload + mapOf(
                 "url" to url,
                 "result" to "started",
                 "source" to "webview",
@@ -164,15 +167,16 @@ class EBWebViewClient(
             RuntimeToolkitTelemetry.finishUiAction(
                 context = context,
                 correlation = correlation,
-                actionName = "webview_navigation",
+                actionName = activePageLoadActionName,
                 result = "ok",
-                payload = mapOf(
+                payload = RuntimeToolkitTelemetry.navigationSemanticPayload(url) + mapOf(
                     "url" to url,
                     "source" to "webview",
                 ),
             )
         }
         activePageLoadCorrelation = null
+        activePageLoadActionName = "webview_navigation"
         RuntimeToolkitTelemetry.recordCookieSnapshot(context, url)
     }
 
@@ -622,6 +626,74 @@ class EBWebViewClient(
                     window.androidApp.runtimeToolkitNetworkEvent(JSON.stringify(event));
                   } catch (_ignored) {}
                 }
+                function emitPlaybackEvent(event) {
+                  try {
+                    if (window.androidApp && typeof window.androidApp.runtimeToolkitPlaybackEvent === 'function') {
+                      window.androidApp.runtimeToolkitPlaybackEvent(JSON.stringify(event));
+                    }
+                  } catch (_ignored) {}
+                }
+                function mediaState(element, signal) {
+                  var mediaUrl = '';
+                  var currentTime = null;
+                  var duration = null;
+                  var playbackRate = null;
+                  var paused = null;
+                  var seeking = null;
+                  var readyState = null;
+                  var networkState = null;
+                  var bufferedEnd = null;
+                  try {
+                    mediaUrl = element.currentSrc || element.src || window.location.href;
+                    currentTime = (typeof element.currentTime === 'number') ? element.currentTime : null;
+                    duration = (typeof element.duration === 'number' && isFinite(element.duration)) ? element.duration : null;
+                    playbackRate = (typeof element.playbackRate === 'number') ? element.playbackRate : null;
+                    paused = !!element.paused;
+                    seeking = !!element.seeking;
+                    readyState = (typeof element.readyState === 'number') ? element.readyState : null;
+                    networkState = (typeof element.networkState === 'number') ? element.networkState : null;
+                    if (element.buffered && element.buffered.length > 0) {
+                      bufferedEnd = element.buffered.end(element.buffered.length - 1);
+                    }
+                  } catch (_ignored) {}
+                  return {
+                    signal: signal,
+                    mediaUrl: mediaUrl,
+                    currentTime: currentTime,
+                    duration: duration,
+                    playbackRate: playbackRate,
+                    paused: paused,
+                    seeking: seeking,
+                    readyState: readyState,
+                    networkState: networkState,
+                    bufferedEnd: bufferedEnd
+                  };
+                }
+                function installPlaybackHooks() {
+                  if (window.__mapperToolkitPlaybackHookInstalled) { return; }
+                  window.__mapperToolkitPlaybackHookInstalled = true;
+                  var watchedSignals = ['play', 'pause', 'seeking', 'seeked', 'waiting', 'ended', 'ratechange', 'loadedmetadata'];
+                  watchedSignals.forEach(function(signal) {
+                    document.addEventListener(signal, function(e) {
+                      var target = e && e.target;
+                      if (!target || typeof target.tagName !== 'string') { return; }
+                      if (String(target.tagName).toLowerCase() !== 'video' && String(target.tagName).toLowerCase() !== 'audio') { return; }
+                      emitPlaybackEvent(mediaState(target, signal));
+                    }, true);
+                  });
+                  document.addEventListener('timeupdate', function(e) {
+                    var target = e && e.target;
+                    if (!target || typeof target.tagName !== 'string') { return; }
+                    var tagName = String(target.tagName).toLowerCase();
+                    if (tagName !== 'video' && tagName !== 'audio') { return; }
+                    var now = Date.now();
+                    var last = Number(target.__mapperToolkitLastTimeUpdateTs || 0);
+                    if ((now - last) < 2000) { return; }
+                    target.__mapperToolkitLastTimeUpdateTs = now;
+                    emitPlaybackEvent(mediaState(target, 'timeupdate'));
+                  }, true);
+                }
+                installPlaybackHooks();
 
                 if (typeof window.fetch === 'function' && !window.__mapperToolkitFetchHookInstalled) {
                   window.__mapperToolkitFetchHookInstalled = true;

@@ -175,6 +175,47 @@ def event_host_class(row: Dict[str, Any]) -> str:
     return ""
 
 
+def event_source(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    val = payload.get("source")
+    if isinstance(val, str) and val:
+        return val
+    val = payload.get("capture_channel")
+    if isinstance(val, str) and val:
+        return val
+    return ""
+
+
+def request_is_response_observable(row: Dict[str, Any]) -> bool:
+    payload = event_payload(row)
+    explicit = payload.get("response_observable")
+    if isinstance(explicit, bool):
+        return explicit
+    source = event_source(row).lower()
+    if source.startswith("webview_js_bridge"):
+        return True
+    if source.startswith("native_replay_"):
+        return True
+    if source.startswith("webview_main_frame_html"):
+        return True
+    if "okhttp" in source:
+        return True
+    if source.startswith("webview"):
+        return False
+    return True
+
+
+def dedup_event_is_observable(row: Dict[str, Any]) -> bool:
+    payload = event_payload(row)
+    explicit = payload.get("response_observable")
+    if isinstance(explicit, bool):
+        return explicit
+    source = str(payload.get("source") or "").lower()
+    if source.startswith("webview"):
+        return False
+    return True
+
+
 def event_request_fingerprint(row: Dict[str, Any]) -> str:
     payload = event_payload(row)
     for key in ("request_fingerprint", "requestFingerprint"):
@@ -199,6 +240,44 @@ def event_mime(row: Dict[str, Any]) -> str:
         val = payload.get(key)
         if isinstance(val, str) and val:
             return val
+    return ""
+
+
+def event_request_classification(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    for key in ("request_classification", "response_classification", "classification"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return ""
+
+
+def event_request_operation(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    for key in ("request_operation", "response_operation", "operation"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return ""
+
+
+def event_semantic_labels(row: Dict[str, Any]) -> List[str]:
+    payload = event_payload(row)
+    val = payload.get("semantic_labels")
+    if isinstance(val, list):
+        out: List[str] = []
+        for item in val:
+            if isinstance(item, str) and item:
+                out.append(item)
+        return out
+    return []
+
+
+def event_action_name(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    val = payload.get("action_name")
+    if isinstance(val, str) and val:
+        return val
     return ""
 
 
@@ -326,6 +405,9 @@ def compact_request(row: Dict[str, Any]) -> Dict[str, Any]:
         "phase_id": event_phase_id(row),
         "host_class": event_host_class(row),
         "dedup_of": event_dedup_of(row),
+        "classification": event_request_classification(row),
+        "operation": event_request_operation(row),
+        "semantic_labels": event_semantic_labels(row),
         "screen_id": str(payload.get("screen_id") or payload.get("screenId") or ""),
         "tab_id": str(payload.get("tab_id") or payload.get("tabId") or ""),
     }
@@ -345,6 +427,9 @@ def compact_response(row: Dict[str, Any]) -> Dict[str, Any]:
         "mime": event_mime(row),
         "phase_id": event_phase_id(row),
         "host_class": event_host_class(row),
+        "classification": event_request_classification(row),
+        "operation": event_request_operation(row),
+        "semantic_labels": event_semantic_labels(row),
         "response_store_path": event_response_store_path(row),
     }
 
@@ -395,6 +480,36 @@ def build_correlation(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             if e.get("event_type") == "correlation_event"
             and str(event_payload(e).get("operation") or "") == "request_dedup"
         ]
+        ui_action_counter = Counter(
+            name for name in (event_action_name(item) for item in ui) if name
+        )
+        request_class_counter = Counter(
+            item for item in (event_request_classification(req) for req in request_events) if item
+        )
+        response_class_counter = Counter(
+            item for item in (event_request_classification(resp) for resp in response_events) if item
+        )
+        semantic_label_counter: Counter[str] = Counter()
+        for req in request_events:
+            semantic_label_counter.update(event_semantic_labels(req))
+        for resp in response_events:
+            semantic_label_counter.update(event_semantic_labels(resp))
+        chain_kind = "generic"
+        preferred_chain_classes = ["auth", "search", "category", "detail", "playback", "live", "config", "tracking", "asset"]
+        for candidate in preferred_chain_classes:
+            if request_class_counter.get(candidate, 0) > 0 or response_class_counter.get(candidate, 0) > 0:
+                chain_kind = candidate
+                break
+        if chain_kind == "generic":
+            ui_names = [name for name in ui_action_counter.keys()]
+            if any("playback" in name for name in ui_names):
+                chain_kind = "playback"
+            elif any("search" in name for name in ui_names):
+                chain_kind = "search"
+            elif any("category" in name for name in ui_names):
+                chain_kind = "category"
+            elif any("auth" in name for name in ui_names):
+                chain_kind = "auth"
 
         response_by_request_id: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         for response in response_events:
@@ -466,6 +581,7 @@ def build_correlation(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "trace_id": trace_id,
                 "action_id": action_id,
                 "phase_id": phase_id,
+                "chain_kind": chain_kind,
                 "host_scope": host_scope,
                 "generated_at_utc": utc_now(),
                 "linked_event_ids": [str(e.get("event_id") or "") for e in ordered if e.get("event_id")],
@@ -488,6 +604,11 @@ def build_correlation(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     "dedup_duplicate_count": dedup_duplicate_count,
                     "canonical_request_count": request_count,
                 },
+                "ui_action_names": [name for name, _ in ui_action_counter.most_common(20)],
+                "ui_action_counts": dict(ui_action_counter),
+                "request_classification_counts": dict(request_class_counter),
+                "response_classification_counts": dict(response_class_counter),
+                "semantic_label_counts": dict(semantic_label_counter),
                 "status_chain": status_chain,
                 "ui": ui[0] if ui else None,
                 "network": [e for e in ordered if str(e.get("event_type", "")).startswith("network_")],
@@ -1153,11 +1274,14 @@ def pipeline_quality_report(
         if req_id:
             response_by_request_id[req_id].append(response)
 
-    total_requests = len(request_rows)
+    total_requests_all = len(request_rows)
+    observable_request_rows = [row for row in request_rows if request_is_response_observable(row)]
+    request_rows_for_coverage = observable_request_rows if observable_request_rows else request_rows
+    total_requests = len(request_rows_for_coverage)
     matched_requests = 0
     relevant_requests = 0
     correlated_requests = 0
-    for request in request_rows:
+    for request in request_rows_for_coverage:
         req_id = event_request_id(request)
         action_id = str(request.get("action_id") or "")
         if action_id and action_id != "session_start":
@@ -1199,9 +1323,10 @@ def pipeline_quality_report(
         for row in rows
         if row.get("event_type") == "correlation_event"
         and str(event_payload(row).get("operation") or "") == "request_dedup"
+        and dedup_event_is_observable(row)
     ]
     dedup_refs = len(dedup_events)
-    logical_request_total = len(request_rows_all) + dedup_refs
+    logical_request_total = len(observable_request_rows) + dedup_refs
     duplicate_request_ratio = round((dedup_refs / logical_request_total), 6) if logical_request_total > 0 else 0.0
 
     required_phases = ["home_probe", "search_probe", "detail_probe", "playback_probe"]
@@ -1297,6 +1422,8 @@ def pipeline_quality_report(
         "pipeline_ready": pipeline_ready,
         "metrics": {
             "request_count": total_requests,
+            "request_count_total": total_requests_all,
+            "request_count_observable": len(observable_request_rows),
             "request_count_all": len(request_rows_all),
             "matched_request_count": matched_requests,
             "response_coverage": response_coverage,
