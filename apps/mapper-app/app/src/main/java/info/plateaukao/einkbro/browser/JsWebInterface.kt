@@ -209,6 +209,8 @@ class JsWebInterface(private val webView: EBWebView) :
             val requestHeaders = jsonToStringMap(event.optJSONObject("requestHeaders"))
             val responseHeaders = jsonToStringMap(event.optJSONObject("headers"))
             val bodyPreview = event.optString("bodyPreview").ifBlank { null }?.take(MAX_BRIDGE_BODY_PREVIEW_CHARS)
+            val bodyPreviewTruncated = event.optBoolean("bodyPreviewTruncated", false)
+            val bodyOriginalLength = optionalInt(event, "bodyOriginalLength")
             val mimeType = event.optString("mimeType").ifBlank { null }
             val reason = event.optString("reason").ifBlank { null }
             val statusCode = optionalInt(event, "status")
@@ -251,6 +253,14 @@ class JsWebInterface(private val webView: EBWebView) :
 
             val requestId = jsRequestId?.let { jsRequestMap.remove(it) }
                 ?: RuntimeToolkitTelemetry.resolveRecentRequestId(url = url, method = method)
+            val rawBody = bodyPreview?.toByteArray(Charsets.UTF_8)
+            val captureLimitBytes = rawBody?.size ?: 0
+            val hasContentLengthHeader = responseHeaders.keys.any { it.equals("content-length", ignoreCase = true) }
+            val contentLengthHeader = if (!hasContentLengthHeader && bodyOriginalLength != null && bodyOriginalLength > 0) {
+                bodyOriginalLength.toString()
+            } else {
+                null
+            }
 
             val responseId = RuntimeToolkitTelemetry.logNetworkResponse(
                 context = context,
@@ -261,12 +271,16 @@ class JsWebInterface(private val webView: EBWebView) :
                 reason = reason,
                 mimeType = mimeType,
                 headers = responseHeaders,
-                rawBody = bodyPreview?.toByteArray(Charsets.UTF_8),
+                rawBody = rawBody,
                 requestId = requestId,
                 payload = mapOf(
                     "bridge_stage" to stage,
                     "bridge_request_id" to jsRequestId,
                     "bridge_observed" to true,
+                    "capture_truncated" to bodyPreviewTruncated,
+                    "capture_limit_bytes" to if (bodyPreviewTruncated) captureLimitBytes else 0,
+                    "stored_size_bytes" to captureLimitBytes,
+                    "content_length_header" to contentLengthHeader,
                 ),
             )
 
@@ -429,7 +443,7 @@ class JsWebInterface(private val webView: EBWebView) :
     }
 
     companion object {
-        private const val MAX_BRIDGE_BODY_PREVIEW_CHARS = 16 * 1024
+        private const val MAX_BRIDGE_BODY_PREVIEW_CHARS = 4 * 1024 * 1024
     }
 }
 

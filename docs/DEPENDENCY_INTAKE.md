@@ -141,3 +141,36 @@ Integration policy: `vendor_snapshot_pinned_commit`
 - status: `planned`
 - notes: Optional timing and latency traces for UI↔backend correlation windows.
 
+### dep-detekt - Detekt
+- kind: `tool`
+- source_url: `https://github.com/detekt/detekt`
+- target_module: `tooling_android_quality`
+- integration_mode: `gradle_plugin_hook`
+- pinned_ref: `1.23.8`
+- local_path: `apps/mapper-app/tooling/detekt`
+- license: `Apache-2.0`
+- status: `planned`
+- notes: Prepared integration point for static Kotlin analysis in mapper cutover quality gates.
+
+### dep-dependency-analysis-gradle-plugin - AutonomousApps dependency-analysis-gradle-plugin
+- kind: `tool`
+- source_url: `https://github.com/autonomousapps/dependency-analysis-gradle-plugin`
+- target_module: `tooling_android_quality`
+- integration_mode: `gradle_plugin_hook`
+- pinned_ref: `2.11.0`
+- local_path: `apps/mapper-app/tooling/dependency-analysis-gradle-plugin`
+- license: `Apache-2.0`
+- status: `planned`
+- notes: Prepared integration point for dependency usage and ABI analysis.
+
+### dep-gradle-doctor - Gradle Doctor
+- kind: `tool`
+- source_url: `https://github.com/runningcode/gradle-doctor`
+- target_module: `tooling_android_quality`
+- integration_mode: `gradle_plugin_hook`
+- pinned_ref: `0.10.0`
+- local_path: `apps/mapper-app/tooling/gradle-doctor`
+- license: `Apache-2.0`
+- status: `planned`
+- notes: Prepared integration point for build-health diagnostics in CI and local workflows.
+

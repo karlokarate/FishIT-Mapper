@@ -356,7 +356,7 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
     }
 
     private fun handleSetProbePhase(context: Context, intent: Intent) {
-        val phaseId = intent.getStringExtra(EXTRA_PHASE_ID).orEmpty().ifBlank { "unscoped" }
+        val phaseId = intent.getStringExtra(EXTRA_PHASE_ID).orEmpty().ifBlank { "background_noise" }
         val transition = intent.getStringExtra(EXTRA_TRANSITION).orEmpty().ifBlank { "start" }
         RuntimeToolkitTelemetry.logProbePhaseEvent(
             context = context,
@@ -484,7 +484,7 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
             reason = response.statusText ?: response.failureType,
             mimeType = mimeType,
             headers = response.headers,
-            rawBody = response.body.takeIf { it.isNotEmpty() && it.size <= 1024 * 1024 },
+            rawBody = response.body.takeIf { it.isNotEmpty() },
             requestId = requestId,
             payload = mapOf(
                 "transport" to response.transport,

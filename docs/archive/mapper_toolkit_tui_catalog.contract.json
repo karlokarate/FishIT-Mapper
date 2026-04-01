@@ -244,7 +244,9 @@
             "home_probe",
             "search_probe",
             "detail_probe",
-            "playback_probe"
+            "playback_probe",
+            "auth_probe",
+            "background_noise"
           ]
         },
         {
@@ -743,7 +745,8 @@
             "search_probe",
             "detail_probe",
             "playback_probe",
-            "unscoped"
+            "auth_probe",
+            "background_noise"
           ]
         },
         {
@@ -754,7 +757,13 @@
           "flag": "--host-class",
           "choices": [
             "target",
+            "provider_bootstrap",
+            "browser_bootstrap",
+            "google_noise",
+            "analytics_noise",
+            "ad_noise",
             "external_noise",
+            "background_noise",
             "ignored",
             "unknown"
           ]
@@ -803,7 +812,8 @@
             "search_probe",
             "detail_probe",
             "playback_probe",
-            "unscoped"
+            "auth_probe",
+            "background_noise"
           ]
         },
         {
@@ -1623,7 +1633,8 @@
             "search_probe",
             "detail_probe",
             "playback_probe",
-            "unscoped"
+            "auth_probe",
+            "background_noise"
           ]
         }
       ]

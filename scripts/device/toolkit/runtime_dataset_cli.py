@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
 import hashlib
 import json
@@ -13,12 +14,86 @@ import re
 import shutil
 import subprocess
 import tarfile
+import urllib.error
+import urllib.request
 from collections import Counter, defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 
 SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+PHASE_HOME = "home_probe"
+PHASE_SEARCH = "search_probe"
+PHASE_DETAIL = "detail_probe"
+PHASE_PLAYBACK = "playback_probe"
+PHASE_AUTH = "auth_probe"
+PHASE_BACKGROUND = "background_noise"
+
+VALID_PHASES = {
+    PHASE_HOME,
+    PHASE_SEARCH,
+    PHASE_DETAIL,
+    PHASE_PLAYBACK,
+    PHASE_AUTH,
+    PHASE_BACKGROUND,
+}
+
+SCORABLE_PHASES = {PHASE_HOME, PHASE_SEARCH, PHASE_DETAIL, PHASE_PLAYBACK, PHASE_AUTH}
+
+PHASE_PRIORITY = {
+    PHASE_PLAYBACK: 6,
+    PHASE_DETAIL: 5,
+    PHASE_SEARCH: 4,
+    PHASE_HOME: 3,
+    PHASE_AUTH: 2,
+    PHASE_BACKGROUND: 1,
+}
+
+HOST_CLASS_TARGET = "target"
+HOST_CLASS_PROVIDER_BOOTSTRAP = "provider_bootstrap"
+HOST_CLASS_BROWSER_BOOTSTRAP = "browser_bootstrap"
+HOST_CLASS_GOOGLE_NOISE = "google_noise"
+HOST_CLASS_ANALYTICS_NOISE = "analytics_noise"
+HOST_CLASS_AD_NOISE = "ad_noise"
+HOST_CLASS_EXTERNAL_NOISE = "external_noise"
+HOST_CLASS_BACKGROUND_NOISE = "background_noise"
+HOST_CLASS_IGNORED = "ignored"
+HOST_CLASS_UNKNOWN = "unknown"
+
+HOST_SCOPE_BUCKETS = [
+    HOST_CLASS_TARGET,
+    HOST_CLASS_PROVIDER_BOOTSTRAP,
+    HOST_CLASS_BROWSER_BOOTSTRAP,
+    HOST_CLASS_GOOGLE_NOISE,
+    HOST_CLASS_ANALYTICS_NOISE,
+    HOST_CLASS_AD_NOISE,
+    HOST_CLASS_EXTERNAL_NOISE,
+    HOST_CLASS_BACKGROUND_NOISE,
+    HOST_CLASS_IGNORED,
+    HOST_CLASS_UNKNOWN,
+]
+
+ACTIVE_REPLAY_ROLLUP_TIMEOUT_MS = 2_000
+
+NON_SIGNAL_HOST_CLASSES = {
+    HOST_CLASS_GOOGLE_NOISE,
+    HOST_CLASS_ANALYTICS_NOISE,
+    HOST_CLASS_AD_NOISE,
+    HOST_CLASS_EXTERNAL_NOISE,
+    HOST_CLASS_BACKGROUND_NOISE,
+    HOST_CLASS_IGNORED,
+}
+
+PROVENANCE_TARGET_NAMES = {
+    "zdf-app-id": ("zdf-app-id", "x-zdf-app-id"),
+    "api-auth": ("api-auth", "x-api-auth", "authorization"),
+    "userSegment": ("usersegment", "x-usersegment"),
+    "abGroup": ("abgroup", "x-ab-group"),
+    "cookies": ("cookie",),
+    "referer": ("referer",),
+    "origin": ("origin",),
+}
 
 
 def utc_now() -> str:
@@ -129,6 +204,218 @@ def event_payload(row: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def safe_int(value: Any, default: int = 0) -> int:
+    if value is None:
+        return default
+    try:
+        return int(str(value).strip())
+    except Exception:
+        return default
+
+
+def normalize_phase_id(value: Any) -> str:
+    phase = str(value or "").strip()
+    if phase in VALID_PHASES:
+        return phase
+    if phase == "unscoped":
+        return PHASE_BACKGROUND
+    return ""
+
+
+def normalize_host(host: str) -> str:
+    return host.lower().strip().strip(".")
+
+
+def normalized_url_components(url: str) -> Tuple[str, str, str, str]:
+    if not url:
+        return ("", "", "", "")
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return ("", "", "", "")
+    scheme = str(parsed.scheme or "").lower()
+    host = normalize_host(str(parsed.netloc or ""))
+    path = str(parsed.path or "/")
+    if not path.startswith("/"):
+        path = f"/{path}"
+    query = str(parsed.query or "")
+    return (scheme, host, path, query)
+
+
+def normalized_url_for_parts(scheme: str, host: str, path: str, query: str) -> str:
+    if not scheme and not host:
+        return path or ""
+    base = f"{scheme}://{host}{path or '/'}"
+    if query:
+        return f"{base}?{query}"
+    return base
+
+
+def parse_query_params(url: str) -> Dict[str, List[str]]:
+    if not url:
+        return {}
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return {}
+    out: Dict[str, List[str]] = defaultdict(list)
+    for key, value in parse_qsl(str(parsed.query or ""), keep_blank_values=True):
+        out[str(key)].append(str(value))
+    return dict(out)
+
+
+def canonical_target_site_id(host: str) -> str:
+    host = normalize_host(host)
+    if not host:
+        return "unknown_target"
+    parts = host.split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[-2:])
+    return host
+
+
+def looks_like_google_noise(host: str, url: str) -> bool:
+    host = normalize_host(host)
+    value = f"{host} {url}".lower()
+    hints = [
+        "google.",
+        "google-",
+        "gstatic.com",
+        "googlesyndication",
+        "googleadservices",
+        "doubleclick.net",
+        "googletagmanager",
+    ]
+    return any(hint in value for hint in hints)
+
+
+def looks_like_analytics_noise(host: str, url: str) -> bool:
+    value = f"{host} {url}".lower()
+    hints = [
+        "analytics",
+        "telemetry",
+        "segment.io",
+        "newrelic",
+        "sentry",
+        "metrics",
+        "pixel",
+    ]
+    return any(hint in value for hint in hints)
+
+
+def looks_like_ad_noise(host: str, url: str) -> bool:
+    value = f"{host} {url}".lower()
+    hints = ["adservice", "ads.", "/ads", "adnxs", "taboola", "outbrain"]
+    return any(hint in value for hint in hints)
+
+
+def looks_like_browser_bootstrap(url: str, path: str, source: str) -> bool:
+    lower = f"{url} {path} {source}".lower()
+    hints = [
+        "_next/static",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".css",
+        "favicon",
+        "chrome://",
+        "about:blank",
+    ]
+    return any(hint in lower for hint in hints)
+
+
+def infer_phase_from_hints(url: str, method: str, operation: str, classification: str) -> str:
+    lower = f"{url} {method} {operation} {classification}".lower()
+    if any(token in lower for token in ("playback", "resolver", ".m3u8", ".mpd", "stream")):
+        return PHASE_PLAYBACK
+    if any(token in lower for token in ("search", "query=", "q=", "suggest")):
+        return PHASE_SEARCH
+    if any(token in lower for token in ("detail", "episode", "content/", "asset/")):
+        return PHASE_DETAIL
+    if any(token in lower for token in ("auth", "token", "login", "refresh", "session")):
+        return PHASE_AUTH
+    if method == "GET":
+        return PHASE_HOME
+    return PHASE_BACKGROUND
+
+
+def pick_dominant_phase(counter: Counter[str]) -> str:
+    if not counter:
+        return PHASE_BACKGROUND
+    ordered = sorted(
+        counter.items(),
+        key=lambda item: (item[1], PHASE_PRIORITY.get(item[0], 0)),
+        reverse=True,
+    )
+    return str(ordered[0][0])
+
+
+def reduce_headers(headers: Dict[str, str]) -> Dict[str, str]:
+    if not headers:
+        return {}
+    reduced: Dict[str, str] = {}
+    for key, value in headers.items():
+        lower = str(key).lower().strip()
+        if not lower:
+            continue
+        if lower in {"cookie", "set-cookie", "authorization"}:
+            reduced[lower] = "__redacted__"
+            continue
+        compact = str(value).strip()
+        if len(compact) > 120:
+            compact = compact[:120]
+        reduced[lower] = compact
+    return reduced
+
+
+def infer_graphql_operation_name(payload: Dict[str, Any]) -> str:
+    op = str(payload.get("graphql_operation_name") or payload.get("graphqlOperationName") or "")
+    if op:
+        return op
+    body_preview = str(payload.get("body_preview") or payload.get("body") or "")
+    if body_preview:
+        try:
+            loaded = json.loads(body_preview)
+            if isinstance(loaded, dict):
+                candidate = str(loaded.get("operationName") or "")
+                if candidate:
+                    return candidate
+        except Exception:
+            pass
+    query = str(payload.get("query") or "")
+    if "graphql" in query.lower():
+        return "graphql_query"
+    return ""
+
+
+def summarize_request_body(payload: Dict[str, Any]) -> Dict[str, Any]:
+    body = payload.get("body")
+    preview = payload.get("body_preview")
+    text = ""
+    if isinstance(body, str) and body:
+        text = body
+    elif isinstance(preview, str) and preview:
+        text = preview
+    if not text:
+        size = safe_int(payload.get("body_size_bytes") or payload.get("bodySizeBytes"), default=0)
+        return {"present": size > 0, "size_bytes": max(size, 0), "kind": "empty"}
+    trimmed = text.strip()
+    kind = "text"
+    if trimmed.startswith("{") or trimmed.startswith("["):
+        kind = "json"
+    elif trimmed.startswith("<"):
+        kind = "markup"
+    return {
+        "present": True,
+        "size_bytes": len(text.encode("utf-8", errors="replace")),
+        "kind": kind,
+        "preview": trimmed[:200],
+    }
+
+
 def event_url(row: Dict[str, Any]) -> str:
     payload = event_payload(row)
     for key in ("url", "request_url", "requestUrl", "target_url", "targetUrl"):
@@ -162,8 +449,16 @@ def event_phase_id(row: Dict[str, Any]) -> str:
     for key in ("phase_id", "phaseId"):
         val = payload.get(key)
         if isinstance(val, str) and val:
-            return val
-    return ""
+            normalized = normalize_phase_id(val)
+            if normalized:
+                return normalized
+    inferred = infer_phase_from_hints(
+        url=event_url(row),
+        method=event_method(row),
+        operation=event_request_operation(row),
+        classification=event_request_classification(row),
+    )
+    return inferred or PHASE_BACKGROUND
 
 
 def event_host_class(row: Dict[str, Any]) -> str:
@@ -172,7 +467,7 @@ def event_host_class(row: Dict[str, Any]) -> str:
         val = payload.get(key)
         if isinstance(val, str) and val:
             return val
-    return ""
+    return HOST_CLASS_UNKNOWN
 
 
 def event_source(row: Dict[str, Any]) -> str:
@@ -281,6 +576,43 @@ def event_action_name(row: Dict[str, Any]) -> str:
     return ""
 
 
+def compact_ui_action_events(events: List[Dict[str, Any]], dedup_window_seconds: float = 0.75) -> List[Dict[str, Any]]:
+    if not events:
+        return []
+
+    out: List[Dict[str, Any]] = []
+    last_signature: Tuple[str, str, str, str, str] = ("", "", "", "", "")
+    last_ts = 0.0
+
+    for row in sorted(events, key=event_sort_key):
+        payload = event_payload(row)
+        signature = (
+            event_action_name(row),
+            str(payload.get("result") or ""),
+            str(payload.get("screen_id") or payload.get("screenId") or ""),
+            str(payload.get("tab_id") or payload.get("tabId") or ""),
+            str(payload.get("phase_id") or payload.get("phaseId") or ""),
+        )
+        ts = ts_to_epoch_seconds(str(row.get("ts_utc") or ""))
+        is_duplicate = (
+            bool(out)
+            and signature == last_signature
+            and (
+                last_ts <= 0.0
+                or ts <= 0.0
+                or abs(ts - last_ts) <= dedup_window_seconds
+            )
+        )
+        if is_duplicate:
+            continue
+
+        out.append(row)
+        last_signature = signature
+        last_ts = ts
+
+    return out
+
+
 def event_request_id(row: Dict[str, Any]) -> str:
     payload = event_payload(row)
     for key in ("request_id", "requestId", "req_id"):
@@ -344,6 +676,457 @@ def normalize_response_store_path(raw_path: str) -> str:
     return pathlib.Path(normalized).name
 
 
+def load_runtime_state(runtime_dir: Optional[pathlib.Path]) -> Dict[str, Any]:
+    if runtime_dir is None:
+        return {}
+    state_file = runtime_dir / "runtime_state.json"
+    if not state_file.exists():
+        return {}
+    try:
+        payload = json.loads(state_file.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if isinstance(payload, dict):
+        return payload
+    return {}
+
+
+def discover_target_hosts(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib.Path]) -> List[str]:
+    state = load_runtime_state(runtime_dir)
+    runtime_cfg = state.get("runtime") if isinstance(state.get("runtime"), dict) else {}
+    host_family = str(runtime_cfg.get("targetHostFamily") or "")
+    hosts: List[str] = []
+    if host_family:
+        split = re.split(r"[,\s;]+", host_family)
+        hosts = [normalize_host(item) for item in split if normalize_host(item)]
+    if hosts:
+        return sorted(set(hosts))
+
+    counter: Counter[str] = Counter()
+    for row in rows:
+        if str(row.get("event_type") or "") != "network_request_event":
+            continue
+        url = event_url(row)
+        _, host, _, _ = normalized_url_components(url)
+        if not host:
+            continue
+        existing = event_host_class(row)
+        if existing and existing != HOST_CLASS_TARGET:
+            continue
+        if looks_like_google_noise(host, url):
+            continue
+        counter[host] += 1
+    return [host for host, _ in counter.most_common(3)]
+
+
+def is_target_host(host: str, target_hosts: List[str]) -> bool:
+    host = normalize_host(host)
+    if not host:
+        return False
+    host_site_id = canonical_target_site_id(host)
+    for target in target_hosts:
+        normalized_target = normalize_host(target)
+        if not normalized_target:
+            continue
+        if host == normalized_target or host.endswith(f".{normalized_target}"):
+            return True
+        # Family-level fallback prevents rare same-site target hosts from being
+        # misclassified as external_noise when top-N host discovery is capped.
+        if canonical_target_site_id(normalized_target) == host_site_id:
+            return True
+    return False
+
+
+def resolve_host_class(
+    host: str,
+    path: str,
+    url: str,
+    source: str,
+    phase_id: str,
+    target_hosts: List[str],
+    original_host_class: str,
+) -> str:
+    normalized_original = str(original_host_class or "").strip()
+    if (
+        normalized_original == HOST_CLASS_PROVIDER_BOOTSTRAP
+        and host
+        and not looks_like_google_noise(host, url)
+        and not looks_like_analytics_noise(host, url)
+        and not looks_like_ad_noise(host, url)
+    ):
+        return HOST_CLASS_PROVIDER_BOOTSTRAP
+    if (
+        normalized_original == HOST_CLASS_TARGET
+        and host
+        and not looks_like_google_noise(host, url)
+        and not looks_like_analytics_noise(host, url)
+        and not looks_like_ad_noise(host, url)
+    ):
+        if looks_like_browser_bootstrap(url=url, path=path, source=source):
+            return HOST_CLASS_PROVIDER_BOOTSTRAP
+        return HOST_CLASS_TARGET
+    if is_target_host(host, target_hosts):
+        if looks_like_browser_bootstrap(url=url, path=path, source=source):
+            return HOST_CLASS_PROVIDER_BOOTSTRAP
+        return HOST_CLASS_TARGET
+
+    if looks_like_google_noise(host, url):
+        return HOST_CLASS_GOOGLE_NOISE
+    if looks_like_ad_noise(host, url):
+        return HOST_CLASS_AD_NOISE
+    if looks_like_analytics_noise(host, url):
+        return HOST_CLASS_ANALYTICS_NOISE
+    if looks_like_browser_bootstrap(url=url, path=path, source=source):
+        return HOST_CLASS_BROWSER_BOOTSTRAP
+    if phase_id == PHASE_BACKGROUND:
+        return HOST_CLASS_BACKGROUND_NOISE
+    if normalized_original in {HOST_CLASS_IGNORED, HOST_CLASS_UNKNOWN}:
+        return normalized_original
+    if host:
+        return HOST_CLASS_EXTERNAL_NOISE
+    return HOST_CLASS_UNKNOWN
+
+
+def canonical_request_key(payload: Dict[str, Any], scheme: str, host: str, path: str, query: str) -> str:
+    fingerprint = str(payload.get("request_fingerprint") or payload.get("requestFingerprint") or "").strip()
+    if fingerprint:
+        return f"fp:{fingerprint}"
+    method = str(payload.get("method") or payload.get("http_method") or "GET").upper()
+    body_summary = summarize_request_body(payload)
+    compact_headers = sorted(reduce_headers(event_headers({"payload": payload})).keys())
+    return stable_hash(
+        {
+            "method": method,
+            "scheme": scheme,
+            "host": host,
+            "path": path,
+            "query": query,
+            "headers": compact_headers,
+            "body_kind": body_summary.get("kind"),
+            "operation": str(payload.get("request_operation") or ""),
+        }
+    )
+
+
+def request_flags(payload: Dict[str, Any], phase_id: str, url: str) -> Dict[str, bool]:
+    lowered = f"{url} {payload.get('request_operation') or ''} {payload.get('graphql_operation_name') or ''}".lower()
+    return {
+        "auth": phase_id == PHASE_AUTH or "auth" in lowered or "token" in lowered,
+        "playback": phase_id == PHASE_PLAYBACK or any(token in lowered for token in ("playback", ".m3u8", ".mpd", "resolver")),
+        "search": phase_id == PHASE_SEARCH or "search" in lowered or "query=" in lowered,
+        "detail": phase_id == PHASE_DETAIL or "detail" in lowered or "content/" in lowered,
+    }
+
+
+def pick_phase_for_event(
+    row: Dict[str, Any],
+    current_phase: str,
+) -> str:
+    payload = event_payload(row)
+    raw_phase = str(payload.get("phase_id") or payload.get("phaseId") or "").strip()
+    explicit = normalize_phase_id(raw_phase)
+    if raw_phase == "unscoped":
+        explicit = ""
+    if explicit:
+        return explicit
+    inferred = infer_phase_from_hints(
+        url=event_url(row),
+        method=event_method(row),
+        operation=event_request_operation(row),
+        classification=event_request_classification(row),
+    )
+    if inferred:
+        return inferred
+    if current_phase:
+        return current_phase
+    return PHASE_BACKGROUND
+
+
+def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib.Path] = None) -> List[Dict[str, Any]]:
+    normalized_rows: List[Dict[str, Any]] = [copy.deepcopy(row) for row in rows]
+    normalized_rows.sort(key=event_sort_key)
+
+    target_hosts = discover_target_hosts(normalized_rows, runtime_dir=runtime_dir)
+    primary_host = target_hosts[0] if target_hosts else ""
+    target_site_id = canonical_target_site_id(primary_host)
+
+    active_phase = PHASE_BACKGROUND
+    canonical_request_id_by_key: Dict[str, str] = {}
+    canonical_request_event_by_key: Dict[str, str] = {}
+    request_id_aliases: Dict[str, str] = {}
+    request_context_by_id: Dict[str, Dict[str, Any]] = {}
+
+    for row in normalized_rows:
+        payload = event_payload(row)
+        if not payload:
+            payload = {}
+            row["payload"] = payload
+
+        event_type = str(row.get("event_type") or "")
+        transition = str(payload.get("transition") or "").strip().lower()
+        if event_type == "probe_phase_event":
+            phase = normalize_phase_id(payload.get("phase_id") or payload.get("phaseId")) or active_phase or PHASE_BACKGROUND
+            if transition in {"", "mark"}:
+                transition = "mark"
+            payload["transition"] = transition
+            payload["phase_id"] = phase
+            if transition in {"start", "resume", "enter"}:
+                active_phase = phase
+            elif transition in {"stop", "exit", "pause"}:
+                active_phase = PHASE_BACKGROUND
+            payload["target_site_id"] = target_site_id
+            payload["normalized_host"] = ""
+            payload["normalized_path"] = "/"
+            payload["normalized_scheme"] = ""
+            payload["host_class"] = HOST_CLASS_BACKGROUND_NOISE
+            continue
+
+        phase_id = pick_phase_for_event(row, active_phase)
+        payload["phase_id"] = phase_id
+
+        url = event_url(row)
+        scheme, host, path, query = normalized_url_components(url)
+        payload["normalized_scheme"] = scheme
+        payload["normalized_host"] = host
+        payload["normalized_path"] = path
+        payload["normalized_url"] = str(payload.get("normalized_url") or normalized_url_for_parts(scheme, host, path, query))
+        payload["target_site_id"] = target_site_id
+
+        host_class = resolve_host_class(
+            host=host,
+            path=path,
+            url=url,
+            source=event_source(row),
+            phase_id=phase_id,
+            target_hosts=target_hosts,
+            original_host_class=event_host_class(row),
+        )
+        payload["host_class"] = host_class
+
+        if event_type == "network_request_event":
+            method = event_method(row) or "GET"
+            payload["method"] = method
+            payload["query_params"] = parse_query_params(url)
+            payload["request_operation"] = str(payload.get("request_operation") or payload.get("operation") or "")
+            payload["graphql_operation_name"] = infer_graphql_operation_name(payload)
+            payload["request_body_summary"] = summarize_request_body(payload)
+            payload["headers_reduced"] = reduce_headers(event_headers(row))
+            payload["correlation_refs"] = {
+                "trace_id": str(row.get("trace_id") or ""),
+                "action_id": str(row.get("action_id") or ""),
+                "event_id": str(row.get("event_id") or ""),
+            }
+            payload["request_flags"] = request_flags(payload, phase_id=phase_id, url=url)
+            payload["request_fingerprint"] = str(
+                payload.get("request_fingerprint")
+                or payload.get("requestFingerprint")
+                or stable_hash(
+                    {
+                        "method": method,
+                        "scheme": scheme,
+                        "host": host,
+                        "path": path,
+                        "query": query,
+                        "request_operation": payload.get("request_operation"),
+                        "graphql_operation_name": payload.get("graphql_operation_name"),
+                        "body_kind": (payload.get("request_body_summary") or {}).get("kind"),
+                    }
+                )
+            )
+
+            original_request_id = str(payload.get("request_id") or payload.get("requestId") or payload.get("req_id") or row.get("event_id") or "").strip()
+            if not original_request_id:
+                original_request_id = f"req_auto_{stable_hash([row.get('event_id'), url, method])[:16]}"
+            payload["original_request_id"] = original_request_id
+            key = canonical_request_key(payload, scheme=scheme, host=host, path=path, query=query)
+            canonical_id = canonical_request_id_by_key.get(key)
+            if not canonical_id:
+                canonical_id = original_request_id
+                canonical_request_id_by_key[key] = canonical_id
+                canonical_request_event_by_key[key] = str(row.get("event_id") or canonical_id)
+            else:
+                canonical_event_id = canonical_request_event_by_key.get(key, "")
+                if canonical_event_id and canonical_event_id != str(row.get("event_id") or ""):
+                    payload["dedup_of"] = canonical_event_id
+            payload["request_id"] = canonical_id
+            request_id_aliases[original_request_id] = canonical_id
+            request_context_by_id[canonical_id] = {
+                "request_fingerprint": str(payload.get("request_fingerprint") or ""),
+                "request_operation": str(payload.get("request_operation") or ""),
+                "graphql_operation_name": str(payload.get("graphql_operation_name") or ""),
+                "phase_id": phase_id,
+                "host_class": host_class,
+                "normalized_scheme": scheme,
+                "normalized_host": host,
+                "normalized_path": path,
+                "target_site_id": target_site_id,
+            }
+
+        if event_type == "network_response_event":
+            raw_request_id = str(payload.get("request_id") or payload.get("requestId") or payload.get("req_id") or "").strip()
+            canonical_request_id = request_id_aliases.get(raw_request_id, raw_request_id)
+            if not canonical_request_id:
+                fallback_key = canonical_request_key(payload, scheme=scheme, host=host, path=path, query=query)
+                canonical_request_id = canonical_request_id_by_key.get(fallback_key, "")
+            if canonical_request_id:
+                payload["request_id"] = canonical_request_id
+            request_context = request_context_by_id.get(canonical_request_id, {})
+            if phase_id == PHASE_BACKGROUND:
+                linked_phase = str(request_context.get("phase_id") or "")
+                if linked_phase and linked_phase != PHASE_BACKGROUND:
+                    phase_id = linked_phase
+                    payload["phase_id"] = linked_phase
+            if str(payload.get("host_class") or "") == HOST_CLASS_BACKGROUND_NOISE:
+                linked_host_class = str(request_context.get("host_class") or "")
+                if linked_host_class:
+                    payload["host_class"] = linked_host_class
+
+            response_id = str(payload.get("response_id") or payload.get("responseId") or payload.get("resp_id") or row.get("event_id") or "").strip()
+            if not response_id:
+                response_id = f"resp_auto_{stable_hash([row.get('event_id'), url])[:16]}"
+            payload["response_id"] = response_id
+
+            status_code = safe_int(payload.get("status_code") or payload.get("status") or payload.get("http_status"), default=0)
+            if status_code:
+                payload["status_code"] = status_code
+            mime_type = str(payload.get("mime_type") or payload.get("mime") or payload.get("content_type") or "")
+            if mime_type:
+                payload["mime_type"] = mime_type
+
+            headers = event_headers(row)
+            content_length = str(headers.get("content-length") or headers.get("Content-Length") or payload.get("content_length_header") or "")
+            payload["content_length_header"] = content_length
+            stored_size_bytes = safe_int(
+                payload.get("stored_size_bytes")
+                or payload.get("response_size_bytes")
+                or payload.get("captured_body_bytes"),
+                default=0,
+            )
+            if stored_size_bytes <= 0 and isinstance(payload.get("body_preview"), str):
+                stored_size_bytes = len(str(payload.get("body_preview")).encode("utf-8", errors="replace"))
+            payload["stored_size_bytes"] = stored_size_bytes
+
+            body_ref = str(payload.get("body_ref") or payload.get("response_store_path") or payload.get("responseStorePath") or "").strip()
+            payload["body_ref"] = body_ref
+            capture_truncated = bool(payload.get("capture_truncated"))
+            capture_limit_bytes = safe_int(payload.get("capture_limit_bytes") or payload.get("captured_body_bytes"), default=0)
+            if capture_truncated and capture_limit_bytes <= 0 and stored_size_bytes > 0:
+                capture_limit_bytes = stored_size_bytes
+            payload["capture_truncated"] = capture_truncated
+            if capture_truncated:
+                payload["capture_limit_bytes"] = capture_limit_bytes
+            payload["source_channel"] = event_source(row)
+            payload["request_operation"] = str(
+                payload.get("request_operation")
+                or payload.get("response_operation")
+                or payload.get("operation")
+                or request_context.get("request_operation")
+                or ""
+            )
+            payload["graphql_operation_name"] = str(
+                payload.get("graphql_operation_name")
+                or request_context.get("graphql_operation_name")
+                or infer_graphql_operation_name(payload)
+            )
+            payload["request_fingerprint"] = str(
+                payload.get("request_fingerprint")
+                or payload.get("requestFingerprint")
+                or request_context.get("request_fingerprint")
+                or stable_hash(
+                    {
+                        "request_id": payload.get("request_id") or "",
+                        "method": event_method(row) or "GET",
+                        "host": host,
+                        "path": path,
+                    }
+                )
+            )
+            payload["correlation_refs"] = {
+                "trace_id": str(row.get("trace_id") or ""),
+                "action_id": str(row.get("action_id") or ""),
+                "event_id": str(row.get("event_id") or ""),
+            }
+
+        if event_type in {"auth_event", "cookie_event", "storage_event", "provenance_event"}:
+            payload["target_site_id"] = target_site_id
+            payload.setdefault("phase_id", phase_id)
+
+    return normalized_rows
+
+
+def event_normalized_host(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    value = str(payload.get("normalized_host") or "").strip().lower()
+    if value:
+        return value
+    _, host, _, _ = normalized_url_components(event_url(row))
+    return host
+
+
+def event_normalized_path(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    value = str(payload.get("normalized_path") or "").strip()
+    if value:
+        return value
+    _, _, path, _ = normalized_url_components(event_url(row))
+    return path
+
+
+def event_normalized_scheme(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    value = str(payload.get("normalized_scheme") or "").strip().lower()
+    if value:
+        return value
+    scheme, _, _, _ = normalized_url_components(event_url(row))
+    return scheme
+
+
+def event_target_site_id(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    value = str(payload.get("target_site_id") or payload.get("targetSiteId") or "").strip()
+    if value:
+        return value
+    return canonical_target_site_id(event_normalized_host(row))
+
+
+def event_content_length_header(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    value = str(payload.get("content_length_header") or "").strip()
+    if value:
+        return value
+    headers = event_headers(row)
+    return str(headers.get("content-length") or headers.get("Content-Length") or "")
+
+
+def event_stored_size_bytes(row: Dict[str, Any]) -> int:
+    payload = event_payload(row)
+    size = safe_int(payload.get("stored_size_bytes") or payload.get("response_size_bytes") or payload.get("captured_body_bytes"), default=0)
+    if size > 0:
+        return size
+    preview = payload.get("body_preview")
+    if isinstance(preview, str):
+        return len(preview.encode("utf-8", errors="replace"))
+    return 0
+
+
+def event_capture_truncated(row: Dict[str, Any]) -> bool:
+    payload = event_payload(row)
+    return bool(payload.get("capture_truncated"))
+
+
+def event_capture_limit_bytes(row: Dict[str, Any]) -> int:
+    payload = event_payload(row)
+    return safe_int(payload.get("capture_limit_bytes") or payload.get("captured_body_bytes"), default=0)
+
+
+def event_source_channel(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    value = str(payload.get("source_channel") or "").strip()
+    if value:
+        return value
+    return event_source(row)
+
+
 def ts_to_epoch_seconds(ts: str) -> float:
     if not ts:
         return 0.0
@@ -394,19 +1177,43 @@ def event_sort_key(row: Dict[str, Any]) -> Tuple[str, int]:
 
 def compact_request(row: Dict[str, Any]) -> Dict[str, Any]:
     payload = event_payload(row)
+    query_params = payload.get("query_params")
+    if not isinstance(query_params, dict):
+        query_params = parse_query_params(event_url(row))
+    headers_raw = event_headers(row)
+    headers_reduced = payload.get("headers_reduced")
+    if not isinstance(headers_reduced, dict):
+        headers_reduced = reduce_headers(headers_raw)
     return {
         "event_id": str(row.get("event_id") or ""),
         "request_id": event_request_id(row),
+        "canonical_request_id": str(payload.get("request_id") or event_request_id(row)),
+        "original_request_id": str(payload.get("original_request_id") or ""),
         "request_fingerprint": event_request_fingerprint(row),
         "ts_utc": str(row.get("ts_utc") or ""),
         "url": event_url(row),
         "normalized_url": str(payload.get("normalized_url") or ""),
+        "normalized_scheme": event_normalized_scheme(row),
+        "normalized_host": event_normalized_host(row),
+        "normalized_path": event_normalized_path(row),
+        "target_site_id": event_target_site_id(row),
         "method": event_method(row) or "GET",
         "phase_id": event_phase_id(row),
         "host_class": event_host_class(row),
         "dedup_of": event_dedup_of(row),
         "classification": event_request_classification(row),
         "operation": event_request_operation(row),
+        "graphql_operation_name": str(payload.get("graphql_operation_name") or ""),
+        "headers_raw": headers_raw,
+        "headers_reduced": headers_reduced,
+        "query_params": query_params,
+        "request_body_summary": payload.get("request_body_summary") or summarize_request_body(payload),
+        "request_flags": payload.get("request_flags") or request_flags(payload, phase_id=event_phase_id(row), url=event_url(row)),
+        "correlation_refs": payload.get("correlation_refs") or {
+            "trace_id": str(row.get("trace_id") or ""),
+            "action_id": str(row.get("action_id") or ""),
+            "event_id": str(row.get("event_id") or ""),
+        },
         "semantic_labels": event_semantic_labels(row),
         "screen_id": str(payload.get("screen_id") or payload.get("screenId") or ""),
         "tab_id": str(payload.get("tab_id") or payload.get("tabId") or ""),
@@ -414,6 +1221,7 @@ def compact_request(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def compact_response(row: Dict[str, Any]) -> Dict[str, Any]:
+    payload = event_payload(row)
     return {
         "event_id": str(row.get("event_id") or ""),
         "response_id": event_response_id(row),
@@ -421,10 +1229,24 @@ def compact_response(row: Dict[str, Any]) -> Dict[str, Any]:
         "request_fingerprint": event_request_fingerprint(row),
         "ts_utc": str(row.get("ts_utc") or ""),
         "url": event_url(row),
-        "normalized_url": str(event_payload(row).get("normalized_url") or ""),
+        "normalized_url": str(payload.get("normalized_url") or ""),
+        "normalized_scheme": event_normalized_scheme(row),
+        "normalized_host": event_normalized_host(row),
+        "normalized_path": event_normalized_path(row),
+        "target_site_id": event_target_site_id(row),
         "method": event_method(row) or "GET",
         "status": event_status(row),
+        "status_code": safe_int(payload.get("status_code") or payload.get("status"), default=0),
         "mime": event_mime(row),
+        "mime_type": str(payload.get("mime_type") or event_mime(row)),
+        "content_length_header": event_content_length_header(row),
+        "stored_size_bytes": event_stored_size_bytes(row),
+        "body_ref": str(payload.get("body_ref") or event_response_store_path(row)),
+        "capture_truncated": event_capture_truncated(row),
+        "capture_limit_bytes": event_capture_limit_bytes(row),
+        "source_channel": event_source_channel(row),
+        "request_operation": str(payload.get("request_operation") or event_request_operation(row)),
+        "graphql_operation_name": str(payload.get("graphql_operation_name") or ""),
         "phase_id": event_phase_id(row),
         "host_class": event_host_class(row),
         "classification": event_request_classification(row),
@@ -469,8 +1291,20 @@ def build_correlation(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for (trace_id, action_id), events in grouped.items():
         ordered = sorted(events, key=event_sort_key)
-        ui = [e for e in ordered if e.get("event_type") == "ui_action_event"]
-        request_events = [e for e in ordered if e.get("event_type") == "network_request_event"]
+        ui_raw = [e for e in ordered if e.get("event_type") == "ui_action_event"]
+        ui = compact_ui_action_events(ui_raw)
+        request_events_raw = [e for e in ordered if e.get("event_type") == "network_request_event"]
+        request_events = []
+        seen_request_ids: set = set()
+        for req in request_events_raw:
+            rid = event_request_id(req)
+            if not rid:
+                request_events.append(req)
+                continue
+            if rid in seen_request_ids:
+                continue
+            seen_request_ids.add(rid)
+            request_events.append(req)
         response_events = [e for e in ordered if e.get("event_type") == "network_response_event"]
         cookies = [e for e in ordered if e.get("event_type") == "cookie_event"]
         auth_events = [e for e in ordered if e.get("event_type") == "auth_event"]
@@ -551,20 +1385,18 @@ def build_correlation(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             for phase_id in (event_phase_id(event) for event in ordered)
             if phase_id
         )
-        phase_id = phase_counter.most_common(1)[0][0] if phase_counter else "unscoped"
+        phase_id = pick_dominant_phase(phase_counter)
         host_class_counter = Counter(
             host_class
             for host_class in (event_host_class(event) for event in ordered)
             if host_class
         )
-        host_scope = {
-            "target": int(host_class_counter.get("target", 0)),
-            "external_noise": int(host_class_counter.get("external_noise", 0)),
-            "ignored": int(host_class_counter.get("ignored", 0)),
-            "unknown": int(host_class_counter.get("unknown", 0)),
-        }
+        host_scope = {bucket: int(host_class_counter.get(bucket, 0)) for bucket in HOST_SCOPE_BUCKETS}
+        host_scope.setdefault("external_noise", int(host_class_counter.get("external_noise", 0)))
+        host_scope.setdefault("ignored", int(host_class_counter.get("ignored", 0)))
+        host_scope.setdefault("unknown", int(host_class_counter.get("unknown", 0)))
         dedup_ref_count = len(dedup_events) + len(
-            [request for request in request_events if event_dedup_of(request)]
+            [request for request in request_events_raw if event_dedup_of(request)]
         )
         dedup_duplicate_count = 0
         for dedup_event in dedup_events:
@@ -603,6 +1435,11 @@ def build_correlation(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     "dedup_reference_count": dedup_ref_count,
                     "dedup_duplicate_count": dedup_duplicate_count,
                     "canonical_request_count": request_count,
+                },
+                "ui_dedup_stats": {
+                    "raw_ui_event_count": len(ui_raw),
+                    "deduped_ui_event_count": len(ui),
+                    "dropped_duplicate_count": max(len(ui_raw) - len(ui), 0),
                 },
                 "ui_action_names": [name for name, _ in ui_action_counter.most_common(20)],
                 "ui_action_counts": dict(ui_action_counter),
@@ -647,69 +1484,559 @@ def is_noise_asset(url: str, mime: str = "") -> bool:
     return False
 
 
+def is_signal_host_class(host_class: str) -> bool:
+    normalized = str(host_class or "").strip().lower()
+    if not normalized:
+        return True
+    return normalized not in NON_SIGNAL_HOST_CLASSES
+
+
+def classify_candidate_type(row: Dict[str, Any]) -> str:
+    phase_id = event_phase_id(row)
+    url = event_url(row).lower()
+    operation = event_request_operation(row).lower()
+    classification = event_request_classification(row).lower()
+    merged = f"{url} {operation} {classification}"
+    if phase_id == PHASE_PLAYBACK or any(token in merged for token in ("playback", ".m3u8", ".mpd", "resolver")):
+        return "playback_candidate"
+    if phase_id == PHASE_DETAIL or any(token in merged for token in ("detail", "episode", "content/")):
+        return "detail_candidate"
+    if phase_id == PHASE_SEARCH or any(token in merged for token in ("search", "suggest", "query=")):
+        return "search_candidate"
+    if phase_id == PHASE_AUTH or any(token in merged for token in ("auth", "token", "refresh", "login")):
+        return "auth_or_refresh_candidate"
+    return "home_candidate"
+
+
+def capture_policy_for_response(row: Dict[str, Any]) -> Tuple[str, str]:
+    url = event_url(row).lower()
+    mime = event_mime(row).lower()
+    host_class = event_host_class(row)
+    phase_id = event_phase_id(row)
+    source = event_source_channel(row).lower()
+    operation = event_request_operation(row).lower()
+    classification = event_request_classification(row).lower()
+    merged = f"{url} {mime} {operation} {classification} {source}"
+
+    if not is_signal_host_class(host_class):
+        return ("skip_full_body", "host_class_noise")
+    if any(token in merged for token in (".m4s", ".ts", ".mp4", ".m4a", ".webm")):
+        return ("skip_full_body", "media_segment")
+    if any(token in merged for token in ("analytics", "telemetry", "pixel")):
+        return ("skip_full_body", "analytics_noise")
+    if any(token in merged for token in ("doubleclick", "adservice", "ads.")):
+        return ("skip_full_body", "ad_traffic")
+    if any(token in merged for token in ("graphql", "operationname")):
+        return ("store_full_body", "graphql_json_candidate")
+    if any(token in merged for token in ("config", "bootstrap", "init")):
+        return ("store_full_body", "provider_bootstrap_document")
+    if any(token in merged for token in (".m3u8", ".mpd", "manifest")):
+        return ("store_full_body", "playback_manifest")
+    if phase_id in {PHASE_SEARCH, PHASE_DETAIL, PHASE_PLAYBACK} and ("json" in mime or "html" in mime):
+        return ("store_full_body", f"{phase_id}_payload")
+    if "json" in mime:
+        return ("store_full_body", "rest_json_candidate")
+    if "html" in mime and ("main_frame" in source or "page_finished" in merged):
+        return ("store_full_body", "main_html_document")
+    if "xml" in mime:
+        return ("store_full_body", "config_or_xml_document")
+    return ("skip_full_body", "non_candidate_payload")
+
+
+def derive_observed_replay_elimination(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    requests = [r for r in rows if r.get("event_type") == "network_request_event"]
+    request_by_id: Dict[str, Dict[str, Any]] = {}
+    response_by_request_id: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for request in requests:
+        request_id = event_request_id(request)
+        if request_id and request_id not in request_by_id:
+            request_by_id[request_id] = request
+    for response in [r for r in rows if r.get("event_type") == "network_response_event"]:
+        request_id = event_request_id(response)
+        if request_id:
+            response_by_request_id[request_id].append(response)
+
+    per_endpoint_success: Dict[Tuple[str, str, str, str, str], List[Dict[str, Any]]] = defaultdict(list)
+    per_endpoint_failure: Dict[Tuple[str, str, str, str, str], List[Dict[str, Any]]] = defaultdict(list)
+    for request_id, request in request_by_id.items():
+        url = event_url(request)
+        if not url:
+            continue
+        if event_host_class(request) in NON_SIGNAL_HOST_CLASSES:
+            continue
+        parsed = urlparse(url)
+        operation = replay_operation_for_row(request)
+        endpoint_key = (
+            operation,
+            event_phase_id(request),
+            event_method(request) or "GET",
+            parsed.netloc or event_normalized_host(request) or "unknown",
+            parsed.path or event_normalized_path(request) or "/",
+        )
+        headers_map = event_headers(request)
+        headers = {header.lower() for header in headers_map.keys() if header}
+        cookie_pairs = parse_cookie_pairs(str(headers_map.get("cookie") or headers_map.get("Cookie") or ""))
+        cookie_names = {name for name, _ in cookie_pairs}
+        if not headers and not cookie_names:
+            continue
+        responses = response_by_request_id.get(request_id, [])
+        if not responses:
+            continue
+        observation = {
+            "request_id": request_id,
+            "headers": headers,
+            "cookies": cookie_names,
+            "status_codes": sorted({event_status(resp) for resp in responses if event_status(resp)}),
+        }
+        if any(event_status(resp).startswith("2") for resp in responses):
+            per_endpoint_success[endpoint_key].append(observation)
+        else:
+            per_endpoint_failure[endpoint_key].append(observation)
+
+    out: List[Dict[str, Any]] = []
+    for key in sorted(set(list(per_endpoint_success.keys()) + list(per_endpoint_failure.keys()))):
+        operation, phase_id, method, host, path = key
+        success_sets = per_endpoint_success.get(key, [])
+        failure_sets = per_endpoint_failure.get(key, [])
+        if not success_sets:
+            continue
+
+        success_header_sets = [set(item.get("headers", set())) for item in success_sets]
+        success_cookie_sets = [set(item.get("cookies", set())) for item in success_sets]
+        candidate_headers = set.union(*success_header_sets) if success_header_sets else set()
+        candidate_cookies = set.union(*success_cookie_sets) if success_cookie_sets else set()
+        intersection_headers = set.intersection(*success_header_sets) if success_header_sets else set()
+        intersection_cookies = set.intersection(*success_cookie_sets) if success_cookie_sets else set()
+        minimal_headers = set(intersection_headers)
+        minimal_cookies = set(intersection_cookies)
+
+        seed = max(
+            success_sets,
+            key=lambda item: (len(item.get("headers", set())), len(item.get("cookies", set()))),
+        )
+        seed_headers = set(seed.get("headers", set()))
+        seed_cookies = set(seed.get("cookies", set()))
+        elimination_steps: List[Dict[str, Any]] = []
+
+        for header_name in sorted(list(candidate_headers)):
+            if header_name in intersection_headers:
+                elimination_steps.append(
+                    {
+                        "dimension": "header",
+                        "name": header_name,
+                        "result": "kept_mandatory",
+                        "reason": "observed_in_all_success_sets",
+                    }
+                )
+                continue
+            reduced_seed = set(seed_headers)
+            reduced_seed.discard(header_name)
+            supported = any(reduced_seed.issubset(item.get("headers", set())) for item in success_sets)
+            elimination_steps.append(
+                {
+                    "dimension": "header",
+                    "name": header_name,
+                    "result": "removed_optional" if supported else "kept_seed",
+                    "reason": "safe_seed_subset_match" if supported else "missing_in_seed_subset",
+                }
+            )
+
+        for cookie_name in sorted(list(candidate_cookies)):
+            if cookie_name in intersection_cookies:
+                elimination_steps.append(
+                    {
+                        "dimension": "cookie",
+                        "name": cookie_name,
+                        "result": "kept_mandatory",
+                        "reason": "observed_in_all_success_sets",
+                    }
+                )
+                continue
+            reduced_seed = set(seed_cookies)
+            reduced_seed.discard(cookie_name)
+            supported = any(reduced_seed.issubset(item.get("cookies", set())) for item in success_sets)
+            elimination_steps.append(
+                {
+                    "dimension": "cookie",
+                    "name": cookie_name,
+                    "result": "removed_optional" if supported else "kept_seed",
+                    "reason": "safe_seed_subset_match" if supported else "missing_in_seed_subset",
+                }
+            )
+
+        out.append(
+            {
+                "operation": operation,
+                "phase_id": phase_id,
+                "method": method,
+                "host": host,
+                "path": path,
+                "successful_chain_count": len(success_sets),
+                "failed_chain_count": len(failure_sets),
+                "candidate_headers": sorted(list(candidate_headers)),
+                "minimal_required_headers": sorted(list(minimal_headers)),
+                "candidate_cookies": sorted(list(candidate_cookies)),
+                "minimal_required_cookies": sorted(list(minimal_cookies)),
+                "intersection_headers": sorted(list(intersection_headers)),
+                "intersection_cookies": sorted(list(intersection_cookies)),
+                "seed_headers": sorted(list(seed_headers)),
+                "seed_cookies": sorted(list(seed_cookies)),
+                "request_ids": sorted([str(item.get("request_id") or "") for item in success_sets if item.get("request_id")]),
+                "elimination_mode": "observed_replay_elimination_conservative",
+                "validation_mode": "observed_success_chains",
+                "elimination_steps": elimination_steps,
+            }
+        )
+    return out
+
+
+def replay_http_execute(
+    *,
+    url: str,
+    method: str,
+    headers: Dict[str, str],
+    body: bytes,
+    timeout_ms: int,
+) -> Dict[str, Any]:
+    request = urllib.request.Request(
+        url=url,
+        data=body if method in {"POST", "PUT", "PATCH", "DELETE"} else None,
+        method=method,
+    )
+    for key, value in headers.items():
+        if not key:
+            continue
+        request.add_header(key, value)
+
+    timeout_seconds = max(timeout_ms, 1000) / 1000.0
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            status_code = int(response.getcode() or 0)
+            return {
+                "success": 200 <= status_code < 300,
+                "status_code": status_code,
+                "error": "",
+            }
+    except urllib.error.HTTPError as exc:
+        return {
+            "success": False,
+            "status_code": int(getattr(exc, "code", 0) or 0),
+            "error": str(exc.reason or exc),
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "status_code": 0,
+            "error": str(exc),
+        }
+
+
+def is_non_replayable_host(host: str) -> bool:
+    normalized = str(host or "").strip().lower()
+    if not normalized:
+        return True
+    return (
+        normalized == "example.com"
+        or normalized.endswith(".example.com")
+        or normalized.endswith(".example")
+        or normalized.endswith(".invalid")
+        or normalized.endswith(".test")
+    )
+
+
+def replay_requirements_from_endpoint_sets(
+    endpoint_sets: List[Dict[str, Any]],
+    inference_mode: str,
+) -> Dict[str, Any]:
+    operations: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for item in endpoint_sets:
+        if not isinstance(item, dict):
+            continue
+        operation = str(item.get("operation") or "home")
+        operations[operation].append(
+            {
+                "phase_id": item.get("phase_id"),
+                "method": item.get("method"),
+                "host": item.get("host"),
+                "path": item.get("path"),
+                "observed_success_count": int(item.get("successful_chain_count") or 0),
+                "observed_failure_count": int(item.get("failed_chain_count") or 0),
+                "required_headers": list(item.get("minimal_required_headers") or []),
+                "required_cookies": list(item.get("minimal_required_cookies") or []),
+                "candidate_headers": list(item.get("candidate_headers") or []),
+                "candidate_cookies": list(item.get("candidate_cookies") or []),
+                "elimination_mode": item.get("elimination_mode"),
+                "validation_mode": item.get("validation_mode"),
+                "elimination_steps": list(item.get("elimination_steps") or []),
+            }
+        )
+    return {
+        "schema_version": 1,
+        "generated_at_utc": utc_now(),
+        "inference_mode": inference_mode,
+        "operations": {operation: endpoints for operation, endpoints in sorted(operations.items())},
+    }
+
+
+def build_required_cookies_report_for_endpoint_sets(
+    rows: List[Dict[str, Any]],
+    endpoint_sets: List[Dict[str, Any]],
+    inference_mode: str,
+) -> Dict[str, Any]:
+    base = build_required_cookies_report(rows)
+    base["inference_mode"] = inference_mode
+    base["endpoint_minimal_sets"] = [
+        {
+            "operation": item.get("operation"),
+            "phase_id": item.get("phase_id"),
+            "method": item.get("method"),
+            "host": item.get("host"),
+            "path": item.get("path"),
+            "minimal_required_cookies": list(item.get("minimal_required_cookies") or []),
+            "candidate_cookies": list(item.get("candidate_cookies") or []),
+            "elimination_mode": item.get("elimination_mode"),
+            "validation_mode": item.get("validation_mode"),
+            "elimination_steps": [
+                step
+                for step in list(item.get("elimination_steps") or [])
+                if isinstance(step, dict) and str(step.get("dimension") or "") == "cookie"
+            ],
+        }
+        for item in endpoint_sets
+        if isinstance(item, dict)
+    ]
+    return base
+
+
+def build_required_headers_active_replay(
+    rows: List[Dict[str, Any]],
+    timeout_ms: int = 15_000,
+    allow_unsafe_methods: bool = False,
+    replay_executor: Optional[Any] = None,
+) -> Dict[str, Any]:
+    observed = derive_observed_replay_elimination(rows)
+    passive = build_required_headers(rows, active_elimination=False)
+    request_rows = [row for row in rows if row.get("event_type") == "network_request_event"]
+    request_by_id: Dict[str, Dict[str, Any]] = {}
+    for row in request_rows:
+        request_id = event_request_id(row)
+        if request_id and request_id not in request_by_id:
+            request_by_id[request_id] = row
+
+    def pick_seed_request(endpoint: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        for request_id in endpoint.get("request_ids", []):
+            candidate = request_by_id.get(str(request_id))
+            if candidate is not None:
+                return candidate
+        method = str(endpoint.get("method") or "GET").upper()
+        host = str(endpoint.get("host") or "")
+        path = str(endpoint.get("path") or "/")
+        phase_id = str(endpoint.get("phase_id") or "")
+        fallback: Optional[Dict[str, Any]] = None
+        fallback_header_count = -1
+        for row in request_rows:
+            if event_host_class(row) in NON_SIGNAL_HOST_CLASSES:
+                continue
+            if (event_method(row) or "GET") != method:
+                continue
+            if event_normalized_host(row) != host:
+                continue
+            if event_normalized_path(row) != path:
+                continue
+            if event_phase_id(row) != phase_id:
+                continue
+            count = len(event_headers(row))
+            if count > fallback_header_count:
+                fallback = row
+                fallback_header_count = count
+        return fallback
+
+    executor = replay_executor or replay_http_execute
+    endpoint_sets: List[Dict[str, Any]] = []
+    for endpoint in observed:
+        item = dict(endpoint)
+        item["elimination_steps"] = list(item.get("elimination_steps") or [])
+        item["replay_attempted"] = False
+
+        seed_row = pick_seed_request(item)
+        if seed_row is None:
+            item["validation_mode"] = "observed_success_chains_no_seed_request"
+            item["elimination_mode"] = "observed_replay_elimination_conservative_fallback"
+            endpoint_sets.append(item)
+            continue
+
+        method = (event_method(seed_row) or str(item.get("method") or "GET")).upper()
+        if method not in {"GET", "HEAD", "OPTIONS"} and not allow_unsafe_methods:
+            item["validation_mode"] = "observed_success_chains_unsafe_method_skipped"
+            item["elimination_mode"] = "observed_replay_elimination_conservative_fallback"
+            endpoint_sets.append(item)
+            continue
+
+        headers_raw = event_headers(seed_row)
+        lowered_headers = {str(key).lower(): str(value) for key, value in headers_raw.items() if key}
+        cookie_pairs = parse_cookie_pairs(str(lowered_headers.get("cookie") or ""))
+        cookie_values = {name: value for name, value in cookie_pairs if name}
+        header_values = {
+            name: value
+            for name, value in lowered_headers.items()
+            if name not in {"cookie", "content-length", "host", "connection", "proxy-connection", "transfer-encoding"}
+            and not name.startswith(":")
+        }
+
+        candidate_headers = set(str(name).lower() for name in item.get("candidate_headers", []) if name)
+        candidate_cookies = set(str(name).lower() for name in item.get("candidate_cookies", []) if name)
+        required_headers = set(header_values.keys())
+        required_cookies = set(cookie_values.keys())
+        if candidate_headers:
+            required_headers &= candidate_headers
+        if candidate_cookies:
+            required_cookies &= candidate_cookies
+
+        body_text = str(event_payload(seed_row).get("body") or event_payload(seed_row).get("body_preview") or "")
+        body_bytes = body_text.encode("utf-8", errors="replace") if body_text else b""
+        url = event_url(seed_row)
+        if not url:
+            item["validation_mode"] = "observed_success_chains_missing_url"
+            item["elimination_mode"] = "observed_replay_elimination_conservative_fallback"
+            endpoint_sets.append(item)
+            continue
+        parsed_seed = urlparse(url)
+        seed_scheme = str(parsed_seed.scheme or "").lower()
+        if seed_scheme not in {"http", "https"}:
+            item["validation_mode"] = "active_http_replay_skipped_unsupported_scheme"
+            item["elimination_mode"] = "observed_replay_elimination_conservative_fallback"
+            endpoint_sets.append(item)
+            continue
+        seed_host = normalize_host(parsed_seed.netloc)
+        if is_non_replayable_host(seed_host):
+            item["validation_mode"] = "active_http_replay_skipped_non_replayable_host"
+            item["elimination_mode"] = "observed_replay_elimination_conservative_fallback"
+            endpoint_sets.append(item)
+            continue
+
+        def execute_subset(selected_headers: set, selected_cookies: set) -> Dict[str, Any]:
+            subset_headers = {name: header_values[name] for name in sorted(selected_headers) if name in header_values}
+            if selected_cookies:
+                subset_headers["cookie"] = "; ".join(
+                    [f"{name}={cookie_values.get(name, '')}" for name in sorted(selected_cookies) if name in cookie_values]
+                )
+            return executor(
+                url=url,
+                method=method,
+                headers=subset_headers,
+                body=body_bytes,
+                timeout_ms=timeout_ms,
+            )
+
+        baseline_result = execute_subset(set(required_headers), set(required_cookies))
+        item["replay_attempted"] = True
+        item["replay_baseline"] = baseline_result
+        if not bool(baseline_result.get("success")):
+            item["validation_mode"] = "active_http_replay_baseline_failed_fallback_observed"
+            item["elimination_mode"] = "observed_replay_elimination_conservative_fallback"
+            item["elimination_steps"].append(
+                {
+                    "dimension": "baseline",
+                    "name": "full_context",
+                    "result": "failed",
+                    "status_code": baseline_result.get("status_code"),
+                    "error": baseline_result.get("error"),
+                }
+            )
+            endpoint_sets.append(item)
+            continue
+
+        item["validation_mode"] = "active_http_replay"
+        item["elimination_mode"] = "active_http_replay_iterative"
+        item["elimination_steps"].append(
+            {
+                "dimension": "baseline",
+                "name": "full_context",
+                "result": "passed",
+                "status_code": baseline_result.get("status_code"),
+            }
+        )
+
+        for header_name in sorted(list(required_headers)):
+            reduced_headers = set(required_headers)
+            reduced_headers.discard(header_name)
+            result = execute_subset(reduced_headers, set(required_cookies))
+            removable = bool(result.get("success"))
+            if removable:
+                required_headers = reduced_headers
+            item["elimination_steps"].append(
+                {
+                    "dimension": "header",
+                    "name": header_name,
+                    "result": "removed" if removable else "kept",
+                    "status_code": result.get("status_code"),
+                    "error": result.get("error"),
+                }
+            )
+
+        for cookie_name in sorted(list(required_cookies)):
+            reduced_cookies = set(required_cookies)
+            reduced_cookies.discard(cookie_name)
+            result = execute_subset(set(required_headers), reduced_cookies)
+            removable = bool(result.get("success"))
+            if removable:
+                required_cookies = reduced_cookies
+            item["elimination_steps"].append(
+                {
+                    "dimension": "cookie",
+                    "name": cookie_name,
+                    "result": "removed" if removable else "kept",
+                    "status_code": result.get("status_code"),
+                    "error": result.get("error"),
+                }
+            )
+
+        item["minimal_required_headers"] = sorted(list(required_headers))
+        item["minimal_required_cookies"] = sorted(list(required_cookies))
+        item["replay_seed_request_id"] = event_request_id(seed_row)
+        endpoint_sets.append(item)
+
+    payload = dict(passive)
+    payload["schema_version"] = 1
+    payload["generated_at_utc"] = utc_now()
+    payload["inference_mode"] = "active_http_replay"
+    payload["active_replay_timeout_ms"] = timeout_ms
+    payload["allow_unsafe_methods"] = bool(allow_unsafe_methods)
+    payload["endpoint_minimal_sets"] = endpoint_sets
+    payload["active_replay_endpoint_count"] = len(endpoint_sets)
+    payload["active_replay_attempted_count"] = len([item for item in endpoint_sets if item.get("replay_attempted")])
+    payload["active_replay_success_count"] = len(
+        [item for item in endpoint_sets if str(item.get("validation_mode") or "") == "active_http_replay"]
+    )
+    return payload
+
+
 def build_required_headers(rows: List[Dict[str, Any]], active_elimination: bool = False) -> Dict[str, Any]:
     network_requests = [r for r in rows if r.get("event_type") == "network_request_event"]
     counter: Dict[str, Counter[str]] = defaultdict(Counter)
-    request_by_id: Dict[str, Dict[str, Any]] = {}
-    response_by_request_id: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-
-    for request in network_requests:
-        req_id = event_request_id(request)
-        if req_id:
-            request_by_id[req_id] = request
-    for response in [r for r in rows if r.get("event_type") == "network_response_event"]:
-        req_id = event_request_id(response)
-        if req_id:
-            response_by_request_id[req_id].append(response)
+    cookie_counter: Dict[str, Counter[str]] = defaultdict(Counter)
 
     for row in network_requests:
         url = event_url(row)
         if is_noise_asset(url=url, mime=event_mime(row)):
             continue
         host_class = event_host_class(row)
-        if host_class and host_class != "target":
+        if host_class in NON_SIGNAL_HOST_CLASSES:
             continue
-        host = urlparse(url).netloc or "unknown"
-        for h in event_headers(row).keys():
+        host = event_normalized_host(row) or urlparse(url).netloc or "unknown"
+        headers = event_headers(row)
+        for h in headers.keys():
             counter[host][h.lower()] += 1
+        cookie_raw = str(headers.get("cookie") or headers.get("Cookie") or "")
+        if cookie_raw:
+            for chunk in cookie_raw.split(";"):
+                key = str(chunk.split("=", 1)[0]).strip().lower()
+                if key:
+                    cookie_counter[host][key] += 1
 
     active_sets: List[Dict[str, Any]] = []
     if active_elimination:
-        per_endpoint: Dict[Tuple[str, str, str], List[set]] = defaultdict(list)
-        for request_id, request in request_by_id.items():
-            responses = response_by_request_id.get(request_id, [])
-            if not responses:
-                continue
-            if not any(event_status(resp).startswith("2") for resp in responses):
-                continue
-            url = event_url(request)
-            if not url:
-                continue
-            if event_host_class(request) and event_host_class(request) != "target":
-                continue
-            parsed = urlparse(url)
-            method = event_method(request) or "GET"
-            key = (method, parsed.netloc or "unknown", parsed.path or "/")
-            headers = {header.lower() for header in event_headers(request).keys() if header}
-            if headers:
-                per_endpoint[key].append(headers)
-
-        for (method, host, path), header_sets in sorted(per_endpoint.items()):
-            if not header_sets:
-                continue
-            minimal_set = set.intersection(*header_sets)
-            passive_candidates = sorted(list(set.union(*header_sets)))
-            active_sets.append(
-                {
-                    "method": method,
-                    "host": host,
-                    "path": path,
-                    "successful_chain_count": len(header_sets),
-                    "candidate_headers": passive_candidates,
-                    "minimal_required_headers": sorted(list(minimal_set)),
-                    "elimination_mode": "replay_elimination_observed",
-                }
-            )
+        active_sets = derive_observed_replay_elimination(rows)
 
     out = {
         "schema_version": 1,
@@ -717,7 +2044,8 @@ def build_required_headers(rows: List[Dict[str, Any]], active_elimination: bool 
         "inference_mode": "active_replay_elimination" if active_elimination else "passive_frequency",
         "hosts": {
             host: {
-                "top_headers": [{"header": k, "count": v} for k, v in headers.most_common(30)]
+                "top_headers": [{"header": k, "count": v} for k, v in headers.most_common(30)],
+                "top_cookies": [{"cookie": k, "count": v} for k, v in cookie_counter.get(host, Counter()).most_common(30)],
             }
             for host, headers in sorted(counter.items())
         },
@@ -726,39 +2054,170 @@ def build_required_headers(rows: List[Dict[str, Any]], active_elimination: bool 
     return out
 
 
-def build_endpoint_candidates(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
-    network_requests = [r for r in rows if r.get("event_type") == "network_request_event"]
-    counts: Counter[Tuple[str, str, str, str]] = Counter()
+def build_required_cookies_report(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    requests = [row for row in rows if row.get("event_type") == "network_request_event"]
+    per_host: Dict[str, Counter[str]] = defaultdict(Counter)
+    for row in requests:
+        if not is_signal_host_class(event_host_class(row)):
+            continue
+        host = event_normalized_host(row) or "unknown"
+        headers = event_headers(row)
+        cookie_header = str(headers.get("Cookie") or headers.get("cookie") or "")
+        for cookie_name in parse_cookie_names(cookie_header):
+            per_host[host][cookie_name] += 1
+    active_sets = derive_observed_replay_elimination(rows)
+    return {
+        "schema_version": 1,
+        "generated_at_utc": utc_now(),
+        "hosts": {
+            host: [{"cookie": cookie_name, "count": count} for cookie_name, count in counter.most_common(50)]
+            for host, counter in sorted(per_host.items())
+        },
+        "endpoint_minimal_sets": [
+            {
+                "operation": item.get("operation"),
+                "phase_id": item.get("phase_id"),
+                "method": item.get("method"),
+                "host": item.get("host"),
+                "path": item.get("path"),
+                "minimal_required_cookies": item.get("minimal_required_cookies", []),
+                "candidate_cookies": item.get("candidate_cookies", []),
+                "elimination_mode": item.get("elimination_mode"),
+                "validation_mode": item.get("validation_mode"),
+            }
+            for item in active_sets
+        ],
+    }
 
-    for row in network_requests:
+
+def build_endpoint_candidates(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    request_rows_all = [r for r in rows if r.get("event_type") == "network_request_event"]
+    response_rows_all = [r for r in rows if r.get("event_type") == "network_response_event"]
+
+    request_rows: List[Dict[str, Any]] = []
+    seen_request_ids: set = set()
+    for row in request_rows_all:
+        request_id = event_request_id(row)
+        if request_id and request_id in seen_request_ids:
+            continue
+        if request_id:
+            seen_request_ids.add(request_id)
+        request_rows.append(row)
+
+    response_by_request_id: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for response in response_rows_all:
+        request_id = event_request_id(response)
+        if request_id:
+            response_by_request_id[request_id].append(response)
+
+    grouped: Dict[Tuple[str, str, str, str, str], List[Dict[str, Any]]] = defaultdict(list)
+    for row in request_rows:
         url = event_url(row)
         if not url:
             continue
+        host_class = event_host_class(row)
+        phase_id = event_phase_id(row)
+        if host_class in NON_SIGNAL_HOST_CLASSES:
+            continue
+        if phase_id not in SCORABLE_PHASES:
+            continue
         if is_noise_asset(url=url, mime=event_mime(row)):
             continue
-        host_class = event_host_class(row)
-        if host_class and host_class != "target":
-            continue
-        parsed = urlparse(url)
+        host = event_normalized_host(row)
+        path = event_normalized_path(row)
         method = event_method(row) or "GET"
-        fingerprint = event_request_fingerprint(row)
-        counts[(method, parsed.netloc, parsed.path, fingerprint)] += 1
+        operation = event_request_operation(row) or str(event_payload(row).get("graphql_operation_name") or "")
+        grouped[(phase_id, method, host, path, operation)].append(row)
 
-    candidates = [
-        {
+    def candidate_type_for(phase_id: str, path: str, operation: str) -> str:
+        lower = f"{phase_id} {path} {operation}".lower()
+        if phase_id == PHASE_HOME:
+            return "home_candidate"
+        if phase_id == PHASE_SEARCH:
+            return "search_candidate"
+        if phase_id == PHASE_DETAIL:
+            return "detail_candidate"
+        if phase_id == PHASE_PLAYBACK or any(token in lower for token in ("playback", "resolver", ".m3u8", ".mpd")):
+            return "playback_candidate"
+        if phase_id == PHASE_AUTH or any(token in lower for token in ("auth", "token", "refresh", "login")):
+            return "auth_or_refresh_candidate"
+        return "home_candidate"
+
+    candidates = []
+    for (phase_id, method, host, path, operation), items in grouped.items():
+        count = len(items)
+        request_ids = [event_request_id(item) for item in items if event_request_id(item)]
+        response_events = []
+        for request_id in request_ids:
+            response_events.extend(response_by_request_id.get(request_id, []))
+        successful = [resp for resp in response_events if event_status(resp).startswith("2")]
+        body_present = [
+            resp
+            for resp in successful
+            if bool(event_body_preview(resp))
+            or bool(event_payload(resp).get("body_ref"))
+            or bool(event_response_store_path(resp))
+        ]
+        graphql_op = str(event_payload(items[0]).get("graphql_operation_name") or "")
+        repeated_bonus = min(count, 5) / 5.0
+        phase_bonus = 1.0 if phase_id in SCORABLE_PHASES else 0.0
+        response_bonus = 1.0 if successful else 0.0
+        body_bonus = 1.0 if body_present else 0.0
+        graphql_bonus = 1.0 if graphql_op else 0.0
+        score = round(
+            (0.30 * repeated_bonus)
+            + (0.20 * phase_bonus)
+            + (0.25 * response_bonus)
+            + (0.15 * body_bonus)
+            + (0.10 * graphql_bonus),
+            4,
+        )
+
+        template_headers = Counter()
+        for item in items:
+            for key in event_headers(item).keys():
+                if key:
+                    template_headers[str(key).lower()] += 1
+        common_headers = [name for name, c in template_headers.items() if c == count]
+
+        candidate = {
+            "candidate_type": candidate_type_for(phase_id, path, operation),
+            "phase_id": phase_id,
+            "target_site_id": event_target_site_id(items[0]),
+            "host_class": event_host_class(items[0]),
             "method": method,
             "host": host,
             "path": path,
-            "request_fingerprint": fingerprint,
+            "request_operation": operation,
+            "graphql_operation_name": graphql_op,
+            "request_fingerprint": event_request_fingerprint(items[0]),
             "count": count,
+            "score": score,
+            "evidence": {
+                "repeated_request_templates": count,
+                "phase_alignment": phase_id in SCORABLE_PHASES,
+                "response_success_count": len(successful),
+                "response_body_presence": len(body_present),
+                "graphql_operation_stability": bool(graphql_op),
+                "playback_or_auth_linkage": phase_id in {PHASE_PLAYBACK, PHASE_AUTH},
+            },
+            "request_template": {
+                "headers_required_hint": sorted(common_headers),
+                "query_params": event_payload(items[0]).get("query_params") or {},
+            },
         }
-        for (method, host, path, fingerprint), count in counts.most_common(300)
-    ]
+        candidates.append(candidate)
+
+    candidates.sort(key=lambda item: (float(item.get("score") or 0.0), int(item.get("count") or 0)), reverse=True)
+    by_type: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for candidate in candidates:
+        by_type[str(candidate.get("candidate_type") or "home_candidate")].append(candidate)
 
     return {
         "schema_version": 1,
         "generated_at_utc": utc_now(),
-        "candidates": candidates,
+        "candidates": candidates[:500],
+        "by_candidate_type": {key: value[:120] for key, value in sorted(by_type.items())},
     }
 
 
@@ -783,29 +2242,182 @@ def read_response_store_payload(row: Dict[str, Any], runtime_dir: Optional[pathl
         return ""
 
 
+def iter_json_leaf_paths(value: Any, prefix: str = "") -> Iterable[Tuple[str, Any]]:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            next_prefix = f"{prefix}.{key}" if prefix else str(key)
+            yield from iter_json_leaf_paths(child, next_prefix)
+        return
+    if isinstance(value, list):
+        for idx, child in enumerate(value[:20]):
+            next_prefix = f"{prefix}[{idx}]" if prefix else f"[{idx}]"
+            yield from iter_json_leaf_paths(child, next_prefix)
+        return
+    yield (prefix or "$", value)
+
+
+def field_status_from_hits(hits: List[Dict[str, Any]], derived: bool = False) -> str:
+    if hits:
+        return "derived" if derived else "directly_observed"
+    return "missing"
+
+
+def field_confidence(hit_count: int, derived: bool = False) -> float:
+    if hit_count <= 0:
+        return 0.0
+    base = 0.55 if derived else 0.7
+    confidence = base + (0.08 * min(hit_count, 3))
+    return round(min(confidence, 0.99), 4)
+
+
+def html_extract_title(body: str) -> str:
+    match = re.search(r"<title[^>]*>(.*?)</title>", body, re.IGNORECASE | re.DOTALL)
+    if not match:
+        return ""
+    text = re.sub(r"\s+", " ", match.group(1)).strip()
+    return text[:200]
+
+
+def html_extract_og_image(body: str) -> str:
+    match = re.search(
+        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+        body,
+        re.IGNORECASE,
+    )
+    if not match:
+        return ""
+    return str(match.group(1)).strip()
+
+
 def build_field_matrix(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
     response_events = [r for r in rows if r.get("event_type") == "network_response_event"]
     key_counter: Counter[str] = Counter()
     parsed_events = 0
     skipped_non_target = 0
+    field_hits: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    search_mapping_samples: List[Dict[str, Any]] = []
 
     for row in response_events:
         host_class = event_host_class(row)
-        if host_class and host_class != "target":
+        if host_class in NON_SIGNAL_HOST_CLASSES:
             skipped_non_target += 1
             continue
-        body = event_body_preview(row)
+        body = read_response_store_payload(row, runtime_dir)
         if not body:
-            body = read_response_store_payload(row, runtime_dir)
+            body = event_body_preview(row)
         if not body:
             continue
         try:
             loaded = json.loads(body)
+            parsed_events += 1
+            for key in flatten_keys(loaded):
+                key_counter[key] += 1
+
+            leaves = list(iter_json_leaf_paths(loaded))
+            event_id = str(row.get("event_id") or "")
+            for key, value in leaves:
+                lower_key = key.lower()
+                str_value = value if isinstance(value, str) else ""
+                str_value_lower = str(str_value).lower()
+                if any(token in lower_key for token in ("title", "headline", "name")) and str_value:
+                    field_hits["title"].append({"event_id": event_id, "path": key, "value": str_value[:200], "source": "json"})
+                if any(token in lower_key for token in ("subtitle", "sub_title", "teaser_title")) and str_value:
+                    field_hits["subtitle"].append({"event_id": event_id, "path": key, "value": str_value[:200], "source": "json"})
+                if any(token in lower_key for token in ("description", "summary", "teasertext")) and str_value:
+                    field_hits["description"].append({"event_id": event_id, "path": key, "value": str_value[:300], "source": "json"})
+                if any(token in lower_key for token in ("image", "poster", "thumbnail")) and str_value and str_value_lower.startswith("http"):
+                    field_hits["image/poster"].append({"event_id": event_id, "path": key, "value": str_value[:300], "source": "json"})
+                if any(token in lower_key for token in ("canonicalid", "canonical_id", "contentid", "content_id")):
+                    field_hits["canonical id"].append({"event_id": event_id, "path": key, "value": str(value)[:120], "source": "json"})
+                if any(token in lower_key for token in ("collectionid", "collection_id", "seriesid", "series_id", "railid", "rail_id")):
+                    field_hits["collection id"].append({"event_id": event_id, "path": key, "value": str(value)[:120], "source": "json"})
+                if any(token in lower_key for token in ("type", "itemtype", "item_type", "teasertype", "teaser_type")) and str_value:
+                    field_hits["teaser/item type"].append({"event_id": event_id, "path": key, "value": str_value[:120], "source": "json"})
+                if any(token in lower_key for token in ("playback", "manifest", "stream", "drm", "resolver")):
+                    field_hits["playback hints"].append({"event_id": event_id, "path": key, "value": str(value)[:160], "source": "json"})
+                if any(token in lower_key for token in ("section", "rail", "category")) and str_value:
+                    field_hits["section/rail names"].append({"event_id": event_id, "path": key, "value": str_value[:120], "source": "json"})
+
+            if isinstance(loaded, dict):
+                for root_key in ("results", "items", "hits"):
+                    value = loaded.get(root_key)
+                    if isinstance(value, list) and value:
+                        sample = value[0]
+                        if isinstance(sample, dict):
+                            search_mapping_samples.append(
+                                {
+                                    "event_id": event_id,
+                                    "root": root_key,
+                                    "sample_keys": sorted(list(sample.keys()))[:20],
+                                }
+                            )
         except Exception:
+            title = html_extract_title(body)
+            if title:
+                field_hits["title"].append(
+                    {
+                        "event_id": str(row.get("event_id") or ""),
+                        "path": "html.title",
+                        "value": title,
+                        "source": "html",
+                    }
+                )
+            og_image = html_extract_og_image(body)
+            if og_image:
+                field_hits["image/poster"].append(
+                    {
+                        "event_id": str(row.get("event_id") or ""),
+                        "path": "html.meta.og:image",
+                        "value": og_image,
+                        "source": "html",
+                    }
+                )
+
+    required_fields = [
+        "title",
+        "subtitle",
+        "description",
+        "image/poster",
+        "canonical id",
+        "collection id",
+        "teaser/item type",
+        "playback hints",
+        "section/rail names",
+        "search result mapping",
+    ]
+
+    field_matrix_rows = []
+    for field_name in required_fields:
+        hits = field_hits.get(field_name, [])
+        if field_name == "search result mapping":
+            mapped_hits = [{"source": "json", **item} for item in search_mapping_samples[:20]]
+            status = field_status_from_hits(mapped_hits, derived=False)
+            confidence = field_confidence(len(mapped_hits), derived=False)
+            field_matrix_rows.append(
+                {
+                    "field": field_name,
+                    "status": status,
+                    "confidence": confidence,
+                    "sources": mapped_hits[:20],
+                    "sample_values": [str(item.get("sample_keys") or "") for item in mapped_hits[:5]],
+                }
+            )
             continue
-        parsed_events += 1
-        for key in flatten_keys(loaded):
-            key_counter[key] += 1
+
+        direct_hits = [item for item in hits if item.get("source") == "json"]
+        derived_hits = [item for item in hits if item.get("source") != "json"]
+        derived_only = not direct_hits and bool(derived_hits)
+        status = field_status_from_hits(hits, derived=derived_only)
+        confidence = field_confidence(len(hits), derived=derived_only)
+        field_matrix_rows.append(
+            {
+                "field": field_name,
+                "status": status,
+                "confidence": confidence,
+                "sources": hits[:20],
+                "sample_values": [str(item.get("value") or "") for item in hits[:5]],
+            }
+        )
 
     return {
         "schema_version": 1,
@@ -813,6 +2425,7 @@ def build_field_matrix(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib
         "parsed_response_events": parsed_events,
         "total_response_events": len(response_events),
         "skipped_non_target_events": skipped_non_target,
+        "fields": field_matrix_rows,
         "keys": [{"field": key, "count": count} for key, count in key_counter.most_common(500)],
     }
 
@@ -850,10 +2463,19 @@ def build_replay_seed(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         selected.append(
             {
                 "event_id": row.get("event_id"),
+                "request_id": event_request_id(row),
                 "url": event_url(row),
+                "normalized_scheme": event_normalized_scheme(row),
+                "normalized_host": event_normalized_host(row),
+                "normalized_path": event_normalized_path(row),
+                "target_site_id": event_target_site_id(row),
                 "method": event_method(row),
                 "headers": event_headers(row),
+                "headers_reduced": payload.get("headers_reduced") or reduce_headers(event_headers(row)),
+                "query_params": payload.get("query_params") or parse_query_params(event_url(row)),
                 "body_preview": payload.get("body_preview"),
+                "phase_id": event_phase_id(row),
+                "host_class": event_host_class(row),
             }
         )
     return {
@@ -861,6 +2483,123 @@ def build_replay_seed(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "generated_at_utc": utc_now(),
         "steps": selected,
     }
+
+
+def replay_operation_for_row(row: Dict[str, Any]) -> str:
+    phase_id = event_phase_id(row)
+    path = event_normalized_path(row).lower()
+    if phase_id == PHASE_HOME:
+        return "home"
+    if phase_id == PHASE_SEARCH:
+        return "search"
+    if phase_id == PHASE_DETAIL:
+        return "detail"
+    if phase_id == PHASE_PLAYBACK or any(token in path for token in ("playback", "resolver", ".m3u8", ".mpd")):
+        return "playback_resolver"
+    if phase_id == PHASE_AUTH or any(token in path for token in ("auth", "token", "refresh", "login")):
+        return "auth_or_refresh"
+    return "home"
+
+
+def build_replay_requirements_observed(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    active_sets = derive_observed_replay_elimination(rows)
+    operations: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for item in active_sets:
+        operation = str(item.get("operation") or "home")
+        operations[operation].append(
+            {
+                "phase_id": item.get("phase_id"),
+                "method": item.get("method"),
+                "host": item.get("host"),
+                "path": item.get("path"),
+                "observed_success_count": int(item.get("successful_chain_count") or 0),
+                "observed_failure_count": int(item.get("failed_chain_count") or 0),
+                "required_headers": list(item.get("minimal_required_headers") or []),
+                "required_cookies": list(item.get("minimal_required_cookies") or []),
+                "candidate_headers": list(item.get("candidate_headers") or []),
+                "candidate_cookies": list(item.get("candidate_cookies") or []),
+                "elimination_mode": item.get("elimination_mode"),
+                "validation_mode": item.get("validation_mode"),
+                "elimination_steps": list(item.get("elimination_steps") or []),
+            }
+        )
+
+    if not operations:
+        requests = [row for row in rows if row.get("event_type") == "network_request_event"]
+        grouped: Dict[str, Dict[Tuple[str, str, str], List[Dict[str, set]]]] = defaultdict(lambda: defaultdict(list))
+        for request in requests:
+            if event_host_class(request) in NON_SIGNAL_HOST_CLASSES:
+                continue
+            operation = replay_operation_for_row(request)
+            key = (
+                event_method(request) or "GET",
+                event_normalized_host(request) or "unknown",
+                event_normalized_path(request) or "/",
+            )
+            headers = {str(header).lower() for header in event_headers(request).keys() if header}
+            cookie_names = set()
+            cookie_raw = str(event_headers(request).get("cookie") or event_headers(request).get("Cookie") or "")
+            for cookie in parse_cookie_names(cookie_raw):
+                cookie_names.add(cookie.lower())
+            grouped[operation][key].append({"headers": headers, "cookies": cookie_names})
+
+        for operation, endpoints in sorted(grouped.items()):
+            endpoint_rows = []
+            for (method, host, path), observations in sorted(endpoints.items()):
+                header_sets = [item["headers"] for item in observations if item["headers"]]
+                cookie_sets = [item["cookies"] for item in observations if item["cookies"]]
+                minimal_headers = set.intersection(*header_sets) if header_sets else set()
+                minimal_cookies = set.intersection(*cookie_sets) if cookie_sets else set()
+                endpoint_rows.append(
+                    {
+                        "method": method,
+                        "host": host,
+                        "path": path,
+                        "observed_success_count": len(observations),
+                        "required_headers": sorted(list(minimal_headers)),
+                        "required_cookies": sorted(list(minimal_cookies)),
+                        "elimination_mode": "passive_intersection_fallback",
+                        "validation_mode": "no_response_chain_data",
+                    }
+                )
+            operations[operation] = endpoint_rows
+
+    return {
+        "schema_version": 1,
+        "generated_at_utc": utc_now(),
+        "inference_mode": "observed_replay_elimination",
+        "operations": {operation: endpoints for operation, endpoints in sorted(operations.items())},
+    }
+
+
+def build_replay_requirements(
+    rows: List[Dict[str, Any]],
+    prefer_active_replay: bool = True,
+    timeout_ms: int = ACTIVE_REPLAY_ROLLUP_TIMEOUT_MS,
+    allow_unsafe_methods: bool = False,
+) -> Dict[str, Any]:
+    if prefer_active_replay:
+        active_payload = build_required_headers_active_replay(
+            rows,
+            timeout_ms=max(int(timeout_ms or 0), 500),
+            allow_unsafe_methods=allow_unsafe_methods,
+        )
+        endpoint_sets = list(active_payload.get("endpoint_minimal_sets") or [])
+        replay_payload = replay_requirements_from_endpoint_sets(
+            endpoint_sets,
+            inference_mode=str(active_payload.get("inference_mode") or "active_http_replay"),
+        )
+        replay_payload["active_replay_timeout_ms"] = max(int(timeout_ms or 0), 500)
+        replay_payload["allow_unsafe_methods"] = bool(allow_unsafe_methods)
+        if replay_payload.get("operations"):
+            return replay_payload
+
+    observed = build_replay_requirements_observed(rows)
+    if prefer_active_replay:
+        observed["inference_mode"] = "active_http_replay_fallback_observed"
+        observed["active_replay_timeout_ms"] = max(int(timeout_ms or 0), 500)
+        observed["allow_unsafe_methods"] = bool(allow_unsafe_methods)
+    return observed
 
 
 def build_response_store_index(
@@ -873,25 +2612,35 @@ def build_response_store_index(
     for row in responses:
         event_id = str(row.get("event_id") or "")
         rel_path = event_response_store_path(row)
-        if rel_path:
-            resolved = str((runtime_dir / "response_store" / rel_path)) if runtime_dir else ""
-            exists = bool(runtime_dir and (runtime_dir / "response_store" / rel_path).exists())
-            refs.append(
-                {
-                    "event_id": event_id,
-                    "request_id": event_request_id(row),
-                    "response_id": event_response_id(row),
-                    "url": event_url(row),
-                    "path": rel_path,
-                    "resolved_path": resolved,
-                    "exists": exists,
-                    "mime": event_mime(row),
-                    "status": event_status(row),
-                    "phase_id": event_phase_id(row),
-                    "host_class": event_host_class(row),
-                    "body_ref": (event_body_refs or {}).get(event_id, ""),
-                }
-            )
+        resolved = str((runtime_dir / "response_store" / rel_path)) if (runtime_dir and rel_path) else ""
+        exists = bool(runtime_dir and rel_path and (runtime_dir / "response_store" / rel_path).exists())
+        refs.append(
+            {
+                "event_id": event_id,
+                "request_id": event_request_id(row),
+                "response_id": event_response_id(row),
+                "url": event_url(row),
+                "normalized_scheme": event_normalized_scheme(row),
+                "normalized_host": event_normalized_host(row),
+                "normalized_path": event_normalized_path(row),
+                "target_site_id": event_target_site_id(row),
+                "path": rel_path,
+                "resolved_path": resolved,
+                "exists": exists,
+                "mime": event_mime(row),
+                "mime_type": str(event_payload(row).get("mime_type") or event_mime(row)),
+                "status": event_status(row),
+                "status_code": safe_int(event_payload(row).get("status_code") or event_status(row), default=0),
+                "content_length_header": event_content_length_header(row),
+                "stored_size_bytes": event_stored_size_bytes(row),
+                "capture_truncated": event_capture_truncated(row),
+                "capture_limit_bytes": event_capture_limit_bytes(row),
+                "source_channel": event_source_channel(row),
+                "phase_id": event_phase_id(row),
+                "host_class": event_host_class(row),
+                "body_ref": (event_body_refs or {}).get(event_id, ""),
+            }
+        )
     return {
         "schema_version": 1,
         "generated_at_utc": utc_now(),
@@ -899,23 +2648,42 @@ def build_response_store_index(
     }
 
 
-def should_capture_candidate_body(row: Dict[str, Any]) -> bool:
+def body_capture_decision(row: Dict[str, Any]) -> Tuple[bool, str, str]:
     host_class = event_host_class(row)
-    if host_class and host_class != "target":
-        return False
+    if host_class in NON_SIGNAL_HOST_CLASSES:
+        return (False, "metadata_only", "non_signal_host_class")
     url = event_url(row).lower()
     mime = event_mime(row).lower()
+    phase = event_phase_id(row)
+
     if any(ext in url for ext in (".m4s", ".ts", ".mp4", ".m4a", ".webm")):
-        return False
-    if any(token in url for token in ("graphql", "manifest", "playback", "resolver")):
-        return True
+        return (False, "metadata_only", "generic_media_segment")
+    if any(token in url for token in ("analytics", "doubleclick", "googletagmanager", "adservice")):
+        return (False, "metadata_only", "analytics_or_ad_noise")
+    if any(token in url for token in ("graphql",)):
+        return (True, "candidate_full", "graphql_payload")
+    if any(token in url for token in ("manifest", "playback", "resolver")):
+        return (True, "candidate_full", "playback_or_manifest")
     if any(ext in url for ext in (".m3u8", ".mpd")):
-        return True
+        return (True, "candidate_full", "manifest_file")
     if mime.startswith("application/json") or "json" in mime:
-        return True
-    if "html" in mime or "xml" in mime:
-        return True
-    return False
+        if phase in {PHASE_HOME, PHASE_SEARCH, PHASE_DETAIL, PHASE_PLAYBACK, PHASE_AUTH}:
+            return (True, "candidate_full", "phase_aligned_json")
+        return (True, "candidate_full", "json_payload")
+    if "html" in mime:
+        if str(event_payload(row).get("is_main_frame")).lower() in {"true", "1"} or "main_frame" in event_source(row):
+            return (True, "candidate_full", "main_html_document")
+        return (True, "candidate_full", "html_document")
+    if "xml" in mime:
+        return (True, "candidate_full", "xml_payload")
+    if any(token in url for token in ("bootstrap", "config")):
+        return (True, "candidate_full", "bootstrap_or_config")
+    return (False, "metadata_only", "non_candidate_mime")
+
+
+def should_capture_candidate_body(row: Dict[str, Any]) -> bool:
+    capture, _, _ = body_capture_decision(row)
+    return capture
 
 
 def body_extension_from_payload(text: str) -> str:
@@ -950,18 +2718,28 @@ def build_body_store(rows: List[Dict[str, Any]], runtime_dir: pathlib.Path) -> D
 
     response_rows = [row for row in rows if row.get("event_type") == "network_response_event"]
     for row in response_rows:
-        if not should_capture_candidate_body(row):
+        capture_body, body_capture_policy, capture_reason = body_capture_decision(row)
+        if not capture_body:
             continue
         event_id = str(row.get("event_id") or "")
         if not event_id:
             continue
 
-        text = event_body_preview(row)
+        text = read_response_store_payload(row, runtime_dir)
         if not text:
-            text = read_response_store_payload(row, runtime_dir)
+            text = event_body_preview(row)
         if not text:
             continue
 
+        capture_truncated = event_capture_truncated(row)
+        capture_limit_bytes = event_capture_limit_bytes(row)
+        stored_size_bytes = event_stored_size_bytes(row)
+        content_length_header = event_content_length_header(row)
+        content_length_int = safe_int(content_length_header, default=0)
+        if not capture_truncated and content_length_int > 0 and stored_size_bytes > 0 and stored_size_bytes < content_length_int:
+            capture_truncated = True
+            if capture_limit_bytes <= 0:
+                capture_limit_bytes = stored_size_bytes
         payload_bytes = text.encode("utf-8", errors="replace")
         digest = hashlib.sha256(payload_bytes).hexdigest()
         extension = body_extension_from_payload(text)
@@ -992,10 +2770,17 @@ def build_body_store(rows: List[Dict[str, Any]], runtime_dir: pathlib.Path) -> D
                 "status": event_status(row),
                 "sha256": digest,
                 "size_bytes": len(payload_bytes),
+                "stored_size_bytes": stored_size_bytes,
+                "content_length_header": content_length_header,
                 "compression": compression,
                 "body_ref": rel,
                 "phase_id": event_phase_id(row),
                 "host_class": event_host_class(row),
+                "target_site_id": event_target_site_id(row),
+                "body_capture_policy": body_capture_policy,
+                "capture_reason": capture_reason,
+                "capture_truncated": capture_truncated,
+                "capture_limit_bytes": capture_limit_bytes if capture_truncated else 0,
             }
         )
 
@@ -1011,6 +2796,304 @@ def build_body_store(rows: List[Dict[str, Any]], runtime_dir: pathlib.Path) -> D
         "index": index,
         "event_body_refs": event_body_refs,
         "index_path": runtime_dir / "response_index.json",
+    }
+
+
+def hash_value_repr(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8", errors="replace")).hexdigest()
+
+
+def safe_value_repr(value: str) -> str:
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return "*" * len(value)
+    return f"{value[:4]}...{value[-2:]}"
+
+
+def parse_cookie_names(cookie_header: str) -> List[str]:
+    return [name for name, _value in parse_cookie_pairs(cookie_header)]
+
+
+def parse_cookie_pairs(cookie_header: str) -> List[Tuple[str, str]]:
+    raw = str(cookie_header or "")
+    if not raw:
+        return []
+    out: List[Tuple[str, str]] = []
+    for chunk in raw.split(";"):
+        part = str(chunk).strip()
+        if not part or "=" not in part:
+            continue
+        name_raw, value_raw = part.split("=", 1)
+        name = str(name_raw).strip().lower()
+        value = str(value_raw).strip()
+        if name:
+            out.append((name, value))
+    return out
+
+
+def parse_set_cookie_pairs(set_cookie_raw: str) -> List[Tuple[str, str]]:
+    raw = str(set_cookie_raw or "").strip()
+    if not raw:
+        return []
+    out: List[Tuple[str, str]] = []
+    candidates = re.split(r",\s*(?=[A-Za-z0-9_.-]+=)", raw)
+    for candidate in candidates:
+        first = str(candidate).split(";", 1)[0].strip()
+        if not first or "=" not in first:
+            continue
+        name_raw, value_raw = first.split("=", 1)
+        name = str(name_raw).strip().lower()
+        value = str(value_raw).strip()
+        if name:
+            out.append((name, value))
+    return out
+
+
+def provenance_key_name(key: str) -> str:
+    normalized = str(key or "").strip().lower()
+    if normalized in {"zdf-app-id", "x-zdf-app-id"}:
+        return "zdf-app-id"
+    if normalized in {"api-auth", "x-api-auth", "authorization"}:
+        return "api-auth"
+    if normalized in {"usersegment", "x-usersegment"}:
+        return "userSegment"
+    if normalized in {"abgroup", "x-ab-group"}:
+        return "abGroup"
+    if normalized in {"referer"}:
+        return "referer"
+    if normalized in {"origin"}:
+        return "origin"
+    return ""
+
+
+def extract_provenance_body_values(body: str) -> List[Tuple[str, str, str]]:
+    hits: List[Tuple[str, str, str]] = []
+    text = str(body or "")
+    if not text:
+        return hits
+
+    try:
+        loaded = json.loads(text)
+        for path, value in iter_json_leaf_paths(loaded):
+            if value is None:
+                continue
+            lower_path = str(path).lower()
+            name = ""
+            if any(token in lower_path for token in ("zdf-app-id", "x-zdf-app-id")):
+                name = "zdf-app-id"
+            elif any(token in lower_path for token in ("api-auth", "x-api-auth", "authorization")):
+                name = "api-auth"
+            elif any(token in lower_path for token in ("usersegment", "x-usersegment")):
+                name = "userSegment"
+            elif any(token in lower_path for token in ("abgroup", "x-ab-group")):
+                name = "abGroup"
+            elif "referer" in lower_path:
+                name = "referer"
+            elif "origin" in lower_path:
+                name = "origin"
+            if name:
+                hits.append((name, str(value), f"body_json:{path}"))
+    except Exception:
+        pass
+
+    for name, pattern in [
+        ("zdf-app-id", r'["\']?(?:x-)?zdf-app-id["\']?\s*[:=]\s*["\']([^"\']+)["\']'),
+        ("api-auth", r'["\']?(?:x-)?api-auth["\']?\s*[:=]\s*["\']([^"\']+)["\']'),
+        ("userSegment", r'["\']?usersegment["\']?\s*[:=]\s*["\']([^"\']+)["\']'),
+        ("abGroup", r'["\']?abgroup["\']?\s*[:=]\s*["\']([^"\']+)["\']'),
+    ]:
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            value = str(match.group(1) or "").strip()
+            if value:
+                hits.append((name, value, "body_text"))
+
+    for meta_name, key_name in [("origin", "origin"), ("referer", "referer")]:
+        meta_pattern = rf'<meta[^>]+(?:name|property)=["\']{meta_name}["\'][^>]+content=["\']([^"\']+)["\']'
+        for match in re.finditer(meta_pattern, text, flags=re.IGNORECASE):
+            value = str(match.group(1) or "").strip()
+            if value:
+                hits.append((key_name, value, "html_meta"))
+
+    return hits
+
+
+def build_provenance_registry(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
+    registry: Dict[Tuple[str, str], Dict[str, Any]] = {}
+
+    def upsert_entry(
+        *,
+        name: str,
+        value: str,
+        source_type: str,
+        source_ref: str,
+        ts_utc: str,
+        phase_id: str,
+        target_site_id: str,
+    ) -> None:
+        if not value:
+            return
+        value_hash = hash_value_repr(value)
+        key = (name, value_hash)
+        entry = registry.get(key)
+        if entry is None:
+            entry = {
+                "name": name,
+                "value_hash": value_hash,
+                "safe_value_repr": safe_value_repr(value),
+                "source_type": source_type,
+                "source_types": [source_type] if source_type else [],
+                "source_refs": [],
+                "first_seen_ts": ts_utc,
+                "last_seen_ts": ts_utc,
+                "phase_id": phase_id,
+                "target_site_id": target_site_id,
+            }
+            registry[key] = entry
+        entry["last_seen_ts"] = ts_utc
+        source_types = entry.get("source_types")
+        if not isinstance(source_types, list):
+            source_types = []
+            entry["source_types"] = source_types
+        if source_type and source_type not in source_types:
+            source_types.append(source_type)
+            source_types.sort()
+        if len(source_types) == 1:
+            entry["source_type"] = source_types[0]
+        elif len(source_types) > 1:
+            entry["source_type"] = "multi_source"
+        if source_ref and source_ref not in entry["source_refs"]:
+            entry["source_refs"].append(source_ref)
+
+    for row in rows:
+        payload = event_payload(row)
+        ts_utc = str(row.get("ts_utc") or "")
+        phase_id = event_phase_id(row)
+        target_site_id = event_target_site_id(row)
+        event_id = str(row.get("event_id") or "")
+
+        headers = event_headers(row)
+        lowered_headers = {str(k).lower(): str(v) for k, v in headers.items()}
+        for provenance_name, header_keys in PROVENANCE_TARGET_NAMES.items():
+            for header_key in header_keys:
+                if header_key in lowered_headers:
+                    upsert_entry(
+                        name=provenance_name,
+                        value=lowered_headers[header_key],
+                        source_type="header",
+                        source_ref=f"{event_id}:header:{header_key}",
+                        ts_utc=ts_utc,
+                        phase_id=phase_id,
+                        target_site_id=target_site_id,
+                    )
+
+        cookie_header = lowered_headers.get("cookie", "")
+        if cookie_header:
+            for cookie_name, cookie_value in parse_cookie_pairs(cookie_header):
+                upsert_entry(
+                    name=f"cookies.{cookie_name}",
+                    value=cookie_value or cookie_name,
+                    source_type="cookie_header",
+                    source_ref=f"{event_id}:cookie:{cookie_name}",
+                    ts_utc=ts_utc,
+                    phase_id=phase_id,
+                    target_site_id=target_site_id,
+                )
+        set_cookie_header = lowered_headers.get("set-cookie", "")
+        if set_cookie_header:
+            for cookie_name, cookie_value in parse_set_cookie_pairs(set_cookie_header):
+                upsert_entry(
+                    name=f"cookies.{cookie_name}",
+                    value=cookie_value or cookie_name,
+                    source_type="set_cookie_header",
+                    source_ref=f"{event_id}:set-cookie:{cookie_name}",
+                    ts_utc=ts_utc,
+                    phase_id=phase_id,
+                    target_site_id=target_site_id,
+                )
+
+        query_params = payload.get("query_params")
+        if isinstance(query_params, dict):
+            for query_key, values in query_params.items():
+                resolved_name = provenance_key_name(query_key)
+                if not resolved_name:
+                    continue
+                if isinstance(values, list):
+                    for idx, value in enumerate(values):
+                        upsert_entry(
+                            name=resolved_name,
+                            value=str(value),
+                            source_type="query_param",
+                            source_ref=f"{event_id}:query:{query_key}[{idx}]",
+                            ts_utc=ts_utc,
+                            phase_id=phase_id,
+                            target_site_id=target_site_id,
+                        )
+
+        if row.get("event_type") == "network_request_event":
+            request_body = str(payload.get("body") or payload.get("body_preview") or "")
+            for name, value, source_marker in extract_provenance_body_values(request_body):
+                upsert_entry(
+                    name=name,
+                    value=value,
+                    source_type=f"request_{source_marker.split(':', 1)[0]}",
+                    source_ref=f"{event_id}:{source_marker}",
+                    ts_utc=ts_utc,
+                    phase_id=phase_id,
+                    target_site_id=target_site_id,
+                )
+
+        if row.get("event_type") == "storage_event":
+            storage_key = str(payload.get("key") or "")
+            value_preview = str(payload.get("value_preview") or "")
+            resolved_name = provenance_key_name(storage_key)
+            if resolved_name and value_preview:
+                upsert_entry(
+                    name=resolved_name,
+                    value=value_preview,
+                    source_type="storage_event",
+                    source_ref=f"{event_id}:storage:{storage_key}",
+                    ts_utc=ts_utc,
+                    phase_id=phase_id,
+                    target_site_id=target_site_id,
+                )
+
+        if row.get("event_type") == "network_response_event":
+            body = read_response_store_payload(row, runtime_dir)
+            if not body:
+                body = event_body_preview(row)
+            body_ref = event_response_store_path(row)
+            for name, value, source_marker in extract_provenance_body_values(body):
+                upsert_entry(
+                    name=name,
+                    value=value,
+                    source_type=source_marker.split(":", 1)[0],
+                    source_ref=f"{event_id}:{source_marker}:{body_ref or 'body_preview'}",
+                    ts_utc=ts_utc,
+                    phase_id=phase_id,
+                    target_site_id=target_site_id,
+                )
+
+        if row.get("event_type") == "provenance_event":
+            entity_key = str(payload.get("entity_key") or "")
+            entity_type = str(payload.get("entity_type") or "provenance")
+            if entity_key:
+                upsert_entry(
+                    name=entity_type,
+                    value=entity_key,
+                    source_type="provenance_event",
+                    source_ref=f"{event_id}:entity_key",
+                    ts_utc=ts_utc,
+                    phase_id=phase_id,
+                    target_site_id=target_site_id,
+                )
+
+    entries = sorted(registry.values(), key=lambda item: (str(item.get("name") or ""), str(item.get("value_hash") or "")))
+    return {
+        "schema_version": 1,
+        "generated_at_utc": utc_now(),
+        "entry_count": len(entries),
+        "entries": entries,
     }
 
 
@@ -1047,6 +3130,7 @@ def build_provenance_graph(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
                     "to": entity_id,
                     "event_id": str(row.get("event_id") or ""),
                     "phase_id": event_phase_id(row),
+                    "target_site_id": event_target_site_id(row),
                 }
             )
         if consumed_by:
@@ -1057,6 +3141,7 @@ def build_provenance_graph(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
                     "to": consumed_by,
                     "event_id": str(row.get("event_id") or ""),
                     "phase_id": event_phase_id(row),
+                    "target_site_id": event_target_site_id(row),
                 }
             )
         for source in derived_from:
@@ -1079,6 +3164,7 @@ def build_provenance_graph(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
                     "to": entity_id,
                     "event_id": str(row.get("event_id") or ""),
                     "phase_id": event_phase_id(row),
+                    "target_site_id": event_target_site_id(row),
                 }
             )
 
@@ -1165,10 +3251,56 @@ def match_filters(rows: List[Dict[str, Any]], args: argparse.Namespace) -> List[
     return out
 
 
+def compact_requests_canonical(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    canonical_rows: List[Dict[str, Any]] = []
+    by_canonical_id: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        if row.get("event_type") != "network_request_event":
+            continue
+        compact = compact_request(row)
+        canonical_id = str(compact.get("canonical_request_id") or compact.get("request_id") or compact.get("event_id") or "")
+        if not canonical_id:
+            canonical_rows.append(compact)
+            continue
+        existing = by_canonical_id.get(canonical_id)
+        if existing is None:
+            compact["duplicate_event_count"] = 0
+            compact["duplicate_event_ids"] = []
+            by_canonical_id[canonical_id] = compact
+            canonical_rows.append(compact)
+            continue
+        existing["duplicate_event_count"] = int(existing.get("duplicate_event_count") or 0) + 1
+        duplicate_ids = existing.get("duplicate_event_ids")
+        if not isinstance(duplicate_ids, list):
+            duplicate_ids = []
+            existing["duplicate_event_ids"] = duplicate_ids
+        event_id = str(compact.get("event_id") or "")
+        if event_id and event_id != str(existing.get("event_id") or "") and event_id not in duplicate_ids:
+            duplicate_ids.append(event_id)
+    return canonical_rows
+
+
 def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dict[str, pathlib.Path]:
+    rows = normalize_runtime_rows(rows, runtime_dir=runtime_dir)
     correlation = build_correlation(rows)
     cookie_timeline = build_cookie_timeline(rows)
-    required_headers = build_required_headers(rows, active_elimination=False)
+    required_headers = build_required_headers_active_replay(
+        rows,
+        timeout_ms=ACTIVE_REPLAY_ROLLUP_TIMEOUT_MS,
+        allow_unsafe_methods=False,
+    )
+    endpoint_sets = list(required_headers.get("endpoint_minimal_sets") or [])
+    required_cookies_payload = build_required_cookies_report_for_endpoint_sets(
+        rows,
+        endpoint_sets=endpoint_sets,
+        inference_mode=str(required_headers.get("inference_mode") or "active_http_replay"),
+    )
+    replay_requirements = build_replay_requirements(
+        rows,
+        prefer_active_replay=True,
+        timeout_ms=ACTIVE_REPLAY_ROLLUP_TIMEOUT_MS,
+        allow_unsafe_methods=False,
+    )
     endpoint_candidates = build_endpoint_candidates(rows)
     field_matrix = build_field_matrix(rows, runtime_dir=runtime_dir)
     profile_draft = build_profile_draft(rows, endpoint_candidates, required_headers)
@@ -1180,20 +3312,29 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
         event_body_refs=body_store.get("event_body_refs", {}),
     )
     provenance_graph = build_provenance_graph(rows)
+    provenance_registry = build_provenance_registry(rows, runtime_dir=runtime_dir)
     events_ssot = {
         "schema_version": 1,
         "generated_at_utc": utc_now(),
         "event_count": len(rows),
+        "raw_event_store_ssot": str(events_path(runtime_dir)),
     }
     profile_candidate = dict(profile_draft)
     profile_candidate["profile_type"] = "candidate"
 
+    request_rows = compact_requests_canonical(rows)
+    response_rows = [compact_response(row) for row in rows if row.get("event_type") == "network_response_event"]
+
     paths = {
         "events_ssot": runtime_dir / "events.jsonl",
         "events_ssot_meta": runtime_dir / "events.meta.json",
+        "requests_normalized": runtime_dir / "requests.normalized.jsonl",
+        "responses_normalized": runtime_dir / "responses.normalized.jsonl",
         "correlation": runtime_dir / "correlation_index.jsonl",
         "cookie_timeline": runtime_dir / "cookie_timeline.json",
         "required_headers": runtime_dir / "required_headers_report.json",
+        "required_cookies": runtime_dir / "required_cookies_report.json",
+        "replay_requirements": runtime_dir / "replay_requirements.json",
         "endpoint_candidates": runtime_dir / "endpoint_candidates.json",
         "field_matrix": runtime_dir / "field_matrix.json",
         "profile_draft": runtime_dir / "site_profile.draft.json",
@@ -1202,13 +3343,18 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
         "response_store_index": runtime_dir / "response_store" / "index.json",
         "response_index": runtime_dir / "response_index.json",
         "provenance_graph": runtime_dir / "provenance_graph.json",
+        "provenance_registry": runtime_dir / "provenance_registry.json",
     }
 
     write_jsonl(paths["events_ssot"], rows)
     write_json(paths["events_ssot_meta"], events_ssot)
+    write_jsonl(paths["requests_normalized"], request_rows)
+    write_jsonl(paths["responses_normalized"], response_rows)
     write_jsonl(paths["correlation"], correlation)
     write_json(paths["cookie_timeline"], cookie_timeline)
     write_json(paths["required_headers"], required_headers)
+    write_json(paths["required_cookies"], required_cookies_payload)
+    write_json(paths["replay_requirements"], replay_requirements)
     write_json(paths["endpoint_candidates"], endpoint_candidates)
     write_json(paths["field_matrix"], field_matrix)
     write_json(paths["profile_draft"], profile_draft)
@@ -1217,6 +3363,7 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
     write_json(paths["response_store_index"], response_store_index)
     write_json(paths["response_index"], body_store.get("index", {}))
     write_json(paths["provenance_graph"], provenance_graph)
+    write_json(paths["provenance_registry"], provenance_registry)
     return paths
 
 
@@ -1225,10 +3372,12 @@ def discover_primary_host(rows: List[Dict[str, Any]]) -> str:
     for row in rows:
         if row.get("event_type") != "network_request_event":
             continue
+        if event_host_class(row) in NON_SIGNAL_HOST_CLASSES:
+            continue
         url = event_url(row)
         if not url:
             continue
-        host = urlparse(url).netloc
+        host = event_normalized_host(row) or urlparse(url).netloc
         if not host:
             continue
         if is_noise_asset(url=url, mime=event_mime(row)):
@@ -1254,14 +3403,14 @@ def pipeline_quality_report(
     if run_id:
         scoped_rows = [row for row in rows if str(row.get("run_id") or "") == run_id]
 
-    rows = scoped_rows
+    rows = normalize_runtime_rows(scoped_rows, runtime_dir=runtime_dir)
     derived = ensure_derived(runtime_dir, rows)
     host = quality_host.strip() or discover_primary_host(rows)
 
     request_rows_all = [row for row in rows if row.get("event_type") == "network_request_event"]
     response_rows_all = [row for row in rows if row.get("event_type") == "network_response_event"]
-    target_request_rows = [row for row in request_rows_all if event_host_class(row) == "target"]
-    target_response_rows = [row for row in response_rows_all if event_host_class(row) == "target"]
+    target_request_rows = [row for row in request_rows_all if event_host_class(row) not in NON_SIGNAL_HOST_CLASSES]
+    target_response_rows = [row for row in response_rows_all if event_host_class(row) not in NON_SIGNAL_HOST_CLASSES]
     request_rows = target_request_rows if target_request_rows else request_rows_all
     response_rows = target_response_rows if target_response_rows else response_rows_all
     if host:
@@ -1329,7 +3478,8 @@ def pipeline_quality_report(
     logical_request_total = len(observable_request_rows) + dedup_refs
     duplicate_request_ratio = round((dedup_refs / logical_request_total), 6) if logical_request_total > 0 else 0.0
 
-    required_phases = ["home_probe", "search_probe", "detail_probe", "playback_probe"]
+    required_phases = [PHASE_HOME, PHASE_SEARCH, PHASE_DETAIL, PHASE_PLAYBACK]
+    optional_phase = PHASE_AUTH
     phase_starts = {
         str(event_payload(row).get("phase_id") or "")
         for row in rows
@@ -1344,14 +3494,19 @@ def pipeline_quality_report(
 
     latest_targets = [
         runtime_dir / "events.jsonl",
+        runtime_dir / "requests.normalized.jsonl",
+        runtime_dir / "responses.normalized.jsonl",
         runtime_dir / "correlation_index.jsonl",
         runtime_dir / "cookie_timeline.json",
         runtime_dir / "required_headers_report.json",
+        runtime_dir / "required_cookies_report.json",
+        runtime_dir / "replay_requirements.json",
         runtime_dir / "endpoint_candidates.json",
         runtime_dir / "field_matrix.json",
         runtime_dir / "site_profile.draft.json",
         runtime_dir / "profile_candidate.json",
         runtime_dir / "provenance_graph.json",
+        runtime_dir / "provenance_registry.json",
         runtime_dir / "response_index.json",
         runtime_dir / "replay_seed.json",
     ]
@@ -1370,6 +3525,8 @@ def pipeline_quality_report(
         for item in refs:
             if not isinstance(item, dict):
                 continue
+            if not str(item.get("path") or ""):
+                continue
             ref_total += 1
             if bool(item.get("exists")):
                 ref_valid += 1
@@ -1386,6 +3543,8 @@ def pipeline_quality_report(
             "value": phase_completeness_ratio,
             "passed": phase_hits == len(required_phases),
             "required_phases": required_phases,
+            "optional_phase": optional_phase,
+            "optional_phase_seen": optional_phase in phase_starts,
             "seen_phases": sorted(list(phase_starts)),
             "phase_hits": phase_hits,
         },
@@ -2019,7 +4178,11 @@ def field_matrix_signature(rows: List[Dict[str, Any]]) -> str:
 
 
 def build_replay_baseline(rows: List[Dict[str, Any]], baseline_name: str, preset: str, source_meta: Dict[str, Any]) -> Dict[str, Any]:
-    required_headers = build_required_headers(rows, active_elimination=True)
+    required_headers = build_required_headers_active_replay(
+        rows,
+        timeout_ms=ACTIVE_REPLAY_ROLLUP_TIMEOUT_MS,
+        allow_unsafe_methods=False,
+    )
     endpoint_candidates = build_endpoint_candidates(rows)
     response_signature = response_form_signature(rows)
 
@@ -2563,9 +4726,31 @@ def do_headers(action: str, rows: List[Dict[str, Any]], args: argparse.Namespace
         selected_rows = match_filters(rows, args)
         if not selected_rows:
             selected_rows = rows
-        payload = build_required_headers(selected_rows, active_elimination=True)
+        payload = build_required_headers_active_replay(
+            selected_rows,
+            timeout_ms=max(int(args.timeout_ms or 0), 1000),
+            allow_unsafe_methods=bool(getattr(args, "allow_unsafe_replay_methods", False)),
+        )
+        endpoint_sets = list(payload.get("endpoint_minimal_sets") or [])
+        replay_payload = replay_requirements_from_endpoint_sets(
+            endpoint_sets,
+            inference_mode=str(payload.get("inference_mode") or "active_http_replay"),
+        )
+        cookies_payload = build_required_cookies_report_for_endpoint_sets(
+            selected_rows,
+            endpoint_sets=endpoint_sets,
+            inference_mode=str(payload.get("inference_mode") or "active_http_replay"),
+        )
         write_json(runtime_dir / "required_headers_report.active.json", payload)
-        print_json(payload)
+        write_json(runtime_dir / "required_cookies_report.active.json", cookies_payload)
+        write_json(runtime_dir / "replay_requirements.active.json", replay_payload)
+        print_json(
+            {
+                "required_headers": payload,
+                "required_cookies": cookies_payload,
+                "replay_requirements": replay_payload,
+            }
+        )
         return 0
 
     if action == "token-deps":
@@ -2710,15 +4895,20 @@ def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Name
             "events/runtime_events.jsonl",
             "events.jsonl",
             "events.meta.json",
+            "requests.normalized.jsonl",
+            "responses.normalized.jsonl",
             "events/indexer_state.json",
             "correlation_index.jsonl",
             "cookie_timeline.json",
             "required_headers_report.json",
+            "required_cookies_report.json",
+            "replay_requirements.json",
             "field_matrix.json",
             "endpoint_candidates.json",
             "site_profile.draft.json",
             "profile_candidate.json",
             "provenance_graph.json",
+            "provenance_registry.json",
             "response_index.json",
             "replay_seed.json",
             "replay_results.jsonl",
@@ -3072,6 +5262,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--baseline-name", default="")
     parser.add_argument("--seed-path", default="")
     parser.add_argument("--timeout-ms", type=int, default=15000)
+    parser.add_argument("--allow-unsafe-replay-methods", action="store_true")
     parser.add_argument("--ci-strict", action="store_true")
     parser.add_argument("--window-limit", type=int, default=400)
     parser.add_argument("--sampling-rate", type=int, default=1)
@@ -3085,7 +5276,8 @@ def main() -> int:
     args = parse_args()
     runtime_dir = pathlib.Path(args.runtime_dir)
     runtime_dir.mkdir(parents=True, exist_ok=True)
-    rows = read_jsonl(events_path(runtime_dir))
+    rows_raw = read_jsonl(events_path(runtime_dir))
+    rows = normalize_runtime_rows(rows_raw, runtime_dir=runtime_dir)
 
     dispatch = {
         "trace": do_trace,

@@ -95,8 +95,20 @@ class RuntimeToolkitOkHttpInterceptor(
             }
             val requestBodyContentLength = runCatching { request.body?.contentLength() ?: -1L }.getOrDefault(-1L)
             val responseBodyContentLength = runCatching { response.body?.contentLength() ?: -1L }.getOrDefault(-1L)
+            val contentLengthHeader = responseHeaders.entries
+                .firstOrNull { it.key.equals("content-length", ignoreCase = true) }
+                ?.value
+                ?.trim()
+                .orEmpty()
             val priorCode = response.priorResponse?.code
             val responseId = "resp_${java.util.UUID.randomUUID()}"
+            val storedSizeBytes = rawBody?.size ?: 0
+            val captureTruncated = when {
+                responseBodyContentLength > 0 && storedSizeBytes > 0 && storedSizeBytes.toLong() < responseBodyContentLength -> true
+                capturePlan.captureRaw && capturePlan.peekBytes > 0 && storedSizeBytes.toLong() >= capturePlan.peekBytes -> true
+                else -> false
+            }
+            val captureLimitBytes = if (captureTruncated) storedSizeBytes else 0
 
             RuntimeToolkitTelemetry.logNetworkResponse(
                 context = appContext,
@@ -126,8 +138,12 @@ class RuntimeToolkitOkHttpInterceptor(
                     "response_received_at_utc" to Instant.now().toString(),
                     "request_content_length" to requestBodyContentLength,
                     "response_content_length" to responseBodyContentLength,
+                    "content_length_header" to contentLengthHeader,
                     "capture_mode" to capturePlan.mode,
+                    "stored_size_bytes" to storedSizeBytes,
                     "captured_body_bytes" to (rawBody?.size ?: 0),
+                    "capture_truncated" to captureTruncated,
+                    "capture_limit_bytes" to captureLimitBytes,
                     "redirected" to (priorCode != null),
                     "prior_status_code" to priorCode,
                 ),
@@ -367,7 +383,7 @@ class RuntimeToolkitOkHttpInterceptor(
     }
 
     companion object {
-        private const val MAX_PEEK_BYTES_FULL = 512L * 1024L
+        private const val MAX_PEEK_BYTES_FULL = 4L * 1024L * 1024L
         private const val MAX_PEEK_BYTES_SNIPPET = 32L * 1024L
         private const val MAX_BODY_PREVIEW_BYTES = 16 * 1024
     }

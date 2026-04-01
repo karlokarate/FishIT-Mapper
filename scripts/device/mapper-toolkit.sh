@@ -434,55 +434,88 @@ update_latest_jsonl_if_valid() {
 }
 
 finalize_snapshot_artifacts() {
-  mkdir -p "$CURRENT_DIR/latest"
+  local quality_report="$CURRENT_DIR/rollups/pipeline_ready_report.json"
+  if ! run_dataset_cli housekeeping validate >"$quality_report"; then
+    echo "WARN: pipeline-ready validation failed; latest artifacts remain unchanged." >&2
+    return 0
+  fi
+
+  local stage_dir="$CURRENT_DIR/latest.stage.$$"
+  local final_dir="$CURRENT_DIR/latest"
+  rm -rf "$stage_dir"
+  mkdir -p "$stage_dir"
+
+  if [[ -d "$final_dir" ]]; then
+    cp -a "$final_dir/." "$stage_dir/" 2>/dev/null || true
+  fi
 
   update_latest_jsonl_if_valid \
     "$CURRENT_DIR/events.jsonl" \
-    "$CURRENT_DIR/latest/events_latest.jsonl"
+    "$stage_dir/events_latest.jsonl"
+  update_latest_jsonl_if_valid \
+    "$CURRENT_DIR/requests.normalized.jsonl" \
+    "$stage_dir/requests_normalized_latest.jsonl"
+  update_latest_jsonl_if_valid \
+    "$CURRENT_DIR/responses.normalized.jsonl" \
+    "$stage_dir/responses_normalized_latest.jsonl"
   update_latest_jsonl_if_valid \
     "$CURRENT_DIR/correlation_index.jsonl" \
-    "$CURRENT_DIR/latest/correlation_index_latest.jsonl"
+    "$stage_dir/correlation_index_latest.jsonl"
   update_latest_json_if_valid \
     "$CURRENT_DIR/field_matrix.json" \
-    "$CURRENT_DIR/latest/field_matrix_latest.json" \
-    '.keys | type == "array" and length > 0'
+    "$stage_dir/field_matrix_latest.json" \
+    '.fields | type == "array" and length > 0'
   update_latest_json_if_valid \
     "$CURRENT_DIR/required_headers_report.json" \
-    "$CURRENT_DIR/latest/required_headers_latest.json" \
+    "$stage_dir/required_headers_latest.json" \
     '.hosts | type == "object" and length > 0'
   update_latest_json_if_valid \
+    "$CURRENT_DIR/required_cookies_report.json" \
+    "$stage_dir/required_cookies_latest.json" \
+    '.hosts | type == "object"'
+  update_latest_json_if_valid \
+    "$CURRENT_DIR/replay_requirements.json" \
+    "$stage_dir/replay_requirements_latest.json" \
+    '.operations | type == "object"'
+  update_latest_json_if_valid \
     "$CURRENT_DIR/endpoint_candidates.json" \
-    "$CURRENT_DIR/latest/endpoint_candidates_latest.json" \
+    "$stage_dir/endpoint_candidates_latest.json" \
     '.candidates | type == "array" and length > 0'
   update_latest_json_if_valid \
     "$CURRENT_DIR/replay_seed.json" \
-    "$CURRENT_DIR/latest/replay_seed_latest.json" \
+    "$stage_dir/replay_seed_latest.json" \
     '.steps | type == "array" and length > 0'
   update_latest_json_if_valid \
     "$CURRENT_DIR/cookie_timeline.json" \
-    "$CURRENT_DIR/latest/cookie_timeline_latest.json" \
+    "$stage_dir/cookie_timeline_latest.json" \
     '.timeline | type == "array"'
   update_latest_json_if_valid \
     "$CURRENT_DIR/site_profile.draft.json" \
-    "$CURRENT_DIR/latest/site_profile_latest.json" \
+    "$stage_dir/site_profile_latest.json" \
     '.endpoint_candidates | type == "array"'
   update_latest_json_if_valid \
     "$CURRENT_DIR/profile_candidate.json" \
-    "$CURRENT_DIR/latest/profile_candidate_latest.json" \
+    "$stage_dir/profile_candidate_latest.json" \
     '.endpoint_candidates | type == "array"'
   update_latest_json_if_valid \
     "$CURRENT_DIR/provenance_graph.json" \
-    "$CURRENT_DIR/latest/provenance_graph_latest.json" \
+    "$stage_dir/provenance_graph_latest.json" \
     '.edge_count >= 0'
   update_latest_json_if_valid \
+    "$CURRENT_DIR/provenance_registry.json" \
+    "$stage_dir/provenance_registry_latest.json" \
+    '.entry_count >= 0'
+  update_latest_json_if_valid \
     "$CURRENT_DIR/response_index.json" \
-    "$CURRENT_DIR/latest/response_index_latest.json" \
+    "$stage_dir/response_index_latest.json" \
     '.item_count >= 0'
 
-  local quality_report="$CURRENT_DIR/rollups/pipeline_ready_report.json"
-  if ! run_dataset_cli housekeeping validate >"$quality_report"; then
-    echo "WARN: pipeline-ready validation failed; keeping previous *_latest snapshots unchanged where source was empty." >&2
+  local backup_dir="$CURRENT_DIR/latest.backup.$$"
+  if [[ -d "$final_dir" ]]; then
+    mv "$final_dir" "$backup_dir"
   fi
+  mv "$stage_dir" "$final_dir"
+  rm -rf "$backup_dir"
 }
 
 session_start() {
@@ -746,8 +779,20 @@ probe_cmd() {
       local phase_id="${1:-}"
       local transition="start"
       local requested_device=""
+      local -a allowed_phases=("home_probe" "search_probe" "detail_probe" "playback_probe" "auth_probe" "background_noise")
       if [[ -z "$phase_id" ]]; then
         echo "ERROR: probe start-phase requires <phase_id>" >&2
+        exit 1
+      fi
+      local valid_phase=0
+      for allowed in "${allowed_phases[@]}"; do
+        if [[ "$phase_id" == "$allowed" ]]; then
+          valid_phase=1
+          break
+        fi
+      done
+      if [[ "$valid_phase" -ne 1 ]]; then
+        echo "ERROR: invalid phase_id '$phase_id' (allowed: ${allowed_phases[*]})" >&2
         exit 1
       fi
       shift || true
@@ -795,7 +840,7 @@ probe_cmd() {
       runtime_broadcast "$serial" clear_probe_phase
       if [[ -f "$STATE_FILE" ]]; then
         local tmp="${STATE_FILE}.tmp.$$"
-        jq '.runtime.activePhaseId = "unscoped"' "$STATE_FILE" >"$tmp" && mv "$tmp" "$STATE_FILE"
+        jq '.runtime.activePhaseId = "background_noise"' "$STATE_FILE" >"$tmp" && mv "$tmp" "$STATE_FILE"
       fi
       echo "probe phase cleared"
       ;;

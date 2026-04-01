@@ -43,6 +43,7 @@ object RuntimeToolkitTelemetry {
     private const val DEDUP_BUCKET_NS = 150_000_000L
     private const val DEDUP_RETENTION_NS = 12_000_000_000L
     private const val DEFAULT_SCOPE_MODE = "strict_target"
+    private const val PHASE_BACKGROUND = "background_noise"
 
     private val ioLock = Any()
     private val requestLock = Any()
@@ -66,6 +67,12 @@ object RuntimeToolkitTelemetry {
         val dedupCount: Int,
         val canonical: Boolean,
         val responseObservable: Boolean,
+    )
+
+    private data class NormalizedUrlParts(
+        val scheme: String,
+        val host: String,
+        val path: String,
     )
 
     private data class CanonicalRequest(
@@ -272,7 +279,15 @@ object RuntimeToolkitTelemetry {
         val nowMonoNs = SystemClock.elapsedRealtimeNanos()
         val phaseId = activePhaseId(context)
         val targetHosts = targetHostFamily(context)
-        val hostClass = classifyHost(url = url, targetHosts = targetHosts, scopeMode = scopeMode(context))
+        val normalizedParts = normalizedUrlParts(url)
+        val targetSiteId = resolveTargetSiteId(targetHosts = targetHosts, normalizedHost = normalizedParts.host)
+        val hostClass = classifyHost(
+            url = url,
+            targetHosts = targetHosts,
+            scopeMode = scopeMode(context),
+            phaseId = phaseId,
+            source = source,
+        )
         val normalizedUrl = normalizedUrl(url)
         val headerSubset = canonicalHeaderSubset(headers)
         val frameContext = canonicalFrameContext(source)
@@ -348,19 +363,24 @@ object RuntimeToolkitTelemetry {
             context = context,
             eventType = "network_request_event",
             correlation = correlation,
-            payload = payload + mapOf(
-                "request_id" to resolvedRequestId,
-                "request_fingerprint" to requestFingerprint,
-                "dedup_fingerprint" to dedupFingerprint,
-                "phase_id" to phaseId,
-                "host_class" to hostClass,
-                "normalized_url" to normalizedUrl,
-                "frame_context" to frameContext,
-                "source" to source,
-                "capture_channel" to source,
-                "response_observable" to responseObservable,
-                "request_classification" to semantic.classification,
-                "request_operation" to semantic.operation,
+                payload = payload + mapOf(
+                    "request_id" to resolvedRequestId,
+                    "request_fingerprint" to requestFingerprint,
+                    "dedup_fingerprint" to dedupFingerprint,
+                    "phase_id" to phaseId,
+                    "target_site_id" to targetSiteId,
+                    "host_class" to hostClass,
+                    "normalized_url" to normalizedUrl,
+                    "normalized_scheme" to normalizedParts.scheme,
+                    "normalized_host" to normalizedParts.host,
+                    "normalized_path" to normalizedParts.path,
+                    "frame_context" to frameContext,
+                    "source" to source,
+                    "capture_channel" to source,
+                    "source_channel" to source,
+                    "response_observable" to responseObservable,
+                    "request_classification" to semantic.classification,
+                    "request_operation" to semantic.operation,
                 "semantic_labels" to semantic.labels,
                 "graphql_operation_name" to semantic.graphqlOperation,
                 "route_kind" to semantic.routeKind,
@@ -407,7 +427,16 @@ object RuntimeToolkitTelemetry {
             rememberRequestId(url = url, method = method, requestId = resolvedRequestId)
         }
         val phaseId = activePhaseId(context)
-        val hostClass = classifyHost(url = url, targetHosts = targetHostFamily(context), scopeMode = scopeMode(context))
+        val targetHosts = targetHostFamily(context)
+        val normalizedParts = normalizedUrlParts(url)
+        val targetSiteId = resolveTargetSiteId(targetHosts = targetHosts, normalizedHost = normalizedParts.host)
+        val hostClass = classifyHost(
+            url = url,
+            targetHosts = targetHosts,
+            scopeMode = scopeMode(context),
+            phaseId = phaseId,
+            source = source,
+        )
         val normalizedUrl = normalizedUrl(url)
         val requestFingerprint = requestFingerprint(method, normalizedUrl, canonicalFrameContext(source), canonicalHeaderSubset(headers))
 
@@ -421,6 +450,22 @@ object RuntimeToolkitTelemetry {
             String(rawBody, Charsets.UTF_8).take(16_384)
         } else {
             null
+        }
+        val contentLengthHeader = headers.entries
+            .firstOrNull { it.key.equals("content-length", ignoreCase = true) }
+            ?.value
+            ?.trim()
+            .orEmpty()
+        val storedSizeBytes = rawBody?.size ?: 0
+        val contentLengthInt = contentLengthHeader.toLongOrNull() ?: -1L
+        val explicitCaptureTruncated = (payload["capture_truncated"] as? Boolean) ?: false
+        val explicitCaptureLimit = (payload["capture_limit_bytes"] as? Number)?.toInt() ?: 0
+        val inferredCaptureTruncated = contentLengthInt > 0 && storedSizeBytes > 0 && storedSizeBytes.toLong() < contentLengthInt
+        val captureTruncated = explicitCaptureTruncated || inferredCaptureTruncated
+        val captureLimitBytes = if (captureTruncated) {
+            if (explicitCaptureLimit > 0) explicitCaptureLimit else storedSizeBytes
+        } else {
+            0
         }
         val bodyHash = if (rawBody != null && rawBody.isNotEmpty()) sha256(rawBody) else null
         val resolvedMime = resolveMimeType(
@@ -448,10 +493,15 @@ object RuntimeToolkitTelemetry {
                 "response_id" to eventId,
                 "request_fingerprint" to requestFingerprint,
                 "phase_id" to phaseId,
+                "target_site_id" to targetSiteId,
                 "host_class" to hostClass,
                 "normalized_url" to normalizedUrl,
+                "normalized_scheme" to normalizedParts.scheme,
+                "normalized_host" to normalizedParts.host,
+                "normalized_path" to normalizedParts.path,
                 "source" to source,
                 "capture_channel" to source,
+                "source_channel" to source,
                 "url" to url,
                 "method" to method,
                 "response_classification" to semantic.classification,
@@ -472,6 +522,10 @@ object RuntimeToolkitTelemetry {
                 "mime_type" to resolvedMime.mimeType,
                 "mime_source" to resolvedMime.source,
                 "headers" to headers,
+                "content_length_header" to contentLengthHeader,
+                "stored_size_bytes" to storedSizeBytes,
+                "capture_truncated" to captureTruncated,
+                "capture_limit_bytes" to captureLimitBytes,
                 "body_preview" to bodyPreview,
                 "response_store_path" to responsePath,
                 "body_ref" to responsePath,
@@ -630,17 +684,19 @@ object RuntimeToolkitTelemetry {
     }
 
     fun setActivePhaseId(context: Context, phaseId: String) {
-        setRuntimeSetting(context, SETTING_ACTIVE_PHASE_ID, phaseId)
+        val normalized = phaseId.trim().ifBlank { PHASE_BACKGROUND }
+        val resolved = if (normalized == "unscoped") PHASE_BACKGROUND else normalized
+        setRuntimeSetting(context, SETTING_ACTIVE_PHASE_ID, resolved)
     }
 
     fun clearActivePhaseId(context: Context) {
-        setRuntimeSetting(context, SETTING_ACTIVE_PHASE_ID, "unscoped")
+        setRuntimeSetting(context, SETTING_ACTIVE_PHASE_ID, PHASE_BACKGROUND)
     }
 
     fun activePhaseId(context: Context): String {
         return runtimeSettings(context).getString(SETTING_ACTIVE_PHASE_ID, null)
             ?.takeIf { it.isNotBlank() }
-            ?: "unscoped"
+            ?: PHASE_BACKGROUND
     }
 
     fun setTargetHostFamily(context: Context, hostsCsv: String) {
@@ -675,7 +731,7 @@ object RuntimeToolkitTelemetry {
         return mapOf(
             "scope_mode" to (prefs.getString(SETTING_SCOPE_MODE, DEFAULT_SCOPE_MODE) ?: DEFAULT_SCOPE_MODE),
             "target_host_family" to (prefs.getString(SETTING_TARGET_HOST_FAMILY, "") ?: ""),
-            "active_phase_id" to (prefs.getString(SETTING_ACTIVE_PHASE_ID, "unscoped") ?: "unscoped"),
+            "active_phase_id" to (prefs.getString(SETTING_ACTIVE_PHASE_ID, PHASE_BACKGROUND) ?: PHASE_BACKGROUND),
             "capture_enabled" to prefs.getBoolean(SETTING_CAPTURE_ENABLED, true),
         )
     }
@@ -944,14 +1000,35 @@ object RuntimeToolkitTelemetry {
         return out
     }
 
+    private fun normalizedUrlParts(rawUrl: String): NormalizedUrlParts {
+        val uri = runCatching { Uri.parse(rawUrl) }.getOrNull()
+        val scheme = uri?.scheme?.lowercase(Locale.ROOT).orEmpty()
+        val host = uri?.host?.lowercase(Locale.ROOT).orEmpty().trim('.')
+        val path = uri?.path.orEmpty().ifBlank { "/" }
+        return NormalizedUrlParts(
+            scheme = scheme,
+            host = host,
+            path = path,
+        )
+    }
+
     private fun normalizedUrl(rawUrl: String): String {
         val uri = runCatching { Uri.parse(rawUrl) }.getOrNull() ?: return rawUrl.trim()
-        val scheme = uri.scheme?.lowercase(Locale.ROOT).orEmpty()
-        val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
-        val path = uri.path.orEmpty()
+        val parts = normalizedUrlParts(rawUrl)
         val queryKeys = uri.queryParameterNames.toList().sorted()
         val queryShape = if (queryKeys.isEmpty()) "" else "?" + queryKeys.joinToString("&")
-        return "$scheme://$host$path$queryShape"
+        return "${parts.scheme}://${parts.host}${parts.path}$queryShape"
+    }
+
+    private fun resolveTargetSiteId(targetHosts: List<String>, normalizedHost: String): String {
+        val candidate = targetHosts.firstOrNull { it.isNotBlank() } ?: normalizedHost
+        if (candidate.isBlank()) return "unknown_target"
+        val parts = candidate.split('.').filter { it.isNotBlank() }
+        return if (parts.size >= 2) {
+            parts.takeLast(2).joinToString(".")
+        } else {
+            candidate
+        }
     }
 
     private fun resolveMimeType(
@@ -1081,14 +1158,96 @@ object RuntimeToolkitTelemetry {
         }
     }
 
-    private fun classifyHost(url: String, targetHosts: List<String>, scopeMode: String): String {
-        val host = runCatching { Uri.parse(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+    private fun classifyHost(
+        url: String,
+        targetHosts: List<String>,
+        scopeMode: String,
+        phaseId: String,
+        source: String,
+    ): String {
+        val uri = runCatching { Uri.parse(url) }.getOrNull()
+        val host = uri?.host.orEmpty().lowercase(Locale.ROOT).trim('.')
+        val path = uri?.path.orEmpty().ifBlank { "/" }.lowercase(Locale.ROOT)
+        val lowerUrl = url.lowercase(Locale.ROOT)
+        val lowerSource = source.lowercase(Locale.ROOT)
         if (host.isBlank()) return "ignored"
-        if (scopeMode == "full_raw_all") return "target"
-        val isTarget = targetHosts.any { configured ->
+
+        val normalizedTargets = targetHosts
+            .map { it.lowercase(Locale.ROOT).trim('.') }
+            .filter { it.isNotBlank() }
+        val isTarget = normalizedTargets.any { configured ->
             host == configured || host.endsWith(".$configured")
         }
-        return if (isTarget) "target" else "external_noise"
+        if (isTarget) {
+            return if (looksLikeBrowserBootstrap(url = lowerUrl, path = path, source = lowerSource)) {
+                "provider_bootstrap"
+            } else {
+                "target"
+            }
+        }
+
+        if (looksLikeGoogleNoise(host, lowerUrl)) return "google_noise"
+        if (looksLikeAdNoise(host, lowerUrl)) return "ad_noise"
+        if (looksLikeAnalyticsNoise(host, lowerUrl)) return "analytics_noise"
+        if (looksLikeBrowserBootstrap(url = lowerUrl, path = path, source = lowerSource)) return "browser_bootstrap"
+        if (phaseId == PHASE_BACKGROUND) return "background_noise"
+        if (scopeMode == "full_raw_all") return "target"
+        return "external_noise"
+    }
+
+    private fun looksLikeGoogleNoise(host: String, url: String): Boolean {
+        val value = "$host $url"
+        return listOf(
+            "google.",
+            "google-",
+            "gstatic.com",
+            "googlesyndication",
+            "googleadservices",
+            "doubleclick.net",
+            "googletagmanager",
+        ).any { token -> value.contains(token) }
+    }
+
+    private fun looksLikeAnalyticsNoise(host: String, url: String): Boolean {
+        val value = "$host $url"
+        return listOf(
+            "analytics",
+            "telemetry",
+            "segment.io",
+            "newrelic",
+            "sentry",
+            "metrics",
+            "pixel",
+        ).any { token -> value.contains(token) }
+    }
+
+    private fun looksLikeAdNoise(host: String, url: String): Boolean {
+        val value = "$host $url"
+        return listOf(
+            "adservice",
+            "ads.",
+            "/ads",
+            "adnxs",
+            "taboola",
+            "outbrain",
+        ).any { token -> value.contains(token) }
+    }
+
+    private fun looksLikeBrowserBootstrap(url: String, path: String, source: String): Boolean {
+        val value = "$url $path $source"
+        return listOf(
+            "_next/static",
+            ".woff",
+            ".woff2",
+            ".ttf",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".css",
+            "favicon",
+            "chrome://",
+            "about:blank",
+        ).any { token -> value.contains(token) }
     }
 
     private fun classifyNetworkSemantics(

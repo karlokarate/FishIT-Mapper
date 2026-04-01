@@ -30,13 +30,40 @@
     "run_id": { "type": "string", "minLength": 1 },
     "trace_id": { "type": "string", "minLength": 1 },
     "action_id": { "type": "string", "minLength": 1 },
-    "phase_id": { "type": "string", "minLength": 1 },
+    "phase_id": {
+      "type": "string",
+      "enum": [
+        "home_probe",
+        "search_probe",
+        "detail_probe",
+        "playback_probe",
+        "auth_probe",
+        "background_noise"
+      ]
+    },
     "host_scope": {
       "type": "object",
-      "required": ["target", "external_noise", "ignored", "unknown"],
+      "required": [
+        "target",
+        "provider_bootstrap",
+        "browser_bootstrap",
+        "google_noise",
+        "analytics_noise",
+        "ad_noise",
+        "external_noise",
+        "background_noise",
+        "ignored",
+        "unknown"
+      ],
       "properties": {
         "target": { "type": "integer", "minimum": 0 },
+        "provider_bootstrap": { "type": "integer", "minimum": 0 },
+        "browser_bootstrap": { "type": "integer", "minimum": 0 },
+        "google_noise": { "type": "integer", "minimum": 0 },
+        "analytics_noise": { "type": "integer", "minimum": 0 },
+        "ad_noise": { "type": "integer", "minimum": 0 },
         "external_noise": { "type": "integer", "minimum": 0 },
+        "background_noise": { "type": "integer", "minimum": 0 },
         "ignored": { "type": "integer", "minimum": 0 },
         "unknown": { "type": "integer", "minimum": 0 }
       }

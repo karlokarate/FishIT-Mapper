@@ -69,17 +69,22 @@
   "required_outputs": [
     "runtime_events.jsonl",
     "events.jsonl",
+    "requests.normalized.jsonl",
+    "responses.normalized.jsonl",
     "correlation_index.jsonl",
     "response_store/",
     "response_index.json",
     "bodies/",
     "cookie_timeline.json",
     "required_headers_report.json",
+    "required_cookies_report.json",
+    "replay_requirements.json",
     "field_matrix.json",
     "endpoint_candidates.json",
     "site_profile.draft.json",
     "profile_candidate.json",
     "provenance_graph.json",
+    "provenance_registry.json",
     "replay_seed.json",
     "replay_results.jsonl",
     "replay_report.json",
@@ -113,5 +118,14 @@
       "perfetto"
     ],
     "optional_expert": ["frida"]
+  },
+  "external_quality_tooling": {
+    "integration_points": [
+      "detekt",
+      "dependency-analysis-gradle-plugin",
+      "gradle-doctor",
+      "replay-fixture-tests"
+    ],
+    "status": "hooks_prepared"
   }
 }

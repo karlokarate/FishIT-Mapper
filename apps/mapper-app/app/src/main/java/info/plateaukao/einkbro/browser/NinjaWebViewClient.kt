@@ -520,7 +520,10 @@ class EBWebViewClient(
                 payload = mapOf(
                     "capture_mode" to "main_frame_dom_snapshot",
                     "capture_truncated" to (bytes.size > MAX_MAIN_FRAME_HTML_CAPTURE_BYTES),
+                    "capture_limit_bytes" to if (bytes.size > MAX_MAIN_FRAME_HTML_CAPTURE_BYTES) capped.size else 0,
                     "captured_body_bytes" to capped.size,
+                    "stored_size_bytes" to capped.size,
+                    "content_length_header" to bytes.size.toString(),
                 ),
             )
         }
@@ -730,10 +733,29 @@ class EBWebViewClient(
                         var bodyPromise = Promise.resolve(null);
                         if (response && shouldCaptureBody(responseUrl, mimeType)) {
                           bodyPromise = response.clone().text()
-                            .then(function(text) { return truncate(text, 16384); })
-                            .catch(function() { return null; });
+                            .then(function(text) {
+                              var safeText = (text == null) ? '' : String(text);
+                              var preview = truncate(safeText, 4194304);
+                              return {
+                                bodyPreview: preview,
+                                bodyPreviewTruncated: preview.length < safeText.length,
+                                bodyOriginalLength: safeText.length
+                              };
+                            })
+                            .catch(function() {
+                              return {
+                                bodyPreview: null,
+                                bodyPreviewTruncated: false,
+                                bodyOriginalLength: 0
+                              };
+                            });
                         }
-                        return bodyPromise.then(function(bodyPreview) {
+                        return bodyPromise.then(function(bodyPayload) {
+                          var payload = bodyPayload || {
+                            bodyPreview: null,
+                            bodyPreviewTruncated: false,
+                            bodyOriginalLength: 0
+                          };
                           emitNetworkEvent({
                             stage: 'response',
                             source: 'fetch',
@@ -745,7 +767,9 @@ class EBWebViewClient(
                             reason: response ? response.statusText : null,
                             mimeType: mimeType,
                             headers: headers,
-                            bodyPreview: bodyPreview
+                            bodyPreview: payload.bodyPreview,
+                            bodyPreviewTruncated: !!payload.bodyPreviewTruncated,
+                            bodyOriginalLength: payload.bodyOriginalLength || 0
                           });
                           return response;
                         });
@@ -819,10 +843,15 @@ class EBWebViewClient(
                       } catch (_ignored2) {}
                       var responseUrl = xhr.responseURL || meta.url;
                       var bodyPreview = null;
+                      var bodyPreviewTruncated = false;
+                      var bodyOriginalLength = 0;
                       try {
                         if (shouldCaptureBody(responseUrl, mimeType) &&
                           (xhr.responseType === '' || xhr.responseType === 'text')) {
-                          bodyPreview = truncate(xhr.responseText, 16384);
+                          var responseText = (xhr.responseText == null) ? '' : String(xhr.responseText);
+                          bodyOriginalLength = responseText.length;
+                          bodyPreview = truncate(responseText, 4194304);
+                          bodyPreviewTruncated = bodyPreview.length < responseText.length;
                         }
                       } catch (_ignored3) {}
                       emitNetworkEvent({
@@ -836,7 +865,9 @@ class EBWebViewClient(
                         reason: xhr.statusText || null,
                         mimeType: mimeType,
                         headers: responseHeaders,
-                        bodyPreview: bodyPreview
+                        bodyPreview: bodyPreview,
+                        bodyPreviewTruncated: bodyPreviewTruncated,
+                        bodyOriginalLength: bodyOriginalLength
                       });
                     };
                     xhr.addEventListener('readystatechange', onReadyState);
@@ -849,7 +880,7 @@ class EBWebViewClient(
 
     companion object {
         private const val TAG = "ebWebViewClient"
-        private const val MAX_MAIN_FRAME_HTML_CAPTURE_BYTES = 512 * 1024
+        private const val MAX_MAIN_FRAME_HTML_CAPTURE_BYTES = 4 * 1024 * 1024
     }
 
     override fun onFormResubmission(view: WebView, doNotResend: Message, resend: Message) {

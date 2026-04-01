@@ -53,7 +53,24 @@
         "properties": {
           "payload": {
             "type": "object",
-            "required": ["request_id", "request_fingerprint", "phase_id", "host_class", "url", "method", "headers"]
+            "required": [
+              "request_id",
+              "request_fingerprint",
+              "phase_id",
+              "target_site_id",
+              "host_class",
+              "normalized_host",
+              "normalized_path",
+              "normalized_scheme",
+              "url",
+              "method",
+              "headers",
+              "query_params",
+              "request_body_summary",
+              "request_operation",
+              "request_flags",
+              "correlation_refs"
+            ]
           }
         }
       }
@@ -64,7 +81,26 @@
         "properties": {
           "payload": {
             "type": "object",
-            "required": ["request_id", "response_id", "request_fingerprint", "phase_id", "host_class", "url", "method", "status_code", "headers"]
+            "required": [
+              "request_id",
+              "response_id",
+              "request_fingerprint",
+              "phase_id",
+              "target_site_id",
+              "host_class",
+              "normalized_host",
+              "normalized_path",
+              "normalized_scheme",
+              "url",
+              "method",
+              "status_code",
+              "mime_type",
+              "content_length_header",
+              "stored_size_bytes",
+              "capture_truncated",
+              "source_channel",
+              "headers"
+            ]
           }
         }
       }
@@ -97,7 +133,20 @@
         "properties": {
           "payload": {
             "type": "object",
-            "required": ["phase_id", "transition"]
+            "required": ["phase_id", "transition"],
+            "properties": {
+              "phase_id": {
+                "type": "string",
+                "enum": [
+                  "home_probe",
+                  "search_probe",
+                  "detail_probe",
+                  "playback_probe",
+                  "auth_probe",
+                  "background_noise"
+                ]
+              }
+            }
           }
         }
       }

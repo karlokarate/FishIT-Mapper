@@ -146,6 +146,20 @@
       "supersedes": [],
       "superseded_by": null,
       "summary": "The app keeps EinkBro as browser foundation and layers two additive modules: mapper-webkit-compat for runtime WebView compatibility/reset hooks and mapper-native-network-cronet for mapper-owned replay/validation requests behind a feature-flagged client abstraction."
+    },
+    {
+      "id": "DEC-0012",
+      "aliases": [
+        "ADR-0012",
+        "MAPPER-TOOLKIT-PLATINUM-RUNTIME-CUTOVER",
+        "PHASED-TARGET-AWARE-EVENT-SSOT"
+      ],
+      "title": "Runtime capture/export cutover uses phase-scoped normalized raw-event SSOT with candidate-only body storage and atomic finalization",
+      "status": "accepted",
+      "date": "2026-04-01",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Provider-draft-ready exports require deterministic phase resolution, target-host-aware classification, canonical request/response linkage, explicit truncation semantics, provenance registry, replay-minimized requirements, and latest artifact publication only after successful finalization."
     }
   ]
 }
