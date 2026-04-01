@@ -1,0 +1,2523 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260401T125556Z",
+  "generated_at_utc": "2026-04-01T12:55:56Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260401T125556Z"
+  },
+  "scope": "mapper-webkit-compat + mapper-native-network-cronet integration",
+  "highlights": [
+    "Added isolated WebKit/Cronet modules with no-downgrade wiring and green build+guards"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/MapperToolkitActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/integration/MapperToolkitIntegrationContract.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/replay/MapperNativeReplayRuntime.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-native-network-cronet/UPSTREAM_REF.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-native-network-cronet/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-native-network-cronet/src/main/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-native-network-cronet/src/main/java/dev/fishit/mapper/network/CronetMapperHttpClient.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-native-network-cronet/src/main/java/dev/fishit/mapper/network/FallbackOkHttpMapperHttpClient.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-native-network-cronet/src/main/java/dev/fishit/mapper/network/MapperNativeHttpClient.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-native-network-cronet/src/main/java/dev/fishit/mapper/network/MapperNativeHttpModels.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-native-network-cronet/src/test/java/dev/fishit/mapper/network/MapperNativeHttpRequestTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-webkit-compat/UPSTREAM_REF.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-webkit-compat/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-webkit-compat/src/main/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-webkit-compat/src/main/java/dev/fishit/mapper/webkit/compat/MapperWebViewCompat.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-webkit-compat/src/main/java/dev/fishit/mapper/webkit/compat/MapperWebViewFeatures.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/mapper-webkit-compat/src/test/java/dev/fishit/mapper/webkit/compat/MapperWebViewFeaturesTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260401T115242Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260401T122140Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/archives/live_capture_pause_20260401T111511Z.tar.gz.manifest",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/archives/live_capture_pause_20260401T111511Z.tar.gz.sha256",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/archives/live_capture_pause_20260401T111511Z.tar.gz",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/cookie_timeline.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/correlation_index.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/endpoint_candidates.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/events/runtime_events.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_auth/auth_focus_20260401T105952Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_auth/postlogin_auth_focus_20260401T110144Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_auth/postlogin_cookie_related_20260401T110144Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_auth/postlogin_window_20260401T110144Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_auth/prelogin_auth_chain_20260401T105820Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_auth/prelogin_cookie_timeline_20260401T105820Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_auth/prelogin_token_deps_20260401T105820Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_gapfill/gapfill_events_20260401T110726Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/cookie_timeline_all.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/cookie_timeline_latest.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/endpoint_candidates_all.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/endpoint_candidates_latest.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/field_matrix_latest.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/pipeline_capture_summary.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/required_headers_all.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/required_headers_latest.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_cookie_domains.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_correlation_chains.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_endpoint_candidates.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_required_headers.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_response_refs.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_response_sample_latest.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104716Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104725Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104734Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104744Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104753Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104802Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104812Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104821Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104831Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104841Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104850Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104859Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104908Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104918Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104927Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104937Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104946Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T104956Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105005Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105015Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105025Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105035Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105045Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105055Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105105Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105114Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105124Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105134Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105144Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105154Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105204Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105213Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105223Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105234Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105244Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105254Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105305Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105315Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105325Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105335Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105344Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105354Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105404Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105414Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105424Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105435Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105445Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105456Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105506Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105517Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105527Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105538Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105549Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105559Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105610Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105621Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105632Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105643Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105655Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105706Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105717Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105729Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105740Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105751Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105801Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105810Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105821Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105831Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105842Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105852Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105903Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105914Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105924Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105935Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105946Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T105957Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110008Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110018Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110029Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110039Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110050Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110100Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110111Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110122Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110133Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110144Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110155Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110207Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110218Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110229Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110241Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110252Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110302Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110312Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110322Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110333Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110343Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110353Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110404Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110414Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110425Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110435Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110446Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110457Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110508Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110519Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110530Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110542Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110553Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110605Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110617Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110629Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110640Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110652Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110703Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110713Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110723Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110733Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110743Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110754Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110805Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110815Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110826Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110837Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110848Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110859Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110910Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110921Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110932Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110943Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T110954Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111005Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111015Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111025Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111036Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111047Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111057Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111109Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111119Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111130Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111141Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111152Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111202Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111214Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111224Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111234Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111245Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111257Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111308Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111320Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111331Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111341Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111352Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111402Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111413Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111424Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111435Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111446Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_2026-04-01T111457Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_responses_latest.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104716Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104725Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104734Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104744Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104753Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104802Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104812Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104821Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104831Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104841Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104850Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104859Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104908Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104918Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104927Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104937Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104946Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T104956Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105005Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105015Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105025Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105035Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105045Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105055Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105105Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105114Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105124Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105134Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105144Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105154Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105204Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105213Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105223Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105234Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105244Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105254Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105305Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105315Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105325Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105335Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105344Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105354Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105404Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105414Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105424Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105435Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105445Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105456Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105506Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105517Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105527Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105538Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105549Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105559Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105610Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105621Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105632Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105643Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105655Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105706Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105717Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105729Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105740Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105751Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105801Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105810Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105821Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105831Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105842Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105852Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105903Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105914Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105924Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105935Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105946Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T105957Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110008Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110018Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110029Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110039Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110050Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110100Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110111Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110122Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110133Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110144Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110155Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110207Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110218Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110229Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110241Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110252Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110302Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110312Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110322Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110333Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110343Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110353Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110404Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110414Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110425Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110435Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110446Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110457Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110508Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110519Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110530Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110542Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110553Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110605Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110617Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110629Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110640Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110652Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110703Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110713Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110723Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110733Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110743Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110754Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110805Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110815Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110826Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110837Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110848Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110859Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110910Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110921Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110932Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110943Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T110954Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111005Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111015Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111025Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111036Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111047Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111057Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111109Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111119Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111130Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111141Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111152Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111202Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111214Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111224Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111234Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111245Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111257Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111308Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111320Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111331Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111341Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111352Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111402Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111413Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111424Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111435Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111446Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_2026-04-01T111457Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_export_manual.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/live_zdf/zdf_trace_latest.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/exports/trace_export_20260401T104825Z.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/field_matrix.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/pipeline_ready_report.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/replay_seed.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/required_headers_report.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/response_store/221f81cf-8391-4672-b4fc-ffc53dc7e1af.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/response_store/index.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/rollups/live_cookie_timeline.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/rollups/live_endpoint_candidates.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/rollups/live_field_matrix.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/rollups/live_required_headers.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/rollups/live_response_sample.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/rollups/live_triage_anomalies.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/runtime_state.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/site_profile.draft.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/tmp/live_monitor.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/tmp/live_zdf_monitor.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/triage_alerts.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/device/mapper-toolkit/current/triage_session_state.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/__pycache__/main.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/__pycache__/tui_catalog.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/tests/__pycache__/test_tui_catalog.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/tests/test_runtime_dataset_hardening.py",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitCommandReceiver.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitOkHttp.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitTelemetry.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/browser/NinjaWebViewClient.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/unit/BrowserUnit.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/view/EBWebView.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/gradle/libs.versions.toml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/settings.gradle",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/correlation.schema.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/decision_trace.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/dependency_intake.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/mapper_toolkit_tui_catalog.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/runtime_event.schema.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/runtime_toolkit_v2.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/ssot.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/DEPENDENCY_INTAKE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/V2_ssot.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/archive/correlation.schema.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/archive/mapper_toolkit_tui_catalog.contract.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/archive/runtime_event.schema.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/archive/runtime_toolkit_v2.contract.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/mapper-toolkit.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/toolkit/runtime_dataset_cli.py",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/toolkit/tests/test_tui_catalog.py",
+      "old_path": null
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
+import android.os.Build
 import android.os.Message
 import android.security.KeyChain
 import android.util.Log
@@ -57,6 +58,7 @@ class EBWebViewClient(
 
     private val webContentPostProcessor = WebContentPostProcessor()
     private var hasAdBlock: Boolean = true
+    private var activePageLoadCorrelation: RuntimeToolkitTelemetry.CorrelationContext? = null
 
     private val adFilter: AdFilter = AdFilter.get()
 
@@ -83,11 +85,15 @@ class EBWebViewClient(
             adFilter.performScript(view, url)
         }
 
-        RuntimeToolkitTelemetry.logUiObserved(
+        activePageLoadCorrelation = RuntimeToolkitTelemetry.beginUiAction(
             context = context,
-            actionName = "webview_page_started",
+            actionName = "webview_navigation",
             screenId = "browser",
-            payload = mapOf("url" to url),
+            payload = mapOf(
+                "url" to url,
+                "result" to "started",
+                "source" to "webview",
+            ),
         )
         RuntimeToolkitTelemetry.recordCookieSnapshot(context, url)
     }
@@ -145,12 +151,19 @@ class EBWebViewClient(
             onPageFinishedAction()
         }
 
-        RuntimeToolkitTelemetry.logUiObserved(
-            context = context,
-            actionName = "webview_page_finished",
-            screenId = "browser",
-            payload = mapOf("url" to url),
-        )
+        activePageLoadCorrelation?.let { correlation ->
+            RuntimeToolkitTelemetry.finishUiAction(
+                context = context,
+                correlation = correlation,
+                actionName = "webview_navigation",
+                result = "ok",
+                payload = mapOf(
+                    "url" to url,
+                    "source" to "webview",
+                ),
+            )
+        }
+        activePageLoadCorrelation = null
         RuntimeToolkitTelemetry.recordCookieSnapshot(context, url)
     }
 
@@ -257,6 +270,10 @@ class EBWebViewClient(
         request: WebResourceRequest?,
         error: WebResourceError?,
     ) {
+        val requestId = RuntimeToolkitTelemetry.resolveRecentRequestId(
+            url = request?.url?.toString().orEmpty(),
+            method = request?.method ?: "GET",
+        )
         RuntimeToolkitTelemetry.logNetworkResponse(
             context = context,
             source = "webview",
@@ -266,6 +283,7 @@ class EBWebViewClient(
             reason = error?.description?.toString(),
             mimeType = null,
             headers = emptyMap(),
+            requestId = requestId,
             payload = mapOf(
                 "error_code" to (error?.errorCode ?: 0),
                 "is_main_frame" to (request?.isForMainFrame ?: false),
@@ -286,6 +304,10 @@ class EBWebViewClient(
         errorResponse: WebResourceResponse?,
     ) {
         super.onReceivedHttpError(view, request, errorResponse)
+        val requestId = RuntimeToolkitTelemetry.resolveRecentRequestId(
+            url = request?.url?.toString().orEmpty(),
+            method = request?.method ?: "GET",
+        )
         RuntimeToolkitTelemetry.logNetworkResponse(
             context = context,
             source = "webview",
@@ -295,6 +317,7 @@ class EBWebViewClient(
             reason = errorResponse?.reasonPhrase,
             mimeType = errorResponse?.mimeType,
             headers = responseHeaders(errorResponse),
+            requestId = requestId,
             payload = mapOf(
                 "is_main_frame" to (request?.isForMainFrame ?: false),
                 "has_gesture" to (request?.hasGesture() ?: false),
@@ -306,22 +329,46 @@ class EBWebViewClient(
     @Deprecated("Deprecated in Java")
     @Suppress("DEPRECATION")
     override fun shouldInterceptRequest(view: WebView, url: String): WebResourceResponse? {
-        RuntimeToolkitTelemetry.logNetworkRequest(
-            context = context,
-            source = "webview",
-            url = url,
-            method = "GET",
-            headers = emptyMap(),
-            payload = mapOf("api_variant" to "deprecated"),
-        )
-        return handleWebRequest(view, Uri.parse(url)) ?: super.shouldInterceptRequest(view, url)
+        val requestId = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            RuntimeToolkitTelemetry.logNetworkRequest(
+                context = context,
+                source = "webview_deprecated_fallback",
+                url = url,
+                method = "GET",
+                headers = emptyMap(),
+                payload = mapOf("api_variant" to "deprecated_fallback"),
+            ).requestId
+        } else {
+            RuntimeToolkitTelemetry.logCorrelationEvent(
+                context = context,
+                operation = "deprecated_should_intercept_ignored",
+                payload = mapOf("url" to url),
+            )
+            RuntimeToolkitTelemetry.resolveRecentRequestId(url = url, method = "GET")
+        }
+        val handled = handleWebRequest(view, Uri.parse(url))
+        if (handled != null) {
+            RuntimeToolkitTelemetry.logNetworkResponse(
+                context = context,
+                source = "webview",
+                url = url,
+                method = "GET",
+                statusCode = 200,
+                reason = "intercepted_local_response",
+                mimeType = handled.mimeType,
+                headers = responseHeaders(handled),
+                requestId = requestId,
+                payload = mapOf("intercepted" to true, "api_variant" to "deprecated"),
+            )
+        }
+        return handled ?: super.shouldInterceptRequest(view, url)
     }
 
     override fun shouldInterceptRequest(
         view: WebView,
         request: WebResourceRequest,
     ): WebResourceResponse? {
-        RuntimeToolkitTelemetry.logNetworkRequest(
+        val requestLog = RuntimeToolkitTelemetry.logNetworkRequest(
             context = context,
             source = "webview",
             url = request.url.toString(),
@@ -333,16 +380,59 @@ class EBWebViewClient(
                 "is_redirect" to request.isRedirect,
             ),
         )
+        val requestId = requestLog.requestId
 
         if (config.adBlock) {
             val result = adFilter.shouldIntercept(view, request)
             if (result.shouldBlock) {
+                RuntimeToolkitTelemetry.logNetworkResponse(
+                    context = context,
+                    source = "webview",
+                    url = request.url.toString(),
+                    method = request.method,
+                    statusCode = 499,
+                    reason = "blocked_by_adblock",
+                    mimeType = result.resourceResponse?.mimeType,
+                    headers = responseHeaders(result.resourceResponse),
+                    requestId = requestId,
+                    payload = mapOf(
+                        "is_main_frame" to request.isForMainFrame,
+                        "is_redirect" to request.isRedirect,
+                        "intercepted" to true,
+                        "blocked" to true,
+                        "request_fingerprint" to requestLog.requestFingerprint,
+                        "host_class" to requestLog.hostClass,
+                        "phase_id" to requestLog.phaseId,
+                    ),
+                )
                 //Log.d("EBWebViewClient", "blocked\n rule: ${result.rule}\n url:${result.resourceUrl}")
                 return result.resourceResponse
             }
         }
 
-        return handleWebRequest(view, request.url) ?: super.shouldInterceptRequest(view, request)
+        val handled = handleWebRequest(view, request.url)
+        if (handled != null) {
+            RuntimeToolkitTelemetry.logNetworkResponse(
+                context = context,
+                source = "webview",
+                url = request.url.toString(),
+                method = request.method,
+                statusCode = 200,
+                reason = "intercepted_local_response",
+                mimeType = handled.mimeType,
+                headers = responseHeaders(handled),
+                requestId = requestId,
+                payload = mapOf(
+                    "is_main_frame" to request.isForMainFrame,
+                    "is_redirect" to request.isRedirect,
+                    "intercepted" to true,
+                    "request_fingerprint" to requestLog.requestFingerprint,
+                    "host_class" to requestLog.hostClass,
+                    "phase_id" to requestLog.phaseId,
+                ),
+            )
+        }
+        return handled ?: super.shouldInterceptRequest(view, request)
     }
 
     private fun handleWebRequest(webView: WebView, uri: Uri): WebResourceResponse? {

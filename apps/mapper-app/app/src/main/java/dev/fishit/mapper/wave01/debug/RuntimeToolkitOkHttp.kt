@@ -8,6 +8,8 @@ import okhttp3.MediaType
 import okhttp3.OkHttpClient
 import okhttp3.Response
 import okio.Buffer
+import java.time.Instant
+import java.util.Locale
 
 object RuntimeToolkitOkHttp {
     fun instrument(
@@ -42,53 +44,121 @@ class RuntimeToolkitOkHttpInterceptor(
         val request = chain.request()
         val requestHeaders = headersToMap(request.headers)
         val requestPreview = requestBodyPreview(request)
+        val requestStartedNs = SystemClock.elapsedRealtimeNanos()
+        val requestStartedUtc = Instant.now().toString()
+        val requestUrl = request.url.toString()
 
-        RuntimeToolkitTelemetry.logNetworkRequest(
+        val requestLog = RuntimeToolkitTelemetry.logNetworkRequest(
             context = appContext,
             source = source,
-            url = request.url.toString(),
+            url = requestUrl,
             method = request.method,
             headers = requestHeaders,
             payload = mapOf(
                 "body_preview" to requestPreview,
                 "content_type" to request.body?.contentType()?.toString(),
+                "request_started_at_utc" to requestStartedUtc,
+                "request_started_mono_ns" to requestStartedNs,
             ),
         )
+        val requestId = requestLog.requestId
 
-        val startedNs = SystemClock.elapsedRealtimeNanos()
+        requestHeaders.forEach { (headerKey, _) ->
+            if (shouldTrackProvenanceHeader(headerKey)) {
+                RuntimeToolkitTelemetry.logProvenanceEvent(
+                    context = appContext,
+                    entityType = "header",
+                    entityKey = headerKey.lowercase(Locale.ROOT),
+                    consumedBy = requestId,
+                    payload = mapOf(
+                        "url" to requestUrl,
+                        "method" to request.method,
+                        "source" to source,
+                    ),
+                )
+            }
+        }
 
         return try {
             val response = chain.proceed(request)
-            val elapsedMs = (SystemClock.elapsedRealtimeNanos() - startedNs) / 1_000_000
+            val elapsedMs = (SystemClock.elapsedRealtimeNanos() - requestStartedNs) / 1_000_000
             val responseHeaders = headersToMap(response.headers)
-            val peekBytes = runCatching { response.peekBody(MAX_PEEK_BYTES).bytes() }.getOrNull()
-            val rawBody = if (peekBytes != null && shouldCaptureBody(response.body?.contentType())) peekBytes else null
+            val capturePlan = resolveCapturePlan(
+                url = request.url.toString(),
+                contentType = response.body?.contentType(),
+            )
+            val peekBytes = runCatching { response.peekBody(capturePlan.peekBytes).bytes() }.getOrNull()
+            val rawBody = if (capturePlan.captureRaw && peekBytes != null && peekBytes.isNotEmpty()) {
+                peekBytes
+            } else {
+                null
+            }
+            val requestBodyContentLength = runCatching { request.body?.contentLength() ?: -1L }.getOrDefault(-1L)
+            val responseBodyContentLength = runCatching { response.body?.contentLength() ?: -1L }.getOrDefault(-1L)
+            val priorCode = response.priorResponse?.code
+            val responseId = "resp_${java.util.UUID.randomUUID()}"
 
             RuntimeToolkitTelemetry.logNetworkResponse(
                 context = appContext,
                 source = source,
-                url = request.url.toString(),
+                url = requestUrl,
                 method = request.method,
                 statusCode = response.code,
                 reason = response.message,
                 mimeType = response.body?.contentType()?.toString(),
                 headers = responseHeaders,
                 rawBody = rawBody,
+                requestId = requestId,
+                responseId = responseId,
                 payload = mapOf(
                     "elapsed_ms" to elapsedMs,
                     "protocol" to response.protocol.toString(),
+                    "request_id" to requestId,
+                    "response_id" to responseId,
+                    "request_fingerprint" to requestLog.requestFingerprint,
+                    "normalized_url" to requestLog.normalizedUrl,
+                    "phase_id" to requestLog.phaseId,
+                    "host_class" to requestLog.hostClass,
+                    "dedup_of" to requestLog.dedupOf,
+                    "dedup_count" to requestLog.dedupCount,
+                    "request_canonical" to requestLog.canonical,
+                    "request_started_at_utc" to requestStartedUtc,
+                    "response_received_at_utc" to Instant.now().toString(),
+                    "request_content_length" to requestBodyContentLength,
+                    "response_content_length" to responseBodyContentLength,
+                    "capture_mode" to capturePlan.mode,
+                    "captured_body_bytes" to (rawBody?.size ?: 0),
+                    "redirected" to (priorCode != null),
+                    "prior_status_code" to priorCode,
                 ),
             )
 
             val setCookieHeaders = response.headers("Set-Cookie")
             setCookieHeaders.forEach { cookieLine ->
+                val cookieOp = cookieOperation(cookieLine)
                 RuntimeToolkitTelemetry.logCookieEvent(
                     context = appContext,
-                    operation = "set_cookie",
+                    operation = cookieOp,
                     domain = extractCookieDomain(request.url.host, cookieLine),
                     cookieName = extractCookieName(cookieLine),
                     cookieValuePreview = cookieLine.take(128),
-                    payload = mapOf("source" to source),
+                    reason = "set_cookie_header",
+                    payload = mapOf(
+                        "source" to source,
+                        "request_id" to requestId,
+                        "response_id" to responseId,
+                    ),
+                )
+                RuntimeToolkitTelemetry.logProvenanceEvent(
+                    context = appContext,
+                    entityType = "cookie",
+                    entityKey = extractCookieName(cookieLine) ?: "unknown_cookie",
+                    producedBy = responseId,
+                    consumedBy = requestId,
+                    payload = mapOf(
+                        "domain" to extractCookieDomain(request.url.host, cookieLine),
+                        "reason" to "set_cookie_header",
+                    ),
                 )
             }
 
@@ -100,8 +170,52 @@ class RuntimeToolkitOkHttpInterceptor(
                         "status_code" to response.code,
                         "url" to request.url.toString(),
                         "source" to source,
+                        "request_id" to requestId,
+                        "response_id" to responseId,
                     ),
                 )
+            }
+            if (isTokenRefreshCall(request.url.toString(), requestHeaders, responseHeaders, response.code)) {
+                RuntimeToolkitTelemetry.logAuthEvent(
+                    context = appContext,
+                    operation = "token_refreshed",
+                    payload = mapOf(
+                        "status_code" to response.code,
+                        "url" to requestUrl,
+                        "source" to source,
+                        "request_id" to requestId,
+                        "response_id" to responseId,
+                    ),
+                )
+                RuntimeToolkitTelemetry.logProvenanceEvent(
+                    context = appContext,
+                    entityType = "token",
+                    entityKey = "refresh",
+                    producedBy = responseId,
+                    consumedBy = requestId,
+                    payload = mapOf(
+                        "url" to requestUrl,
+                        "status_code" to response.code,
+                        "source" to source,
+                    ),
+                )
+            }
+
+            responseHeaders.forEach { (headerKey, _) ->
+                if (shouldTrackProvenanceHeader(headerKey)) {
+                    RuntimeToolkitTelemetry.logProvenanceEvent(
+                        context = appContext,
+                        entityType = "header",
+                        entityKey = headerKey.lowercase(Locale.ROOT),
+                        producedBy = responseId,
+                        consumedBy = requestId,
+                        payload = mapOf(
+                            "url" to requestUrl,
+                            "status_code" to response.code,
+                            "source" to source,
+                        ),
+                    )
+                }
             }
 
             response
@@ -109,15 +223,24 @@ class RuntimeToolkitOkHttpInterceptor(
             RuntimeToolkitTelemetry.logNetworkResponse(
                 context = appContext,
                 source = source,
-                url = request.url.toString(),
+                url = requestUrl,
                 method = request.method,
                 statusCode = null,
                 reason = t.message,
                 mimeType = null,
                 headers = emptyMap(),
                 rawBody = null,
+                requestId = requestId,
                 payload = mapOf(
                     "error_type" to (t::class.java.simpleName ?: "Throwable"),
+                    "capture_mode" to "error",
+                    "request_fingerprint" to requestLog.requestFingerprint,
+                    "normalized_url" to requestLog.normalizedUrl,
+                    "phase_id" to requestLog.phaseId,
+                    "host_class" to requestLog.hostClass,
+                    "dedup_of" to requestLog.dedupOf,
+                    "dedup_count" to requestLog.dedupCount,
+                    "request_canonical" to requestLog.canonical,
                 ),
             )
             throw t
@@ -135,16 +258,87 @@ class RuntimeToolkitOkHttpInterceptor(
         }.getOrNull()
     }
 
-    private fun shouldCaptureBody(contentType: MediaType?): Boolean {
+    private data class CapturePlan(
+        val mode: String,
+        val captureRaw: Boolean,
+        val peekBytes: Long,
+    )
+
+    private fun resolveCapturePlan(url: String, contentType: MediaType?): CapturePlan {
+        val normalizedUrl = url.lowercase(Locale.ROOT)
+        val mime = contentType?.toString()?.lowercase(Locale.ROOT).orEmpty()
+        val isMediaSegment = normalizedUrl.endsWith(".ts") ||
+            normalizedUrl.endsWith(".m4s") ||
+            normalizedUrl.endsWith(".m4a") ||
+            normalizedUrl.endsWith(".m4v") ||
+            normalizedUrl.endsWith(".mp4") ||
+            normalizedUrl.endsWith(".webm") ||
+            mime.startsWith("video/") ||
+            mime.startsWith("audio/")
+        if (isMediaSegment) {
+            return CapturePlan(mode = "metadata_only", captureRaw = false, peekBytes = 0L)
+        }
+
+        val isManifest = normalizedUrl.endsWith(".m3u8") ||
+            normalizedUrl.endsWith(".mpd") ||
+            mime.contains("application/vnd.apple.mpegurl") ||
+            mime.contains("application/x-mpegurl") ||
+            mime.contains("application/dash+xml")
+        if (isManifest || shouldCaptureTextLike(contentType)) {
+            return CapturePlan(mode = "full_raw", captureRaw = true, peekBytes = MAX_PEEK_BYTES_FULL)
+        }
+
+        return CapturePlan(mode = "snippet", captureRaw = true, peekBytes = MAX_PEEK_BYTES_SNIPPET)
+    }
+
+    private fun shouldCaptureTextLike(contentType: MediaType?): Boolean {
         if (contentType == null) return false
-        val type = contentType.type.lowercase()
-        val subtype = contentType.subtype.lowercase()
+        val type = contentType.type.lowercase(Locale.ROOT)
+        val subtype = contentType.subtype.lowercase(Locale.ROOT)
         if (type == "text") return true
         return subtype.contains("json") ||
             subtype.contains("xml") ||
             subtype.contains("javascript") ||
             subtype.contains("x-www-form-urlencoded") ||
             subtype.contains("html")
+    }
+
+    private fun cookieOperation(cookieLine: String): String {
+        val lower = cookieLine.lowercase(Locale.ROOT)
+        if (lower.contains("max-age=0") || lower.contains("expires=thu, 01 jan 1970")) {
+            return "delete"
+        }
+        return "set"
+    }
+
+    private fun shouldTrackProvenanceHeader(headerKey: String): Boolean {
+        val normalized = headerKey.lowercase(Locale.ROOT)
+        return normalized == "authorization" ||
+            normalized == "cookie" ||
+            normalized == "set-cookie" ||
+            normalized.contains("token") ||
+            normalized.startsWith("x-")
+    }
+
+    private fun isTokenRefreshCall(
+        url: String,
+        requestHeaders: Map<String, String>,
+        responseHeaders: Map<String, String>,
+        statusCode: Int,
+    ): Boolean {
+        if (statusCode !in 200..299) return false
+        val lowerUrl = url.lowercase(Locale.ROOT)
+        if (
+            lowerUrl.contains("token") ||
+            lowerUrl.contains("refresh") ||
+            lowerUrl.contains("oauth") ||
+            lowerUrl.contains("identity")
+        ) {
+            return true
+        }
+        val reqKeys = requestHeaders.keys.joinToString(" ").lowercase(Locale.ROOT)
+        val resKeys = responseHeaders.keys.joinToString(" ").lowercase(Locale.ROOT)
+        return reqKeys.contains("authorization") || resKeys.contains("set-cookie")
     }
 
     private fun extractCookieName(cookieLine: String): String? {
@@ -173,7 +367,8 @@ class RuntimeToolkitOkHttpInterceptor(
     }
 
     companion object {
-        private const val MAX_PEEK_BYTES = 64L * 1024L
+        private const val MAX_PEEK_BYTES_FULL = 512L * 1024L
+        private const val MAX_PEEK_BYTES_SNIPPET = 32L * 1024L
         private const val MAX_BODY_PREVIEW_BYTES = 16 * 1024
     }
 }

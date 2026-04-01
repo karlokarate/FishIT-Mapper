@@ -190,11 +190,16 @@ minimal_open_stack:
   browser_replay_validation:
     chosen: Playwright
     donor_repo: https://github.com/microsoft/playwright
-  optional_future_upgrades:
+  runtime_upgrades:
     - name: Jetpack WebKit
-      reason: prefer over raw framework-only WebView integration
+      status: integrated
+      module: mapper_webkit_compat
+      reason: centralized runtime feature-gated WebView compat and site reset helpers
     - name: Cronet
-      reason: modern Chromium-network-stack upgrade path for runtime networking
+      status: integrated
+      module: mapper_native_network_cronet
+      reason: deterministic native replay/validation transport for mapper-owned HTTP requests
+  optional_future_upgrades:
     - name: Android Keystore + custom AES-GCM wrapper
       reason: prefer over adding deprecated security-crypto as new dependency
 
@@ -243,6 +248,36 @@ modules:
           - response_capture_logic
           - header_and_body_exposure_patterns
           - cookie_visibility_patterns
+  mapper_webkit_compat:
+    required: true
+    role: webview_runtime_compatibility_facade
+    responsibilities:
+      - centralized_webview_feature_checks
+      - centralized_websettings_compat_usage
+      - site_and_origin_reset_helpers
+      - renderer_process_health_hooks_when_supported
+    allowed_usage:
+      - BrowserActivity_and_EBWebView_host_paths
+      - session_login_bootstrap_flows
+      - site_reset_and_probe_replay_flows
+    forbidden_usage:
+      - replacing_core_webview_implementation
+      - global_non_webview_mapper_business_logic
+  mapper_native_network_cronet:
+    required: true
+    role: mapper_owned_native_http_replay_validation
+    responsibilities:
+      - deterministic_get_post_request_execution
+      - timeout_cancellation_redirect_policy_controls
+      - structured_request_response_metadata_surface
+      - cronet_feature_flagged_transport_with_okhttp_fallback
+    allowed_usage:
+      - replay_validation_of_discovered_endpoint_candidates
+      - mapper_runtime_config_fetch_and_auth_validation_calls
+      - playback_preflight_requests_outside_webview_page_loading
+    forbidden_usage:
+      - routing_webview_page_loads_through_cronet
+      - global_network_stack_replacement_inside_donor_browser_core
   core_capture:
     required: true
     submodules:

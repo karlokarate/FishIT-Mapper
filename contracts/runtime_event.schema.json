@@ -14,7 +14,8 @@
     "span_id",
     "action_id",
     "device",
-    "app"
+    "app",
+    "payload"
   ],
   "properties": {
     "schema_version": { "type": "integer", "const": 1 },
@@ -29,7 +30,11 @@
         "cookie_event",
         "auth_event",
         "correlation_event",
-        "extraction_event"
+        "extraction_event",
+        "triage_alert_event",
+        "probe_phase_event",
+        "provenance_event",
+        "storage_event"
       ]
     },
     "ts_utc": { "type": "string", "format": "date-time" },
@@ -41,5 +46,96 @@
     "app": { "type": "object" },
     "payload": { "type": ["object", "array", "string", "number", "boolean", "null"] }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "event_type": { "const": "network_request_event" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["request_id", "request_fingerprint", "phase_id", "host_class", "url", "method", "headers"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "network_response_event" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["request_id", "response_id", "request_fingerprint", "phase_id", "host_class", "url", "method", "status_code", "headers"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "cookie_event" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["operation", "domain", "phase_id"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "auth_event" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["operation", "phase_id"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "probe_phase_event" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["phase_id", "transition"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "provenance_event" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["entity_type", "entity_key", "phase_id"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "storage_event" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["storage_type", "key", "operation", "phase_id"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "triage_alert_event" } } },
+      "then": {
+        "required": ["severity", "rule_id", "title", "reason"],
+        "properties": {
+          "severity": { "type": "string" },
+          "rule_id": { "type": "string" },
+          "title": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    }
+  ],
   "additionalProperties": true
 }

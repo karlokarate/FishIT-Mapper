@@ -108,6 +108,8 @@ dependencies {
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
 
     implementation(project(":ad-filter"))
+    implementation(project(":mapper-webkit-compat"))
+    implementation(project(":mapper-native-network-cronet"))
 
     implementation(libs.material)
 
@@ -141,9 +143,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.4")
     implementation("androidx.fragment:fragment-ktx:1.3.6")
 
-
-    // for dark mode
-    implementation("androidx.webkit:webkit:1.11.0")
 
     val koinVersion = "3.1.2"
     // Koin core features

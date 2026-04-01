@@ -1,0 +1,5 @@
+{
+  "source_url": "https://dl.google.com/dl/android/maven2/org/chromium/net/cronet-embedded/",
+  "integration_mode": "gradle_version_catalog",
+  "pinned_ref": "143.7445.0"
+}

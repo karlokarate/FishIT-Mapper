@@ -53,6 +53,28 @@ Integration policy: `vendor_snapshot_pinned_commit`
 - status: `planned`
 - notes: Next repository to integrate after EinkBro validation.
 
+### dep-androidx-webkit - Jetpack WebKit
+- kind: `tool`
+- source_url: `https://developer.android.com/jetpack/androidx/releases/webkit`
+- target_module: `mapper_webkit_compat`
+- integration_mode: `gradle_version_catalog`
+- pinned_ref: `1.15.0`
+- local_path: `apps/mapper-app/mapper-webkit-compat`
+- license: `Apache-2.0`
+- status: `integrated`
+- notes: Centralized WebViewCompat/WebViewFeature/WebSettingsCompat adapter layer for mapper runtime flows.
+
+### dep-cronet-embedded - Cronet Embedded
+- kind: `tool`
+- source_url: `https://dl.google.com/dl/android/maven2/org/chromium/net/cronet-embedded/`
+- target_module: `mapper_native_network_cronet`
+- integration_mode: `gradle_version_catalog`
+- pinned_ref: `143.7445.0`
+- local_path: `apps/mapper-app/mapper-native-network-cronet`
+- license: `BSD-like`
+- status: `integrated`
+- notes: Feature-flagged native replay/validation HTTP transport; default mapper replay path uses Cronet with OkHttp fallback.
+
 ### dep-mitmproxy - mitmproxy
 - kind: `tool`
 - source_url: `https://github.com/mitmproxy/mitmproxy`

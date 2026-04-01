@@ -7,6 +7,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -102,14 +103,23 @@ def read_jsonl(path: pathlib.Path) -> List[Dict[str, Any]]:
 
 def write_json(path: pathlib.Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+    text = json.dumps(payload, ensure_ascii=True, indent=2) + "\n"
+    atomic_write_text(path, text)
 
 
 def write_jsonl(path: pathlib.Path, rows: Iterable[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=True) + "\n")
+    lines = []
+    for row in rows:
+        lines.append(json.dumps(row, ensure_ascii=True) + "\n")
+    atomic_write_text(path, "".join(lines))
+
+
+def atomic_write_text(path: pathlib.Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp.{os.getpid()}")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
 
 
 def event_payload(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -139,7 +149,7 @@ def event_method(row: Dict[str, Any]) -> str:
 
 def event_status(row: Dict[str, Any]) -> str:
     payload = event_payload(row)
-    for key in ("status", "status_code", "statusCode"):
+    for key in ("status", "status_code", "statusCode", "http_status", "httpStatus"):
         val = payload.get(key)
         if val is None:
             continue
@@ -147,12 +157,72 @@ def event_status(row: Dict[str, Any]) -> str:
     return ""
 
 
-def event_mime(row: Dict[str, Any]) -> str:
+def event_phase_id(row: Dict[str, Any]) -> str:
     payload = event_payload(row)
-    for key in ("mime", "mime_type", "mimeType", "content_type", "contentType"):
+    for key in ("phase_id", "phaseId"):
         val = payload.get(key)
         if isinstance(val, str) and val:
             return val
+    return ""
+
+
+def event_host_class(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    for key in ("host_class", "hostClass"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return ""
+
+
+def event_request_fingerprint(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    for key in ("request_fingerprint", "requestFingerprint"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return ""
+
+
+def event_dedup_of(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    for key in ("dedup_of", "dedupOf"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return ""
+
+
+def event_mime(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    for key in ("mime", "mime_type", "mimeType", "content_type", "contentType", "response_mime"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return ""
+
+
+def event_request_id(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    for key in ("request_id", "requestId", "req_id"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    if str(row.get("event_type") or "") == "network_request_event":
+        event_id = str(row.get("event_id") or "")
+        return event_id
+    return ""
+
+
+def event_response_id(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    for key in ("response_id", "responseId", "resp_id"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    if str(row.get("event_type") or "") == "network_response_event":
+        event_id = str(row.get("event_id") or "")
+        return event_id
     return ""
 
 
@@ -174,6 +244,25 @@ def event_body_preview(row: Dict[str, Any]) -> str:
         if isinstance(val, str) and val:
             return val
     return ""
+
+
+def event_response_store_path(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    for key in ("response_store_path", "responseStorePath", "response_store_ref"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return normalize_response_store_path(val)
+    return ""
+
+
+def normalize_response_store_path(raw_path: str) -> str:
+    normalized = raw_path.replace("\\", "/").strip()
+    if not normalized:
+        return ""
+    marker = "response_store/"
+    if marker in normalized:
+        return normalized.split(marker, 1)[1].lstrip("/")
+    return pathlib.Path(normalized).name
 
 
 def ts_to_epoch_seconds(ts: str) -> float:
@@ -214,6 +303,75 @@ def flatten_keys(value: Any, prefix: str = "") -> Iterable[str]:
             yield from flatten_keys(item, key)
 
 
+def event_sort_key(row: Dict[str, Any]) -> Tuple[str, int]:
+    ts = str(row.get("ts_utc") or "")
+    mono_raw = row.get("ts_mono_ns", 0)
+    try:
+        mono = int(mono_raw)
+    except Exception:
+        mono = 0
+    return (ts, mono)
+
+
+def compact_request(row: Dict[str, Any]) -> Dict[str, Any]:
+    payload = event_payload(row)
+    return {
+        "event_id": str(row.get("event_id") or ""),
+        "request_id": event_request_id(row),
+        "request_fingerprint": event_request_fingerprint(row),
+        "ts_utc": str(row.get("ts_utc") or ""),
+        "url": event_url(row),
+        "normalized_url": str(payload.get("normalized_url") or ""),
+        "method": event_method(row) or "GET",
+        "phase_id": event_phase_id(row),
+        "host_class": event_host_class(row),
+        "dedup_of": event_dedup_of(row),
+        "screen_id": str(payload.get("screen_id") or payload.get("screenId") or ""),
+        "tab_id": str(payload.get("tab_id") or payload.get("tabId") or ""),
+    }
+
+
+def compact_response(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "event_id": str(row.get("event_id") or ""),
+        "response_id": event_response_id(row),
+        "request_id": event_request_id(row),
+        "request_fingerprint": event_request_fingerprint(row),
+        "ts_utc": str(row.get("ts_utc") or ""),
+        "url": event_url(row),
+        "normalized_url": str(event_payload(row).get("normalized_url") or ""),
+        "method": event_method(row) or "GET",
+        "status": event_status(row),
+        "mime": event_mime(row),
+        "phase_id": event_phase_id(row),
+        "host_class": event_host_class(row),
+        "response_store_path": event_response_store_path(row),
+    }
+
+
+def compact_cookie(row: Dict[str, Any]) -> Dict[str, Any]:
+    payload = event_payload(row)
+    return {
+        "event_id": str(row.get("event_id") or ""),
+        "ts_utc": str(row.get("ts_utc") or ""),
+        "operation": str(payload.get("operation") or ""),
+        "domain": str(payload.get("domain") or ""),
+        "cookie_name": str(payload.get("cookie_name") or ""),
+        "reason": str(payload.get("reason") or ""),
+    }
+
+
+def compact_auth(row: Dict[str, Any]) -> Dict[str, Any]:
+    payload = event_payload(row)
+    return {
+        "event_id": str(row.get("event_id") or ""),
+        "ts_utc": str(row.get("ts_utc") or ""),
+        "operation": str(payload.get("operation") or ""),
+        "status": event_status(row),
+        "url": event_url(row),
+    }
+
+
 def build_correlation(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     grouped: Dict[Tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -225,21 +383,114 @@ def build_correlation(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     out: List[Dict[str, Any]] = []
     for (trace_id, action_id), events in grouped.items():
-        ui = [e for e in events if e.get("event_type") == "ui_action_event"]
-        network = [e for e in events if str(e.get("event_type", "")).startswith("network_")]
-        cookies = [e for e in events if e.get("event_type") == "cookie_event"]
+        ordered = sorted(events, key=event_sort_key)
+        ui = [e for e in ordered if e.get("event_type") == "ui_action_event"]
+        request_events = [e for e in ordered if e.get("event_type") == "network_request_event"]
+        response_events = [e for e in ordered if e.get("event_type") == "network_response_event"]
+        cookies = [e for e in ordered if e.get("event_type") == "cookie_event"]
+        auth_events = [e for e in ordered if e.get("event_type") == "auth_event"]
+        provenance_events = [e for e in ordered if e.get("event_type") == "provenance_event"]
+        dedup_events = [
+            e for e in ordered
+            if e.get("event_type") == "correlation_event"
+            and str(event_payload(e).get("operation") or "") == "request_dedup"
+        ]
+
+        response_by_request_id: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for response in response_events:
+            req_id = event_request_id(response)
+            if req_id:
+                response_by_request_id[req_id].append(response)
+
+        request_pairs = []
+        matched_request_ids = set()
+        for request in request_events:
+            req_id = event_request_id(request)
+            matches = response_by_request_id.get(req_id, []) if req_id else []
+            if matches:
+                matched_request_ids.add(req_id)
+            request_pairs.append(
+                {
+                    "request": compact_request(request),
+                    "responses": [compact_response(resp) for resp in matches],
+                    "status_chain": [event_status(resp) for resp in matches if event_status(resp)],
+                }
+            )
+
+        unmatched_response_ids = []
+        request_ids = {event_request_id(req) for req in request_events if event_request_id(req)}
+        for response in response_events:
+            req_id = event_request_id(response)
+            if req_id and req_id not in request_ids:
+                unmatched_response_ids.append(event_response_id(response))
 
         run_id = str(events[0].get("run_id") or "unknown")
+        request_count = len(request_events)
+        matched_count = len([rid for rid in request_ids if rid in matched_request_ids])
+        response_coverage = round((matched_count / request_count), 4) if request_count > 0 else 0.0
+        status_chain = [event_status(resp) for resp in response_events if event_status(resp)]
+        any_success = any(status.startswith("2") for status in status_chain)
+        result_status = "ok" if any_success else ("incomplete" if response_coverage < 1.0 else "error")
+        phase_counter = Counter(
+            phase_id
+            for phase_id in (event_phase_id(event) for event in ordered)
+            if phase_id
+        )
+        phase_id = phase_counter.most_common(1)[0][0] if phase_counter else "unscoped"
+        host_class_counter = Counter(
+            host_class
+            for host_class in (event_host_class(event) for event in ordered)
+            if host_class
+        )
+        host_scope = {
+            "target": int(host_class_counter.get("target", 0)),
+            "external_noise": int(host_class_counter.get("external_noise", 0)),
+            "ignored": int(host_class_counter.get("ignored", 0)),
+            "unknown": int(host_class_counter.get("unknown", 0)),
+        }
+        dedup_ref_count = len(dedup_events) + len(
+            [request for request in request_events if event_dedup_of(request)]
+        )
+        dedup_duplicate_count = 0
+        for dedup_event in dedup_events:
+            payload = event_payload(dedup_event)
+            try:
+                dedup_duplicate_count += int(payload.get("dedup_count") or 1)
+            except Exception:
+                dedup_duplicate_count += 1
+
         out.append(
             {
                 "schema_version": 1,
                 "run_id": run_id,
                 "trace_id": trace_id,
                 "action_id": action_id,
+                "phase_id": phase_id,
+                "host_scope": host_scope,
                 "generated_at_utc": utc_now(),
-                "linked_event_ids": [str(e.get("event_id") or "") for e in events if e.get("event_id")],
+                "linked_event_ids": [str(e.get("event_id") or "") for e in ordered if e.get("event_id")],
+                "ui_start": ui[0] if ui else None,
+                "ui_end": ui[-1] if ui else None,
+                "requests": [compact_request(req) for req in request_events],
+                "responses": [compact_response(resp) for resp in response_events],
+                "request_response_pairs": request_pairs,
+                "cookie_transitions": [compact_cookie(cookie) for cookie in cookies],
+                "auth_transitions": [compact_auth(auth) for auth in auth_events],
+                "request_count": request_count,
+                "response_count": len(response_events),
+                "matched_request_count": matched_count,
+                "response_coverage": response_coverage,
+                "unmatched_response_ids": [item for item in unmatched_response_ids if item],
+                "result_status": result_status,
+                "provenance_refs": [str(event.get("event_id") or "") for event in provenance_events if event.get("event_id")],
+                "dedup_stats": {
+                    "dedup_reference_count": dedup_ref_count,
+                    "dedup_duplicate_count": dedup_duplicate_count,
+                    "canonical_request_count": request_count,
+                },
+                "status_chain": status_chain,
                 "ui": ui[0] if ui else None,
-                "network": network,
+                "network": [e for e in ordered if str(e.get("event_type", "")).startswith("network_")],
                 "cookies": cookies,
             }
         )
@@ -261,49 +512,126 @@ def build_cookie_timeline(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def build_required_headers(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+def is_noise_asset(url: str, mime: str = "") -> bool:
+    lower_url = url.lower()
+    lower_mime = (mime or "").lower()
+    critical_hints = ("identity", "auth", "oauth", "token", "session", "api", "graphql", "usage-data", "tmd")
+    if any(hint in lower_url for hint in critical_hints):
+        return False
+
+    if any(ext in lower_url for ext in (".woff", ".woff2", ".ttf", ".otf", "favicon", "sprite", ".png", ".jpg", ".jpeg", ".gif")):
+        return True
+    if lower_mime.startswith("font/") or lower_mime.startswith("image/"):
+        return True
+    return False
+
+
+def build_required_headers(rows: List[Dict[str, Any]], active_elimination: bool = False) -> Dict[str, Any]:
     network_requests = [r for r in rows if r.get("event_type") == "network_request_event"]
     counter: Dict[str, Counter[str]] = defaultdict(Counter)
+    request_by_id: Dict[str, Dict[str, Any]] = {}
+    response_by_request_id: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+
+    for request in network_requests:
+        req_id = event_request_id(request)
+        if req_id:
+            request_by_id[req_id] = request
+    for response in [r for r in rows if r.get("event_type") == "network_response_event"]:
+        req_id = event_request_id(response)
+        if req_id:
+            response_by_request_id[req_id].append(response)
 
     for row in network_requests:
         url = event_url(row)
+        if is_noise_asset(url=url, mime=event_mime(row)):
+            continue
+        host_class = event_host_class(row)
+        if host_class and host_class != "target":
+            continue
         host = urlparse(url).netloc or "unknown"
         for h in event_headers(row).keys():
             counter[host][h.lower()] += 1
 
+    active_sets: List[Dict[str, Any]] = []
+    if active_elimination:
+        per_endpoint: Dict[Tuple[str, str, str], List[set]] = defaultdict(list)
+        for request_id, request in request_by_id.items():
+            responses = response_by_request_id.get(request_id, [])
+            if not responses:
+                continue
+            if not any(event_status(resp).startswith("2") for resp in responses):
+                continue
+            url = event_url(request)
+            if not url:
+                continue
+            if event_host_class(request) and event_host_class(request) != "target":
+                continue
+            parsed = urlparse(url)
+            method = event_method(request) or "GET"
+            key = (method, parsed.netloc or "unknown", parsed.path or "/")
+            headers = {header.lower() for header in event_headers(request).keys() if header}
+            if headers:
+                per_endpoint[key].append(headers)
+
+        for (method, host, path), header_sets in sorted(per_endpoint.items()):
+            if not header_sets:
+                continue
+            minimal_set = set.intersection(*header_sets)
+            passive_candidates = sorted(list(set.union(*header_sets)))
+            active_sets.append(
+                {
+                    "method": method,
+                    "host": host,
+                    "path": path,
+                    "successful_chain_count": len(header_sets),
+                    "candidate_headers": passive_candidates,
+                    "minimal_required_headers": sorted(list(minimal_set)),
+                    "elimination_mode": "replay_elimination_observed",
+                }
+            )
+
     out = {
         "schema_version": 1,
         "generated_at_utc": utc_now(),
+        "inference_mode": "active_replay_elimination" if active_elimination else "passive_frequency",
         "hosts": {
             host: {
                 "top_headers": [{"header": k, "count": v} for k, v in headers.most_common(30)]
             }
             for host, headers in sorted(counter.items())
         },
+        "endpoint_minimal_sets": active_sets,
     }
     return out
 
 
 def build_endpoint_candidates(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     network_requests = [r for r in rows if r.get("event_type") == "network_request_event"]
-    counts: Counter[Tuple[str, str, str]] = Counter()
+    counts: Counter[Tuple[str, str, str, str]] = Counter()
 
     for row in network_requests:
         url = event_url(row)
         if not url:
             continue
+        if is_noise_asset(url=url, mime=event_mime(row)):
+            continue
+        host_class = event_host_class(row)
+        if host_class and host_class != "target":
+            continue
         parsed = urlparse(url)
         method = event_method(row) or "GET"
-        counts[(method, parsed.netloc, parsed.path)] += 1
+        fingerprint = event_request_fingerprint(row)
+        counts[(method, parsed.netloc, parsed.path, fingerprint)] += 1
 
     candidates = [
         {
             "method": method,
             "host": host,
             "path": path,
+            "request_fingerprint": fingerprint,
             "count": count,
         }
-        for (method, host, path), count in counts.most_common(300)
+        for (method, host, path, fingerprint), count in counts.most_common(300)
     ]
 
     return {
@@ -313,24 +641,57 @@ def build_endpoint_candidates(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def build_field_matrix(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+def read_response_store_payload(row: Dict[str, Any], runtime_dir: Optional[pathlib.Path]) -> str:
+    if runtime_dir is None:
+        return ""
+    rel_path = event_response_store_path(row)
+    if not rel_path:
+        return ""
+    candidate = runtime_dir / "response_store" / rel_path
+    if not candidate.exists() or not candidate.is_file():
+        return ""
+    try:
+        raw = candidate.read_bytes()
+    except Exception:
+        return ""
+    if not raw:
+        return ""
+    try:
+        return raw.decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def build_field_matrix(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
     response_events = [r for r in rows if r.get("event_type") == "network_response_event"]
     key_counter: Counter[str] = Counter()
+    parsed_events = 0
+    skipped_non_target = 0
 
     for row in response_events:
+        host_class = event_host_class(row)
+        if host_class and host_class != "target":
+            skipped_non_target += 1
+            continue
         body = event_body_preview(row)
+        if not body:
+            body = read_response_store_payload(row, runtime_dir)
         if not body:
             continue
         try:
             loaded = json.loads(body)
         except Exception:
             continue
+        parsed_events += 1
         for key in flatten_keys(loaded):
             key_counter[key] += 1
 
     return {
         "schema_version": 1,
         "generated_at_utc": utc_now(),
+        "parsed_response_events": parsed_events,
+        "total_response_events": len(response_events),
+        "skipped_non_target_events": skipped_non_target,
         "keys": [{"field": key, "count": count} for key, count in key_counter.most_common(500)],
     }
 
@@ -381,26 +742,232 @@ def build_replay_seed(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def build_response_store_index(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+def build_response_store_index(
+    rows: List[Dict[str, Any]],
+    runtime_dir: Optional[pathlib.Path] = None,
+    event_body_refs: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
     responses = [r for r in rows if r.get("event_type") == "network_response_event"]
     refs = []
     for row in responses:
-        payload = event_payload(row)
-        path = payload.get("response_store_path")
-        if path:
+        event_id = str(row.get("event_id") or "")
+        rel_path = event_response_store_path(row)
+        if rel_path:
+            resolved = str((runtime_dir / "response_store" / rel_path)) if runtime_dir else ""
+            exists = bool(runtime_dir and (runtime_dir / "response_store" / rel_path).exists())
             refs.append(
                 {
-                    "event_id": row.get("event_id"),
+                    "event_id": event_id,
+                    "request_id": event_request_id(row),
+                    "response_id": event_response_id(row),
                     "url": event_url(row),
-                    "path": path,
+                    "path": rel_path,
+                    "resolved_path": resolved,
+                    "exists": exists,
                     "mime": event_mime(row),
                     "status": event_status(row),
+                    "phase_id": event_phase_id(row),
+                    "host_class": event_host_class(row),
+                    "body_ref": (event_body_refs or {}).get(event_id, ""),
                 }
             )
     return {
         "schema_version": 1,
         "generated_at_utc": utc_now(),
         "items": refs,
+    }
+
+
+def should_capture_candidate_body(row: Dict[str, Any]) -> bool:
+    host_class = event_host_class(row)
+    if host_class and host_class != "target":
+        return False
+    url = event_url(row).lower()
+    mime = event_mime(row).lower()
+    if any(ext in url for ext in (".m4s", ".ts", ".mp4", ".m4a", ".webm")):
+        return False
+    if any(token in url for token in ("graphql", "manifest", "playback", "resolver")):
+        return True
+    if any(ext in url for ext in (".m3u8", ".mpd")):
+        return True
+    if mime.startswith("application/json") or "json" in mime:
+        return True
+    if "html" in mime or "xml" in mime:
+        return True
+    return False
+
+
+def body_extension_from_payload(text: str) -> str:
+    trimmed = text.strip()
+    if not trimmed:
+        return "txt"
+    if trimmed.startswith("{") or trimmed.startswith("["):
+        return "json"
+    if trimmed.startswith("<!doctype html") or trimmed.startswith("<html"):
+        return "html"
+    if trimmed.startswith("<?xml") or trimmed.startswith("<"):
+        return "xml"
+    return "txt"
+
+
+def zstd_compress(payload: bytes) -> Optional[bytes]:
+    try:
+        import zstandard as zstd  # type: ignore
+    except Exception:
+        return None
+    compressor = zstd.ZstdCompressor(level=3)
+    return compressor.compress(payload)
+
+
+def build_body_store(rows: List[Dict[str, Any]], runtime_dir: pathlib.Path) -> Dict[str, Any]:
+    bodies_root = runtime_dir / "bodies"
+    bodies_root.mkdir(parents=True, exist_ok=True)
+
+    items = []
+    event_body_refs: Dict[str, str] = {}
+    seen_sha: set = set()
+
+    response_rows = [row for row in rows if row.get("event_type") == "network_response_event"]
+    for row in response_rows:
+        if not should_capture_candidate_body(row):
+            continue
+        event_id = str(row.get("event_id") or "")
+        if not event_id:
+            continue
+
+        text = event_body_preview(row)
+        if not text:
+            text = read_response_store_payload(row, runtime_dir)
+        if not text:
+            continue
+
+        payload_bytes = text.encode("utf-8", errors="replace")
+        digest = hashlib.sha256(payload_bytes).hexdigest()
+        extension = body_extension_from_payload(text)
+        compressed = zstd_compress(payload_bytes)
+        if compressed is not None:
+            filename = f"{digest}.{extension}.zst"
+            compression = "zstd"
+            to_write = compressed
+        else:
+            filename = f"{digest}.{extension}"
+            compression = "none"
+            to_write = payload_bytes
+
+        target = bodies_root / filename
+        if digest not in seen_sha and not target.exists():
+            target.write_bytes(to_write)
+        seen_sha.add(digest)
+
+        rel = str(target.relative_to(runtime_dir))
+        event_body_refs[event_id] = rel
+        items.append(
+            {
+                "event_id": event_id,
+                "request_id": event_request_id(row),
+                "response_id": event_response_id(row),
+                "url": event_url(row),
+                "mime": event_mime(row),
+                "status": event_status(row),
+                "sha256": digest,
+                "size_bytes": len(payload_bytes),
+                "compression": compression,
+                "body_ref": rel,
+                "phase_id": event_phase_id(row),
+                "host_class": event_host_class(row),
+            }
+        )
+
+    index = {
+        "schema_version": 1,
+        "generated_at_utc": utc_now(),
+        "item_count": len(items),
+        "unique_blob_count": len(seen_sha),
+        "items": items,
+    }
+    write_json(runtime_dir / "response_index.json", index)
+    return {
+        "index": index,
+        "event_body_refs": event_body_refs,
+        "index_path": runtime_dir / "response_index.json",
+    }
+
+
+def build_provenance_graph(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    provenance_rows = [row for row in rows if row.get("event_type") == "provenance_event"]
+    nodes: Dict[str, Dict[str, Any]] = {}
+    edges: List[Dict[str, Any]] = []
+
+    for row in provenance_rows:
+        payload = event_payload(row)
+        entity_type = str(payload.get("entity_type") or "unknown")
+        entity_key = str(payload.get("entity_key") or "unknown")
+        entity_id = f"{entity_type}:{entity_key}"
+        nodes.setdefault(
+            entity_id,
+            {
+                "id": entity_id,
+                "entity_type": entity_type,
+                "entity_key": entity_key,
+            },
+        )
+
+        produced_by = str(payload.get("produced_by") or "")
+        consumed_by = str(payload.get("consumed_by") or "")
+        derived_from = payload.get("derived_from")
+        if not isinstance(derived_from, list):
+            derived_from = []
+
+        if produced_by:
+            edges.append(
+                {
+                    "relation": "produced_by",
+                    "from": produced_by,
+                    "to": entity_id,
+                    "event_id": str(row.get("event_id") or ""),
+                    "phase_id": event_phase_id(row),
+                }
+            )
+        if consumed_by:
+            edges.append(
+                {
+                    "relation": "consumed_by",
+                    "from": entity_id,
+                    "to": consumed_by,
+                    "event_id": str(row.get("event_id") or ""),
+                    "phase_id": event_phase_id(row),
+                }
+            )
+        for source in derived_from:
+            source_key = str(source)
+            if not source_key:
+                continue
+            source_id = f"{entity_type}:{source_key}"
+            nodes.setdefault(
+                source_id,
+                {
+                    "id": source_id,
+                    "entity_type": entity_type,
+                    "entity_key": source_key,
+                },
+            )
+            edges.append(
+                {
+                    "relation": "derived_from",
+                    "from": source_id,
+                    "to": entity_id,
+                    "event_id": str(row.get("event_id") or ""),
+                    "phase_id": event_phase_id(row),
+                }
+            )
+
+    return {
+        "schema_version": 1,
+        "generated_at_utc": utc_now(),
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+        "nodes": sorted(nodes.values(), key=lambda item: item["id"]),
+        "edges": edges,
     }
 
 
@@ -422,33 +989,39 @@ def match_filters(rows: List[Dict[str, Any]], args: argparse.Namespace) -> List[
     for row in rows:
         if getattr(args, "trace_id", "") and str(row.get("trace_id") or "") != args.trace_id:
             continue
-        if args.action_id and str(row.get("action_id") or "") != args.action_id:
+        if getattr(args, "action_id", "") and str(row.get("action_id") or "") != args.action_id:
             continue
 
         payload = event_payload(row)
         screen_id = str(payload.get("screen_id") or payload.get("screenId") or "")
-        if args.screen_id and screen_id != args.screen_id:
+        if getattr(args, "screen_id", "") and screen_id != args.screen_id:
+            continue
+        phase_id = event_phase_id(row)
+        if getattr(args, "phase_id", "") and phase_id != args.phase_id:
+            continue
+        host_class = event_host_class(row)
+        if getattr(args, "host_class", "") and host_class != args.host_class:
             continue
 
-        if not within_time_range(row, args.time_from, args.time_to):
+        if not within_time_range(row, getattr(args, "time_from", ""), getattr(args, "time_to", "")):
             continue
 
         url = event_url(row)
         parsed = urlparse(url) if url else None
 
-        if args.domain and (not parsed or args.domain not in parsed.netloc):
+        if getattr(args, "domain", "") and (not parsed or args.domain not in parsed.netloc):
             continue
-        if args.path and (not parsed or args.path not in parsed.path):
+        if getattr(args, "path", "") and (not parsed or args.path not in parsed.path):
             continue
-        if args.method and event_method(row) != args.method.upper():
+        if getattr(args, "method", "") and event_method(row) != args.method.upper():
             continue
-        if args.status and event_status(row) != str(args.status):
+        if getattr(args, "status", "") and event_status(row) != str(args.status):
             continue
-        if args.mime and args.mime.lower() not in event_mime(row).lower():
+        if getattr(args, "mime", "") and args.mime.lower() not in event_mime(row).lower():
             continue
 
         headers = event_headers(row)
-        if args.header_key and args.header_key.lower() not in {h.lower() for h in headers.keys()}:
+        if getattr(args, "header_key", "") and args.header_key.lower() not in {h.lower() for h in headers.keys()}:
             continue
 
         cookie_text = " ".join([
@@ -458,7 +1031,7 @@ def match_filters(rows: List[Dict[str, Any]], args: argparse.Namespace) -> List[
             str(headers.get("Cookie") or headers.get("cookie") or ""),
             str(headers.get("Set-Cookie") or headers.get("set-cookie") or ""),
         ])
-        if args.cookie_key and args.cookie_key not in cookie_text:
+        if getattr(args, "cookie_key", "") and args.cookie_key not in cookie_text:
             continue
 
         if body_rx and not body_rx.search(event_body_preview(row)):
@@ -466,7 +1039,7 @@ def match_filters(rows: List[Dict[str, Any]], args: argparse.Namespace) -> List[
 
         out.append(row)
 
-    if args.limit and args.limit > 0:
+    if getattr(args, "limit", 0) and args.limit > 0:
         out = out[: args.limit]
     return out
 
@@ -474,33 +1047,261 @@ def match_filters(rows: List[Dict[str, Any]], args: argparse.Namespace) -> List[
 def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dict[str, pathlib.Path]:
     correlation = build_correlation(rows)
     cookie_timeline = build_cookie_timeline(rows)
-    required_headers = build_required_headers(rows)
+    required_headers = build_required_headers(rows, active_elimination=False)
     endpoint_candidates = build_endpoint_candidates(rows)
-    field_matrix = build_field_matrix(rows)
+    field_matrix = build_field_matrix(rows, runtime_dir=runtime_dir)
     profile_draft = build_profile_draft(rows, endpoint_candidates, required_headers)
     replay_seed = build_replay_seed(rows)
-    response_store_index = build_response_store_index(rows)
+    body_store = build_body_store(rows, runtime_dir=runtime_dir)
+    response_store_index = build_response_store_index(
+        rows,
+        runtime_dir=runtime_dir,
+        event_body_refs=body_store.get("event_body_refs", {}),
+    )
+    provenance_graph = build_provenance_graph(rows)
+    events_ssot = {
+        "schema_version": 1,
+        "generated_at_utc": utc_now(),
+        "event_count": len(rows),
+    }
+    profile_candidate = dict(profile_draft)
+    profile_candidate["profile_type"] = "candidate"
 
     paths = {
+        "events_ssot": runtime_dir / "events.jsonl",
+        "events_ssot_meta": runtime_dir / "events.meta.json",
         "correlation": runtime_dir / "correlation_index.jsonl",
         "cookie_timeline": runtime_dir / "cookie_timeline.json",
         "required_headers": runtime_dir / "required_headers_report.json",
         "endpoint_candidates": runtime_dir / "endpoint_candidates.json",
         "field_matrix": runtime_dir / "field_matrix.json",
         "profile_draft": runtime_dir / "site_profile.draft.json",
+        "profile_candidate": runtime_dir / "profile_candidate.json",
         "replay_seed": runtime_dir / "replay_seed.json",
         "response_store_index": runtime_dir / "response_store" / "index.json",
+        "response_index": runtime_dir / "response_index.json",
+        "provenance_graph": runtime_dir / "provenance_graph.json",
     }
 
+    write_jsonl(paths["events_ssot"], rows)
+    write_json(paths["events_ssot_meta"], events_ssot)
     write_jsonl(paths["correlation"], correlation)
     write_json(paths["cookie_timeline"], cookie_timeline)
     write_json(paths["required_headers"], required_headers)
     write_json(paths["endpoint_candidates"], endpoint_candidates)
     write_json(paths["field_matrix"], field_matrix)
     write_json(paths["profile_draft"], profile_draft)
+    write_json(paths["profile_candidate"], profile_candidate)
     write_json(paths["replay_seed"], replay_seed)
     write_json(paths["response_store_index"], response_store_index)
+    write_json(paths["response_index"], body_store.get("index", {}))
+    write_json(paths["provenance_graph"], provenance_graph)
     return paths
+
+
+def discover_primary_host(rows: List[Dict[str, Any]]) -> str:
+    counts: Counter[str] = Counter()
+    for row in rows:
+        if row.get("event_type") != "network_request_event":
+            continue
+        url = event_url(row)
+        if not url:
+            continue
+        host = urlparse(url).netloc
+        if not host:
+            continue
+        if is_noise_asset(url=url, mime=event_mime(row)):
+            continue
+        counts[host] += 1
+    if not counts:
+        return ""
+    return counts.most_common(1)[0][0]
+
+
+def pipeline_quality_report(
+    runtime_dir: pathlib.Path,
+    rows: List[Dict[str, Any]],
+    quality_host: str = "",
+) -> Dict[str, Any]:
+    derived = ensure_derived(runtime_dir, rows)
+    host = quality_host.strip() or discover_primary_host(rows)
+
+    request_rows_all = [row for row in rows if row.get("event_type") == "network_request_event"]
+    response_rows_all = [row for row in rows if row.get("event_type") == "network_response_event"]
+    target_request_rows = [row for row in request_rows_all if event_host_class(row) == "target"]
+    target_response_rows = [row for row in response_rows_all if event_host_class(row) == "target"]
+    request_rows = target_request_rows if target_request_rows else request_rows_all
+    response_rows = target_response_rows if target_response_rows else response_rows_all
+    if host:
+        request_rows = [row for row in request_rows if host in (urlparse(event_url(row)).netloc or "")]
+        response_rows = [row for row in response_rows if host in (urlparse(event_url(row)).netloc or "")]
+
+    response_by_request_id: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for response in response_rows:
+        req_id = event_request_id(response)
+        if req_id:
+            response_by_request_id[req_id].append(response)
+
+    total_requests = len(request_rows)
+    matched_requests = 0
+    relevant_requests = 0
+    correlated_requests = 0
+    for request in request_rows:
+        req_id = event_request_id(request)
+        action_id = str(request.get("action_id") or "")
+        if action_id and action_id != "session_start":
+            correlated_requests += 1
+        if action_id:
+            relevant_requests += 1
+
+        if req_id and any(event_status(resp) for resp in response_by_request_id.get(req_id, [])):
+            matched_requests += 1
+            continue
+
+        fallback_hit = False
+        request_url = event_url(request)
+        request_method = event_method(request)
+        request_trace = str(request.get("trace_id") or "")
+        request_action = str(request.get("action_id") or "")
+        request_ts = ts_to_epoch_seconds(str(request.get("ts_utc") or ""))
+        for response in response_rows:
+            if event_url(response) != request_url:
+                continue
+            if event_method(response) and request_method and event_method(response) != request_method:
+                continue
+            if request_trace and str(response.get("trace_id") or "") != request_trace:
+                continue
+            if request_action and str(response.get("action_id") or "") != request_action:
+                continue
+            delta = abs(ts_to_epoch_seconds(str(response.get("ts_utc") or "")) - request_ts)
+            if delta <= 20 and event_status(response):
+                fallback_hit = True
+                break
+        if fallback_hit:
+            matched_requests += 1
+
+    response_coverage = round((matched_requests / total_requests), 4) if total_requests > 0 else 0.0
+    correlation_coverage = round((correlated_requests / relevant_requests), 4) if relevant_requests > 0 else 0.0
+
+    dedup_events = [
+        row
+        for row in rows
+        if row.get("event_type") == "correlation_event"
+        and str(event_payload(row).get("operation") or "") == "request_dedup"
+    ]
+    dedup_refs = len(dedup_events)
+    logical_request_total = len(request_rows_all) + dedup_refs
+    duplicate_request_ratio = round((dedup_refs / logical_request_total), 6) if logical_request_total > 0 else 0.0
+
+    required_phases = ["home_probe", "search_probe", "detail_probe", "playback_probe"]
+    phase_starts = {
+        str(event_payload(row).get("phase_id") or "")
+        for row in rows
+        if row.get("event_type") == "probe_phase_event"
+        and str(event_payload(row).get("transition") or "").lower() in {"start", "resume"}
+    }
+    if not phase_starts:
+        phase_starts = {event_phase_id(row) for row in request_rows_all if event_phase_id(row)}
+    phase_starts.discard("")
+    phase_hits = len([phase for phase in required_phases if phase in phase_starts])
+    phase_completeness_ratio = round((phase_hits / len(required_phases)), 4) if required_phases else 0.0
+
+    latest_targets = [
+        runtime_dir / "events.jsonl",
+        runtime_dir / "correlation_index.jsonl",
+        runtime_dir / "cookie_timeline.json",
+        runtime_dir / "required_headers_report.json",
+        runtime_dir / "endpoint_candidates.json",
+        runtime_dir / "field_matrix.json",
+        runtime_dir / "site_profile.draft.json",
+        runtime_dir / "profile_candidate.json",
+        runtime_dir / "provenance_graph.json",
+        runtime_dir / "response_index.json",
+        runtime_dir / "replay_seed.json",
+    ]
+    latest_non_empty = True
+    empty_targets = []
+    for target in latest_targets:
+        if not target.exists() or target.stat().st_size == 0:
+            latest_non_empty = False
+            empty_targets.append(str(target))
+
+    response_index = load_contract_json(derived["response_store_index"])
+    refs = response_index.get("items", [])
+    ref_total = 0
+    ref_valid = 0
+    if isinstance(refs, list):
+        for item in refs:
+            if not isinstance(item, dict):
+                continue
+            ref_total += 1
+            if bool(item.get("exists")):
+                ref_valid += 1
+    ref_ratio = round((ref_valid / ref_total), 4) if ref_total > 0 else 1.0
+
+    gates = {
+        "duplicate_request_ratio_gate": {
+            "threshold": 0.01,
+            "value": duplicate_request_ratio,
+            "passed": duplicate_request_ratio <= 0.01,
+        },
+        "phase_completeness_gate": {
+            "threshold": 1.0,
+            "value": phase_completeness_ratio,
+            "passed": phase_hits == len(required_phases),
+            "required_phases": required_phases,
+            "seen_phases": sorted(list(phase_starts)),
+            "phase_hits": phase_hits,
+        },
+        "response_coverage_gate": {
+            "threshold": 0.9,
+            "value": response_coverage,
+            "passed": response_coverage >= 0.9 if total_requests > 0 else False,
+        },
+        "correlation_coverage_gate": {
+            "threshold": 0.9,
+            "value": correlation_coverage,
+            "passed": correlation_coverage >= 0.9 if relevant_requests > 0 else False,
+        },
+        "latest_non_empty_gate": {
+            "threshold": True,
+            "value": latest_non_empty,
+            "passed": latest_non_empty,
+            "empty_targets": empty_targets,
+        },
+        "response_ref_integrity_gate": {
+            "threshold": 1.0,
+            "value": ref_ratio,
+            "passed": ref_ratio >= 1.0,
+            "total_refs": ref_total,
+            "valid_refs": ref_valid,
+        },
+    }
+    pipeline_ready = all(bool(gate.get("passed")) for gate in gates.values())
+    return {
+        "schema_version": 1,
+        "generated_at_utc": utc_now(),
+        "quality_host": host,
+        "pipeline_ready": pipeline_ready,
+        "metrics": {
+            "request_count": total_requests,
+            "request_count_all": len(request_rows_all),
+            "matched_request_count": matched_requests,
+            "response_coverage": response_coverage,
+            "relevant_request_count": relevant_requests,
+            "correlated_request_count": correlated_requests,
+            "correlation_coverage": correlation_coverage,
+            "duplicate_request_ratio": duplicate_request_ratio,
+            "dedup_reference_count": dedup_refs,
+            "phase_hits": phase_hits,
+            "phase_completeness_ratio": phase_completeness_ratio,
+            "response_ref_count": ref_total,
+            "response_ref_valid_count": ref_valid,
+            "response_ref_ratio": ref_ratio,
+        },
+        "gates": gates,
+        "derived_paths": {k: str(v) for k, v in derived.items()},
+    }
 
 
 def rule_map() -> Dict[str, Dict[str, Any]]:
@@ -777,6 +1578,8 @@ def apply_preset_filters(rows: List[Dict[str, Any]], preset_id: str) -> Tuple[Li
         body_regex=str(filters.get("body_regex") or ""),
         action_id=str(filters.get("action_id") or ""),
         screen_id=str(filters.get("screen_id") or ""),
+        phase_id=str(filters.get("phase_id") or ""),
+        host_class=str(filters.get("host_class") or ""),
         time_from=str(filters.get("time_from") or ""),
         time_to=str(filters.get("time_to") or ""),
         limit=int(filters.get("limit") or 0),
@@ -873,7 +1676,17 @@ def incident_bundle(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]], args:
     ]
     write_jsonl(root / "correlation_slice.jsonl", corr_slice)
 
-    for key in ("cookie_timeline", "required_headers", "field_matrix", "endpoint_candidates", "profile_draft", "replay_seed"):
+    for key in (
+        "cookie_timeline",
+        "required_headers",
+        "field_matrix",
+        "endpoint_candidates",
+        "profile_draft",
+        "profile_candidate",
+        "replay_seed",
+        "provenance_graph",
+        "response_index",
+    ):
         source = derived[key]
         if source.exists():
             shutil.copy2(source, root / source.name)
@@ -910,6 +1723,25 @@ def incident_bundle(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]], args:
                 shutil.copy2(source, target)
                 copied_response_refs.append({"event_id": event_id, "path": str(target.relative_to(root))})
 
+    candidate_response_index = load_contract_json(derived["response_index"])
+    body_items = candidate_response_index.get("items", [])
+    copied_body_refs = []
+    if isinstance(body_items, list):
+        bundle_bodies_dir = root / "bodies"
+        bundle_bodies_dir.mkdir(parents=True, exist_ok=True)
+        for item in body_items:
+            if not isinstance(item, dict):
+                continue
+            event_id = str(item.get("event_id") or "")
+            body_ref = str(item.get("body_ref") or "")
+            if event_id not in selected_event_ids or not body_ref:
+                continue
+            source = runtime_dir / body_ref
+            if source.exists() and source.is_file():
+                target = bundle_bodies_dir / source.name
+                shutil.copy2(source, target)
+                copied_body_refs.append({"event_id": event_id, "path": str(target.relative_to(root))})
+
     report = {
         "schema_version": 1,
         "generated_at_utc": utc_now(),
@@ -918,6 +1750,7 @@ def incident_bundle(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]], args:
         "selected_trace_ids": sorted(v for v in selected_trace_ids if v),
         "selected_action_ids": sorted(v for v in selected_action_ids if v),
         "response_refs": copied_response_refs,
+        "body_refs": copied_body_refs,
     }
     write_json(root / "incident_report.json", report)
     return root
@@ -1047,7 +1880,7 @@ def field_matrix_signature(rows: List[Dict[str, Any]]) -> str:
 
 
 def build_replay_baseline(rows: List[Dict[str, Any]], baseline_name: str, preset: str, source_meta: Dict[str, Any]) -> Dict[str, Any]:
-    required_headers = build_required_headers(rows)
+    required_headers = build_required_headers(rows, active_elimination=True)
     endpoint_candidates = build_endpoint_candidates(rows)
     response_signature = response_form_signature(rows)
 
@@ -1579,12 +2412,21 @@ def do_cookies(action: str, rows: List[Dict[str, Any]], args: argparse.Namespace
     raise SystemExit(f"unsupported cookies action: {action}")
 
 
-def do_headers(action: str, rows: List[Dict[str, Any]], _args: argparse.Namespace, runtime_dir: pathlib.Path) -> int:
+def do_headers(action: str, rows: List[Dict[str, Any]], args: argparse.Namespace, runtime_dir: pathlib.Path) -> int:
     paths = ensure_derived(runtime_dir, rows)
     required_headers = json.loads(paths["required_headers"].read_text(encoding="utf-8"))
 
     if action == "infer-required":
         print_json(required_headers)
+        return 0
+
+    if action == "infer-required-active":
+        selected_rows = match_filters(rows, args)
+        if not selected_rows:
+            selected_rows = rows
+        payload = build_required_headers(selected_rows, active_elimination=True)
+        write_json(runtime_dir / "required_headers_report.active.json", payload)
+        print_json(payload)
         return 0
 
     if action == "token-deps":
@@ -1675,11 +2517,43 @@ def do_mapping(action: str, rows: List[Dict[str, Any]], _args: argparse.Namespac
     return 0
 
 
+def do_provenance(action: str, rows: List[Dict[str, Any]], args: argparse.Namespace, runtime_dir: pathlib.Path) -> int:
+    provenance_rows = [row for row in rows if row.get("event_type") == "provenance_event"]
+    filtered = match_filters(provenance_rows, args)
+
+    if action == "query":
+        for row in filtered:
+            print(json.dumps(row, ensure_ascii=True))
+        return 0
+
+    if action == "graph":
+        paths = ensure_derived(runtime_dir, rows)
+        print(paths["provenance_graph"].read_text(encoding="utf-8"))
+        return 0
+
+    if action == "export":
+        export_dir = runtime_dir / "exports"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        target = export_dir / f"provenance_export_{dt.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.jsonl"
+        write_jsonl(target, filtered)
+        print(str(target))
+        return 0
+
+    raise SystemExit(f"unsupported provenance action: {action}")
+
+
 def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Namespace, runtime_dir: pathlib.Path) -> int:
     if action == "reindex":
         paths = ensure_derived(runtime_dir, rows)
         print_json({"reindexed": {k: str(v) for k, v in paths.items()}})
         return 0
+
+    if action == "validate":
+        report = pipeline_quality_report(runtime_dir, rows, quality_host=args.quality_host)
+        report_path = runtime_dir / "pipeline_ready_report.json"
+        write_json(report_path, report)
+        print_json(report)
+        return 0 if bool(report.get("pipeline_ready")) else 2
 
     if action in {"pack", "compress"}:
         archive_dir = runtime_dir.parent / "archive"
@@ -1695,6 +2569,8 @@ def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Name
             raise SystemExit("housekeeping purge requires --yes")
         for rel in [
             "events/runtime_events.jsonl",
+            "events.jsonl",
+            "events.meta.json",
             "events/indexer_state.json",
             "correlation_index.jsonl",
             "cookie_timeline.json",
@@ -1702,6 +2578,9 @@ def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Name
             "field_matrix.json",
             "endpoint_candidates.json",
             "site_profile.draft.json",
+            "profile_candidate.json",
+            "provenance_graph.json",
+            "response_index.json",
             "replay_seed.json",
             "replay_results.jsonl",
             "replay_report.json",
@@ -1710,6 +2589,7 @@ def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Name
             "triage_alerts.jsonl",
             "triage_bookmarks.json",
             "triage_session_state.json",
+            "pipeline_ready_report.json",
         ]:
             target = runtime_dir / rel
             if target.exists():
@@ -1717,6 +2597,9 @@ def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Name
         response_store = runtime_dir / "response_store"
         if response_store.exists():
             shutil.rmtree(response_store)
+        bodies = runtime_dir / "bodies"
+        if bodies.exists():
+            shutil.rmtree(bodies)
         incident_root = runtime_dir / "incident_bundle"
         if incident_root.exists():
             shutil.rmtree(incident_root)
@@ -1816,6 +2699,8 @@ def do_triage(action: str, rows: List[Dict[str, Any]], args: argparse.Namespace,
                     "trace_id": args.trace_id,
                     "action_id": args.action_id,
                     "screen_id": args.screen_id,
+                    "phase_id": args.phase_id,
+                    "host_class": args.host_class,
                     "domain": args.domain,
                     "path": args.path,
                     "limit": args.limit,
@@ -2017,7 +2902,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Mapper-Toolkit dataset CLI")
     parser.add_argument(
         "group",
-        choices=["trace", "cookies", "headers", "responses", "mapping", "housekeeping", "triage", "replay"],
+        choices=["trace", "cookies", "headers", "responses", "mapping", "provenance", "housekeeping", "triage", "replay"],
     )
     parser.add_argument("action")
 
@@ -2032,6 +2917,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--body-regex", default="")
     parser.add_argument("--action-id", default="")
     parser.add_argument("--screen-id", default="")
+    parser.add_argument("--phase-id", default="")
+    parser.add_argument("--host-class", default="")
     parser.add_argument("--time-from", default="")
     parser.add_argument("--time-to", default="")
     parser.add_argument("--limit", type=int, default=0)
@@ -2049,6 +2936,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ci-strict", action="store_true")
     parser.add_argument("--window-limit", type=int, default=400)
     parser.add_argument("--sampling-rate", type=int, default=1)
+    parser.add_argument("--quality-host", default="")
     parser.add_argument("--yes", action="store_true")
 
     return parser.parse_args()
@@ -2066,6 +2954,7 @@ def main() -> int:
         "headers": do_headers,
         "responses": do_responses,
         "mapping": do_mapping,
+        "provenance": do_provenance,
         "housekeeping": do_housekeeping,
         "triage": do_triage,
         "replay": do_replay,

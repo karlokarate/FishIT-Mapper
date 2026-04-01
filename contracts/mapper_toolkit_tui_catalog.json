@@ -116,6 +116,26 @@
           "required": false,
           "flag": "--device",
           "example": "emulator-5554"
+        },
+        {
+          "key": "scope_mode",
+          "label": "Scope mode",
+          "type": "choice",
+          "required": false,
+          "flag": "--scope-mode",
+          "default": "strict_target",
+          "choices": [
+            "strict_target",
+            "full_raw_all"
+          ]
+        },
+        {
+          "key": "target_host_family",
+          "label": "Target hosts CSV",
+          "type": "string",
+          "required": false,
+          "flag": "--target-host-family",
+          "example": "example.com,api.example.com"
         }
       ]
     },
@@ -199,6 +219,84 @@
       ]
     },
     {
+      "id": "session.probe_start_phase",
+      "screen": "session",
+      "title": "Probe Start Phase",
+      "description": "Mark deterministic probe phase start for guided capture.",
+      "safety": "normal",
+      "argv": [
+        "probe",
+        "start-phase"
+      ],
+      "params": [
+        {
+          "key": "phase_id",
+          "label": "Phase ID",
+          "type": "choice",
+          "required": true,
+          "positional": true,
+          "default": "home_probe",
+          "choices": [
+            "home_probe",
+            "search_probe",
+            "detail_probe",
+            "playback_probe"
+          ]
+        },
+        {
+          "key": "transition",
+          "label": "Transition",
+          "type": "choice",
+          "required": false,
+          "flag": "--transition",
+          "default": "start",
+          "choices": [
+            "start",
+            "resume"
+          ]
+        },
+        {
+          "key": "device",
+          "label": "Device serial (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--device"
+        }
+      ]
+    },
+    {
+      "id": "session.probe_stop_phase",
+      "screen": "session",
+      "title": "Probe Stop Phase",
+      "description": "Stop active probe phase marker.",
+      "safety": "normal",
+      "argv": [
+        "probe",
+        "stop-phase"
+      ],
+      "params": [
+        {
+          "key": "device",
+          "label": "Device serial (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--device"
+        }
+      ]
+    },
+    {
+      "id": "session.probe_status",
+      "screen": "session",
+      "title": "Probe Status",
+      "description": "Show current local probe/scope runtime state.",
+      "safety": "normal",
+      "argv": [
+        "probe",
+        "status"
+      ],
+      "params": []
+    },
+    {
       "id": "ui.open_screen",
       "screen": "ui",
       "title": "Open Screen",
@@ -220,7 +318,8 @@
             "search",
             "library",
             "settings",
-            "refresh"
+            "refresh",
+            "mapper_toolkit"
           ]
         }
       ]
@@ -239,6 +338,27 @@
         {
           "key": "url",
           "label": "URL",
+          "type": "string",
+          "required": true,
+          "positional": true,
+          "example": "https://example.org"
+        }
+      ]
+    },
+    {
+      "id": "ui.reset_site_state",
+      "screen": "ui",
+      "title": "Reset Site State",
+      "description": "Clear cookies and origin storage for a specific site URL.",
+      "safety": "normal",
+      "argv": [
+        "ui",
+        "reset-site-state"
+      ],
+      "params": [
+        {
+          "key": "url",
+          "label": "Site URL",
           "type": "string",
           "required": true,
           "positional": true,
@@ -594,6 +714,101 @@
           "type": "string",
           "required": true,
           "flag": "--right"
+        }
+      ]
+    },
+    {
+      "id": "trace.provenance_query",
+      "screen": "trace",
+      "title": "Provenance Query",
+      "description": "Query provenance events with phase/host filters.",
+      "safety": "normal",
+      "argv": [
+        "provenance",
+        "query"
+      ],
+      "params": [
+        {
+          "key": "phase_id",
+          "label": "Phase ID",
+          "type": "choice",
+          "required": false,
+          "flag": "--phase-id",
+          "choices": [
+            "home_probe",
+            "search_probe",
+            "detail_probe",
+            "playback_probe",
+            "unscoped"
+          ]
+        },
+        {
+          "key": "host_class",
+          "label": "Host class",
+          "type": "choice",
+          "required": false,
+          "flag": "--host-class",
+          "choices": [
+            "target",
+            "external_noise",
+            "ignored",
+            "unknown"
+          ]
+        },
+        {
+          "key": "limit",
+          "label": "Limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "200"
+        }
+      ]
+    },
+    {
+      "id": "trace.provenance_graph",
+      "screen": "trace",
+      "title": "Provenance Graph",
+      "description": "Render current provenance graph artifact.",
+      "safety": "normal",
+      "argv": [
+        "provenance",
+        "graph"
+      ],
+      "params": []
+    },
+    {
+      "id": "trace.provenance_export",
+      "screen": "trace",
+      "title": "Provenance Export",
+      "description": "Export filtered provenance events as JSONL.",
+      "safety": "normal",
+      "argv": [
+        "provenance",
+        "export"
+      ],
+      "params": [
+        {
+          "key": "phase_id",
+          "label": "Phase ID",
+          "type": "choice",
+          "required": false,
+          "flag": "--phase-id",
+          "choices": [
+            "home_probe",
+            "search_probe",
+            "detail_probe",
+            "playback_probe",
+            "unscoped"
+          ]
+        },
+        {
+          "key": "limit",
+          "label": "Limit",
+          "type": "int",
+          "required": false,
+          "flag": "--limit",
+          "default": "500"
         }
       ]
     },
@@ -1232,6 +1447,90 @@
       ]
     },
     {
+      "id": "replay.native_request",
+      "screen": "replay",
+      "title": "Native Request",
+      "description": "Execute a mapper-owned native replay request with Cronet/OkHttp transport.",
+      "safety": "normal",
+      "argv": [
+        "replay",
+        "native-request"
+      ],
+      "params": [
+        {
+          "key": "url",
+          "label": "URL",
+          "type": "string",
+          "required": true,
+          "flag": "--url",
+          "example": "https://api.example.org/graphql"
+        },
+        {
+          "key": "method",
+          "label": "Method",
+          "type": "choice",
+          "required": false,
+          "flag": "--method",
+          "default": "GET",
+          "choices": [
+            "GET",
+            "POST"
+          ]
+        },
+        {
+          "key": "headers",
+          "label": "Headers JSON/path",
+          "type": "string",
+          "required": false,
+          "flag": "--headers",
+          "example": "{\"accept\":\"application/json\"}"
+        },
+        {
+          "key": "query",
+          "label": "Query string",
+          "type": "string",
+          "required": false,
+          "flag": "--query",
+          "example": "operationName=GetHome&page=1"
+        },
+        {
+          "key": "body",
+          "label": "Body JSON/path",
+          "type": "string",
+          "required": false,
+          "flag": "--body"
+        },
+        {
+          "key": "content_type",
+          "label": "Content-Type",
+          "type": "string",
+          "required": false,
+          "flag": "--content-type",
+          "default": "application/json"
+        },
+        {
+          "key": "timeout_sec",
+          "label": "Timeout seconds",
+          "type": "int",
+          "required": false,
+          "flag": "--timeout",
+          "default": "20"
+        },
+        {
+          "key": "follow_redirects",
+          "label": "Follow redirects",
+          "type": "choice",
+          "required": false,
+          "flag": "--follow-redirects",
+          "default": "yes",
+          "choices": [
+            "yes",
+            "no"
+          ]
+        }
+      ]
+    },
+    {
       "id": "cookies.timeline",
       "screen": "cookies",
       "title": "Cookie Timeline",
@@ -1290,6 +1589,40 @@
         "infer-required"
       ],
       "params": []
+    },
+    {
+      "id": "headers.infer_required_active",
+      "screen": "headers",
+      "title": "Infer Required (Active)",
+      "description": "Replay-elimination style minimal header inference per endpoint.",
+      "safety": "normal",
+      "argv": [
+        "headers",
+        "infer-required-active"
+      ],
+      "params": [
+        {
+          "key": "domain",
+          "label": "Domain filter",
+          "type": "string",
+          "required": false,
+          "flag": "--domain"
+        },
+        {
+          "key": "phase_id",
+          "label": "Phase ID",
+          "type": "choice",
+          "required": false,
+          "flag": "--phase-id",
+          "choices": [
+            "home_probe",
+            "search_probe",
+            "detail_probe",
+            "playback_probe",
+            "unscoped"
+          ]
+        }
+      ]
     },
     {
       "id": "headers.token_deps",
@@ -1525,6 +1858,27 @@
       "params": []
     },
     {
+      "id": "housekeeping.validate",
+      "screen": "housekeeping",
+      "title": "Validate",
+      "description": "Evaluate pipeline-ready quality gates for the current dataset.",
+      "safety": "normal",
+      "argv": [
+        "housekeeping",
+        "validate"
+      ],
+      "params": [
+        {
+          "key": "quality_host",
+          "label": "Quality host (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--quality-host",
+          "example": "api.example.com"
+        }
+      ]
+    },
+    {
       "id": "housekeeping.purge",
       "screen": "housekeeping",
       "title": "Purge",
@@ -1570,6 +1924,108 @@
             "yes"
           ],
           "default": "yes"
+        }
+      ]
+    },
+    {
+      "id": "settings.scope_set",
+      "screen": "settings",
+      "title": "Set Scope",
+      "description": "Configure strict target host scope for runtime capture.",
+      "safety": "normal",
+      "argv": [
+        "scope",
+        "set"
+      ],
+      "params": [
+        {
+          "key": "mode",
+          "label": "Scope mode",
+          "type": "choice",
+          "required": false,
+          "flag": "--mode",
+          "default": "strict_target",
+          "choices": [
+            "strict_target",
+            "full_raw_all"
+          ]
+        },
+        {
+          "key": "target_host_family",
+          "label": "Target hosts CSV",
+          "type": "string",
+          "required": false,
+          "flag": "--target-host-family",
+          "example": "example.com,api.example.com"
+        },
+        {
+          "key": "device",
+          "label": "Device serial (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--device"
+        }
+      ]
+    },
+    {
+      "id": "settings.scope_show",
+      "screen": "settings",
+      "title": "Show Scope",
+      "description": "Show configured scope state from runtime state file.",
+      "safety": "normal",
+      "argv": [
+        "scope",
+        "show"
+      ],
+      "params": []
+    },
+    {
+      "id": "settings.provenance_mark",
+      "screen": "settings",
+      "title": "Mark Provenance",
+      "description": "Write a manual provenance marker event.",
+      "safety": "normal",
+      "argv": [
+        "provenance",
+        "mark"
+      ],
+      "params": [
+        {
+          "key": "entity_type",
+          "label": "Entity type",
+          "type": "string",
+          "required": false,
+          "flag": "--entity-type",
+          "default": "custom"
+        },
+        {
+          "key": "entity_key",
+          "label": "Entity key",
+          "type": "string",
+          "required": true,
+          "flag": "--entity-key"
+        },
+        {
+          "key": "produced_by",
+          "label": "Produced by",
+          "type": "string",
+          "required": false,
+          "flag": "--produced-by"
+        },
+        {
+          "key": "consumed_by",
+          "label": "Consumed by",
+          "type": "string",
+          "required": false,
+          "flag": "--consumed-by"
+        },
+        {
+          "key": "derived_from",
+          "label": "Derived from CSV",
+          "type": "string",
+          "required": false,
+          "flag": "--derived-from",
+          "example": "token_a,token_b"
         }
       ]
     },

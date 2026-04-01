@@ -12,9 +12,13 @@ okhttpSse = "4.11.0"
 reorderable = "2.3.3"
 slf4jApi = "1.7.36"
 timber = "4.7.1"
+webkit = "1.15.0"
+cronet = "143.7445.0"
 [libraries]
 accompanist-drawablepainter = { module = "com.google.accompanist:accompanist-drawablepainter", version.ref = "accompanistDrawablepainter" }
 androidx-foundation-android = { group = "androidx.compose.foundation", name = "foundation-android", version.ref = "foundationAndroid" }
+androidx-webkit = { module = "androidx.webkit:webkit", version.ref = "webkit" }
+chromium-cronet-embedded = { module = "org.chromium.net:cronet-embedded", version.ref = "cronet" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 kxml2 = { module = "net.sf.kxml:kxml2", version.ref = "kxml2" }

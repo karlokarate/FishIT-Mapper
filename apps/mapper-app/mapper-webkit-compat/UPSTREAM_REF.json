@@ -1,0 +1,5 @@
+{
+  "source_url": "https://developer.android.com/jetpack/androidx/releases/webkit",
+  "integration_mode": "gradle_version_catalog",
+  "pinned_ref": "1.15.0"
+}

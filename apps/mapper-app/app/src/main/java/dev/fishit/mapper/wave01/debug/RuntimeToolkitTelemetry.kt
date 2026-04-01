@@ -10,7 +10,10 @@ import android.webkit.CookieManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.security.MessageDigest
 import java.time.Instant
+import java.util.LinkedHashMap
+import java.util.Locale
 import java.util.UUID
 
 object RuntimeToolkitTelemetry {
@@ -24,14 +27,45 @@ object RuntimeToolkitTelemetry {
     private const val PREF_ACTION_ID = "action_id"
     private const val PREF_SPAN_ID = "span_id"
 
+    private const val PREF_RUNTIME_SETTINGS = "mapper_toolkit_runtime_settings"
+    private const val SETTING_SCOPE_MODE = "scope.mode"
+    private const val SETTING_TARGET_HOST_FAMILY = "scope.target_host_family"
+    private const val SETTING_ACTIVE_PHASE_ID = "probe.active_phase"
+
     private const val PREF_COOKIE_SNAPSHOT = "mapper_toolkit_cookie_snapshot"
+    private const val MAX_RECENT_REQUEST_IDS = 4096
+    private const val MAX_DEDUP_REQUESTS = 8192
+    private const val DEDUP_BUCKET_NS = 1_500_000_000L
+    private const val DEDUP_RETENTION_NS = 12_000_000_000L
+    private const val DEFAULT_SCOPE_MODE = "strict_target"
 
     private val ioLock = Any()
+    private val requestLock = Any()
+    private val dedupLock = Any()
+    private val recentRequestIds = LinkedHashMap<String, String>(MAX_RECENT_REQUEST_IDS + 1, 0.75f, true)
+    private val dedupRequests = LinkedHashMap<String, CanonicalRequest>(MAX_DEDUP_REQUESTS + 1, 0.75f, true)
 
     data class CorrelationContext(
         val traceId: String,
         val actionId: String,
         val spanId: String,
+    )
+
+    data class RequestLogResult(
+        val requestId: String,
+        val requestFingerprint: String,
+        val normalizedUrl: String,
+        val phaseId: String,
+        val hostClass: String,
+        val dedupOf: String?,
+        val dedupCount: Int,
+        val canonical: Boolean,
+    )
+
+    private data class CanonicalRequest(
+        val requestId: String,
+        var duplicateCount: Int,
+        var lastSeenMonoNs: Long,
     )
 
     fun ensureRunId(context: Context, preferred: String? = null): String {
@@ -165,19 +199,87 @@ object RuntimeToolkitTelemetry {
         url: String,
         method: String,
         headers: Map<String, String>,
+        requestId: String? = null,
         payload: Map<String, Any?> = emptyMap(),
-    ) {
+    ): RequestLogResult {
         val correlation = currentCorrelationContext(context)
+        val nowMonoNs = SystemClock.elapsedRealtimeNanos()
+        val phaseId = activePhaseId(context)
+        val targetHosts = targetHostFamily(context)
+        val hostClass = classifyHost(url = url, targetHosts = targetHosts, scopeMode = scopeMode(context))
+        val normalizedUrl = normalizedUrl(url)
+        val headerSubset = canonicalHeaderSubset(headers)
+        val requestFingerprint = requestFingerprint(method, normalizedUrl, source, headerSubset)
+        val dedupKey = "$requestFingerprint:${nowMonoNs / DEDUP_BUCKET_NS}"
+
+        synchronized(dedupLock) {
+            pruneDedupRequests(nowMonoNs)
+            val existing = dedupRequests[dedupKey]
+            if (existing != null) {
+                existing.duplicateCount += 1
+                existing.lastSeenMonoNs = nowMonoNs
+                rememberRequestId(url = url, method = method, requestId = existing.requestId)
+                logCorrelationEvent(
+                    context = context,
+                    operation = "request_dedup",
+                    payload = mapOf(
+                        "source" to source,
+                        "url" to normalizedUrl,
+                        "method" to method.uppercase(Locale.ROOT),
+                        "request_fingerprint" to requestFingerprint,
+                        "dedup_of" to existing.requestId,
+                        "dedup_count" to existing.duplicateCount,
+                        "phase_id" to phaseId,
+                        "host_class" to hostClass,
+                    ),
+                )
+                return RequestLogResult(
+                    requestId = existing.requestId,
+                    requestFingerprint = requestFingerprint,
+                    normalizedUrl = normalizedUrl,
+                    phaseId = phaseId,
+                    hostClass = hostClass,
+                    dedupOf = existing.requestId,
+                    dedupCount = existing.duplicateCount,
+                    canonical = false,
+                )
+            }
+        }
+
+        val resolvedRequestId = requestId?.takeIf { it.isNotBlank() } ?: "req_${UUID.randomUUID()}"
+        synchronized(dedupLock) {
+            dedupRequests[dedupKey] = CanonicalRequest(
+                requestId = resolvedRequestId,
+                duplicateCount = 0,
+                lastSeenMonoNs = nowMonoNs,
+            )
+        }
+        rememberRequestId(url = url, method = method, requestId = resolvedRequestId)
         logEvent(
             context = context,
             eventType = "network_request_event",
             correlation = correlation,
             payload = payload + mapOf(
+                "request_id" to resolvedRequestId,
+                "request_fingerprint" to requestFingerprint,
+                "phase_id" to phaseId,
+                "host_class" to hostClass,
+                "normalized_url" to normalizedUrl,
                 "source" to source,
                 "url" to url,
                 "method" to method,
                 "headers" to headers,
             ),
+        )
+        return RequestLogResult(
+            requestId = resolvedRequestId,
+            requestFingerprint = requestFingerprint,
+            normalizedUrl = normalizedUrl,
+            phaseId = phaseId,
+            hostClass = hostClass,
+            dedupOf = null,
+            dedupCount = 0,
+            canonical = true,
         )
     }
 
@@ -191,10 +293,20 @@ object RuntimeToolkitTelemetry {
         mimeType: String?,
         headers: Map<String, String>,
         rawBody: ByteArray? = null,
+        requestId: String? = null,
+        responseId: String? = null,
         payload: Map<String, Any?> = emptyMap(),
-    ) {
+    ): String {
         val correlation = currentCorrelationContext(context)
-        val eventId = UUID.randomUUID().toString()
+        val eventId = responseId?.takeIf { it.isNotBlank() } ?: "resp_${UUID.randomUUID()}"
+        val resolvedRequestId = requestId?.takeIf { it.isNotBlank() } ?: resolveRecentRequestId(url, method)
+        if (!resolvedRequestId.isNullOrBlank()) {
+            rememberRequestId(url = url, method = method, requestId = resolvedRequestId)
+        }
+        val phaseId = activePhaseId(context)
+        val hostClass = classifyHost(url = url, targetHosts = targetHostFamily(context), scopeMode = scopeMode(context))
+        val normalizedUrl = normalizedUrl(url)
+        val requestFingerprint = requestFingerprint(method, normalizedUrl, source, canonicalHeaderSubset(headers))
 
         val responsePath = if (rawBody != null && rawBody.isNotEmpty()) {
             storeRawBody(context, eventId, rawBody)
@@ -207,6 +319,7 @@ object RuntimeToolkitTelemetry {
         } else {
             null
         }
+        val bodyHash = if (rawBody != null && rawBody.isNotEmpty()) sha256(rawBody) else null
 
         logEvent(
             context = context,
@@ -214,17 +327,30 @@ object RuntimeToolkitTelemetry {
             eventType = "network_response_event",
             correlation = correlation,
             payload = payload + mapOf(
+                "request_id" to resolvedRequestId,
+                "response_id" to eventId,
+                "request_fingerprint" to requestFingerprint,
+                "phase_id" to phaseId,
+                "host_class" to hostClass,
+                "normalized_url" to normalizedUrl,
                 "source" to source,
                 "url" to url,
                 "method" to method,
+                "status" to statusCode,
                 "status_code" to statusCode,
+                "http_status" to statusCode,
                 "reason" to reason,
+                "mime" to mimeType,
                 "mime_type" to mimeType,
                 "headers" to headers,
                 "body_preview" to bodyPreview,
                 "response_store_path" to responsePath,
+                "body_ref" to responsePath,
+                "response_size_bytes" to (rawBody?.size ?: 0),
+                "response_sha256" to bodyHash,
             ),
         )
+        return eventId
     }
 
     fun logCookieEvent(
@@ -233,6 +359,7 @@ object RuntimeToolkitTelemetry {
         domain: String,
         cookieName: String?,
         cookieValuePreview: String?,
+        reason: String? = null,
         payload: Map<String, Any?> = emptyMap(),
     ) {
         val correlation = currentCorrelationContext(context)
@@ -245,6 +372,8 @@ object RuntimeToolkitTelemetry {
                 "domain" to domain,
                 "cookie_name" to cookieName,
                 "cookie_preview" to cookieValuePreview,
+                "reason" to reason,
+                "phase_id" to activePhaseId(context),
             ),
         )
     }
@@ -259,7 +388,10 @@ object RuntimeToolkitTelemetry {
             context = context,
             eventType = "auth_event",
             correlation = correlation,
-            payload = payload + mapOf("operation" to operation),
+            payload = payload + mapOf(
+                "operation" to operation,
+                "phase_id" to activePhaseId(context),
+            ),
         )
     }
 
@@ -291,6 +423,123 @@ object RuntimeToolkitTelemetry {
         )
     }
 
+    fun logProbePhaseEvent(
+        context: Context,
+        phaseId: String,
+        transition: String,
+        payload: Map<String, Any?> = emptyMap(),
+    ) {
+        setActivePhaseId(context, phaseId)
+        val correlation = currentCorrelationContext(context)
+        logEvent(
+            context = context,
+            eventType = "probe_phase_event",
+            correlation = correlation,
+            payload = payload + mapOf(
+                "phase_id" to phaseId,
+                "transition" to transition,
+            ),
+        )
+    }
+
+    fun logProvenanceEvent(
+        context: Context,
+        entityType: String,
+        entityKey: String,
+        producedBy: String? = null,
+        consumedBy: String? = null,
+        derivedFrom: List<String> = emptyList(),
+        payload: Map<String, Any?> = emptyMap(),
+    ) {
+        val correlation = currentCorrelationContext(context)
+        logEvent(
+            context = context,
+            eventType = "provenance_event",
+            correlation = correlation,
+            payload = payload + mapOf(
+                "entity_type" to entityType,
+                "entity_key" to entityKey,
+                "produced_by" to producedBy,
+                "consumed_by" to consumedBy,
+                "derived_from" to derivedFrom,
+                "phase_id" to activePhaseId(context),
+            ),
+        )
+    }
+
+    fun logStorageEvent(
+        context: Context,
+        storageType: String,
+        key: String,
+        operation: String,
+        valuePreview: String? = null,
+        payload: Map<String, Any?> = emptyMap(),
+    ) {
+        val correlation = currentCorrelationContext(context)
+        logEvent(
+            context = context,
+            eventType = "storage_event",
+            correlation = correlation,
+            payload = payload + mapOf(
+                "storage_type" to storageType,
+                "key" to key,
+                "operation" to operation,
+                "value_preview" to valuePreview,
+                "phase_id" to activePhaseId(context),
+            ),
+        )
+    }
+
+    fun setActivePhaseId(context: Context, phaseId: String) {
+        setRuntimeSetting(context, SETTING_ACTIVE_PHASE_ID, phaseId)
+    }
+
+    fun clearActivePhaseId(context: Context) {
+        setRuntimeSetting(context, SETTING_ACTIVE_PHASE_ID, "unscoped")
+    }
+
+    fun activePhaseId(context: Context): String {
+        return runtimeSettings(context).getString(SETTING_ACTIVE_PHASE_ID, null)
+            ?.takeIf { it.isNotBlank() }
+            ?: "unscoped"
+    }
+
+    fun setTargetHostFamily(context: Context, hostsCsv: String) {
+        setRuntimeSetting(context, SETTING_TARGET_HOST_FAMILY, hostsCsv)
+    }
+
+    fun targetHostFamily(context: Context): List<String> {
+        val raw = runtimeSettings(context).getString(SETTING_TARGET_HOST_FAMILY, "").orEmpty()
+        return raw.split(',')
+            .map { it.trim().lowercase(Locale.ROOT) }
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    fun setScopeMode(context: Context, mode: String) {
+        val normalized = mode.trim().lowercase(Locale.ROOT)
+        val safeMode = when (normalized) {
+            "strict_target", "full_raw_all" -> normalized
+            else -> DEFAULT_SCOPE_MODE
+        }
+        setRuntimeSetting(context, SETTING_SCOPE_MODE, safeMode)
+    }
+
+    fun scopeMode(context: Context): String {
+        return runtimeSettings(context).getString(SETTING_SCOPE_MODE, DEFAULT_SCOPE_MODE)
+            ?.takeIf { it.isNotBlank() }
+            ?: DEFAULT_SCOPE_MODE
+    }
+
+    fun runtimeSettingsSnapshot(context: Context): Map<String, Any?> {
+        val prefs = runtimeSettings(context)
+        return mapOf(
+            "scope_mode" to (prefs.getString(SETTING_SCOPE_MODE, DEFAULT_SCOPE_MODE) ?: DEFAULT_SCOPE_MODE),
+            "target_host_family" to (prefs.getString(SETTING_TARGET_HOST_FAMILY, "") ?: ""),
+            "active_phase_id" to (prefs.getString(SETTING_ACTIVE_PHASE_ID, "unscoped") ?: "unscoped"),
+        )
+    }
+
     fun emitAck(op: String, status: String, payload: Map<String, Any?> = emptyMap()) {
         val json = JSONObject().apply {
             put("op", op)
@@ -311,16 +560,19 @@ object RuntimeToolkitTelemetry {
 
         val prefs = context.getSharedPreferences(PREF_COOKIE_SNAPSHOT, Context.MODE_PRIVATE)
         val previous = prefs.getString(host, null)
+        val previousMap = parseCookieMap(previous.orEmpty())
+        val currentMap = parseCookieMap(raw)
 
         if (previous == null) {
             prefs.edit().putString(host, raw).apply()
-            if (raw.isNotBlank()) {
+            for ((name, value) in currentMap) {
                 logCookieEvent(
                     context = context,
-                    operation = "snapshot_init",
+                    operation = "set",
                     domain = host,
-                    cookieName = null,
-                    cookieValuePreview = raw.take(128),
+                    cookieName = name,
+                    cookieValuePreview = value.take(128),
+                    reason = "cookie_manager_snapshot_init",
                     payload = mapOf("cookie_length" to raw.length),
                 )
             }
@@ -329,19 +581,53 @@ object RuntimeToolkitTelemetry {
 
         if (previous == raw) return
 
-        val op = if (raw.isBlank()) "cookie_deleted" else "cookie_refreshed"
-        logCookieEvent(
-            context = context,
-            operation = op,
-            domain = host,
-            cookieName = null,
-            cookieValuePreview = raw.take(128),
-            payload = mapOf(
-                "previous_length" to previous.length,
-                "current_length" to raw.length,
-            ),
-        )
+        val names = linkedSetOf<String>().apply {
+            addAll(previousMap.keys)
+            addAll(currentMap.keys)
+        }
+        for (name in names) {
+            val oldValue = previousMap[name]
+            val newValue = currentMap[name]
+            if (oldValue == null && newValue != null) {
+                logCookieEvent(
+                    context = context,
+                    operation = "set",
+                    domain = host,
+                    cookieName = name,
+                    cookieValuePreview = newValue.take(128),
+                    reason = "cookie_manager_snapshot_diff",
+                    payload = mapOf("previous_length" to previous.length, "current_length" to raw.length),
+                )
+            } else if (oldValue != null && newValue == null) {
+                logCookieEvent(
+                    context = context,
+                    operation = "delete",
+                    domain = host,
+                    cookieName = name,
+                    cookieValuePreview = null,
+                    reason = "cookie_manager_snapshot_diff",
+                    payload = mapOf("previous_length" to previous.length, "current_length" to raw.length),
+                )
+            } else if (oldValue != null && newValue != null && oldValue != newValue) {
+                logCookieEvent(
+                    context = context,
+                    operation = "refresh",
+                    domain = host,
+                    cookieName = name,
+                    cookieValuePreview = newValue.take(128),
+                    reason = "cookie_manager_snapshot_diff",
+                    payload = mapOf("previous_length" to previous.length, "current_length" to raw.length),
+                )
+            }
+        }
         prefs.edit().putString(host, raw).apply()
+    }
+
+    fun resolveRecentRequestId(url: String, method: String): String? {
+        val key = requestKey(url = url, method = method)
+        synchronized(requestLock) {
+            return recentRequestIds[key]
+        }
     }
 
     fun clearRuntimeArtifacts(context: Context): Boolean {
@@ -398,6 +684,125 @@ object RuntimeToolkitTelemetry {
         }
 
         Log.d(TAG, "$EVENT_PREFIX ${event}")
+    }
+
+    private fun rememberRequestId(url: String, method: String, requestId: String) {
+        val key = requestKey(url = url, method = method)
+        synchronized(requestLock) {
+            recentRequestIds[key] = requestId
+            if (recentRequestIds.size > MAX_RECENT_REQUEST_IDS) {
+                val iterator = recentRequestIds.entries.iterator()
+                if (iterator.hasNext()) {
+                    iterator.next()
+                    iterator.remove()
+                }
+            }
+        }
+    }
+
+    private fun runtimeSettings(context: Context) =
+        context.getSharedPreferences(PREF_RUNTIME_SETTINGS, Context.MODE_PRIVATE)
+
+    private fun setRuntimeSetting(context: Context, key: String, value: String) {
+        runtimeSettings(context).edit().putString(key, value).apply()
+    }
+
+    private fun canonicalHeaderSubset(headers: Map<String, String>): Map<String, String> {
+        val out = linkedMapOf<String, String>()
+        val preferredKeys = listOf(
+            "accept",
+            "content-type",
+            "origin",
+            "referer",
+            "authorization",
+            "cookie",
+            "x-requested-with",
+            "x-api-key",
+            "x-auth-token",
+        )
+        for (pref in preferredKeys) {
+            headers.entries.firstOrNull { it.key.equals(pref, ignoreCase = true) }?.let { entry ->
+                out[pref] = entry.value.take(256)
+            }
+        }
+        headers.entries
+            .asSequence()
+            .filter { it.key.lowercase(Locale.ROOT).startsWith("x-") }
+            .sortedBy { it.key.lowercase(Locale.ROOT) }
+            .take(8)
+            .forEach { entry ->
+                out[entry.key.lowercase(Locale.ROOT)] = entry.value.take(256)
+            }
+        return out
+    }
+
+    private fun normalizedUrl(rawUrl: String): String {
+        val uri = runCatching { Uri.parse(rawUrl) }.getOrNull() ?: return rawUrl.trim()
+        val scheme = uri.scheme?.lowercase(Locale.ROOT).orEmpty()
+        val host = uri.host?.lowercase(Locale.ROOT).orEmpty()
+        val path = uri.path.orEmpty()
+        val queryKeys = uri.queryParameterNames.toList().sorted()
+        val queryShape = if (queryKeys.isEmpty()) "" else "?" + queryKeys.joinToString("&")
+        return "$scheme://$host$path$queryShape"
+    }
+
+    private fun requestFingerprint(
+        method: String,
+        normalizedUrl: String,
+        frameContext: String,
+        headerSubset: Map<String, String>,
+    ): String {
+        val payload = "${method.uppercase(Locale.ROOT)}|$normalizedUrl|$frameContext|${headerSubset.entries.joinToString(";") { "${it.key}=${it.value}" }}"
+        return sha256(payload.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun classifyHost(url: String, targetHosts: List<String>, scopeMode: String): String {
+        val host = runCatching { Uri.parse(url).host.orEmpty().lowercase(Locale.ROOT) }.getOrDefault("")
+        if (host.isBlank()) return "ignored"
+        if (scopeMode == "full_raw_all") return "target"
+        val isTarget = targetHosts.any { configured ->
+            host == configured || host.endsWith(".$configured")
+        }
+        return if (isTarget) "target" else "external_noise"
+    }
+
+    private fun pruneDedupRequests(nowMonoNs: Long) {
+        val iterator = dedupRequests.entries.iterator()
+        while (iterator.hasNext()) {
+            val item = iterator.next()
+            val age = nowMonoNs - item.value.lastSeenMonoNs
+            if (age > DEDUP_RETENTION_NS || dedupRequests.size > MAX_DEDUP_REQUESTS) {
+                iterator.remove()
+            }
+        }
+    }
+
+    private fun requestKey(url: String, method: String): String {
+        return "${method.trim().uppercase()} ${url.trim()}"
+    }
+
+    private fun parseCookieMap(raw: String): Map<String, String> {
+        if (raw.isBlank()) return emptyMap()
+        val out = linkedMapOf<String, String>()
+        raw.split(';').forEach { part ->
+            val token = part.trim()
+            if (token.isBlank() || !token.contains("=")) return@forEach
+            val name = token.substringBefore('=').trim()
+            val value = token.substringAfter('=', "")
+            if (name.isNotBlank()) {
+                out[name] = value
+            }
+        }
+        return out
+    }
+
+    private fun sha256(bytes: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+        val out = StringBuilder(digest.size * 2)
+        for (b in digest) {
+            out.append(String.format("%02x", b))
+        }
+        return out.toString()
     }
 
     private fun buildDeviceJson(): JSONObject = JSONObject().apply {

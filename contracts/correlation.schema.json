@@ -1,26 +1,75 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "mapper-toolkit/correlation.schema.json",
-  "title": "Mapper-Toolkit Correlation Entry",
+  "title": "Mapper-Toolkit Correlation Chain Entry",
   "type": "object",
   "required": [
     "schema_version",
     "run_id",
     "trace_id",
     "action_id",
+    "phase_id",
+    "host_scope",
     "linked_event_ids",
-    "generated_at_utc"
+    "generated_at_utc",
+    "requests",
+    "responses",
+    "request_response_pairs",
+    "cookie_transitions",
+    "auth_transitions",
+    "request_count",
+    "response_count",
+    "matched_request_count",
+    "response_coverage",
+    "provenance_refs",
+    "dedup_stats",
+    "result_status"
   ],
   "properties": {
     "schema_version": { "type": "integer", "const": 1 },
     "run_id": { "type": "string", "minLength": 1 },
     "trace_id": { "type": "string", "minLength": 1 },
     "action_id": { "type": "string", "minLength": 1 },
+    "phase_id": { "type": "string", "minLength": 1 },
+    "host_scope": {
+      "type": "object",
+      "required": ["target", "external_noise", "ignored", "unknown"],
+      "properties": {
+        "target": { "type": "integer", "minimum": 0 },
+        "external_noise": { "type": "integer", "minimum": 0 },
+        "ignored": { "type": "integer", "minimum": 0 },
+        "unknown": { "type": "integer", "minimum": 0 }
+      }
+    },
     "generated_at_utc": { "type": "string", "format": "date-time" },
     "linked_event_ids": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
     },
+    "ui_start": { "type": ["object", "null"] },
+    "ui_end": { "type": ["object", "null"] },
+    "requests": { "type": "array", "items": { "type": "object" } },
+    "responses": { "type": "array", "items": { "type": "object" } },
+    "request_response_pairs": { "type": "array", "items": { "type": "object" } },
+    "cookie_transitions": { "type": "array", "items": { "type": "object" } },
+    "auth_transitions": { "type": "array", "items": { "type": "object" } },
+    "request_count": { "type": "integer", "minimum": 0 },
+    "response_count": { "type": "integer", "minimum": 0 },
+    "matched_request_count": { "type": "integer", "minimum": 0 },
+    "response_coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+    "provenance_refs": { "type": "array", "items": { "type": "string" } },
+    "dedup_stats": {
+      "type": "object",
+      "required": ["dedup_reference_count", "dedup_duplicate_count", "canonical_request_count"],
+      "properties": {
+        "dedup_reference_count": { "type": "integer", "minimum": 0 },
+        "dedup_duplicate_count": { "type": "integer", "minimum": 0 },
+        "canonical_request_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "unmatched_response_ids": { "type": "array", "items": { "type": "string" } },
+    "status_chain": { "type": "array", "items": { "type": "string" } },
+    "result_status": { "type": "string", "enum": ["ok", "incomplete", "error"] },
     "ui": { "type": ["object", "null"] },
     "network": { "type": "array", "items": { "type": "object" } },
     "cookies": { "type": "array", "items": { "type": "object" } }

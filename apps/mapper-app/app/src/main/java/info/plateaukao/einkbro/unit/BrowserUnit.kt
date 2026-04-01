@@ -36,6 +36,7 @@ import androidx.core.app.ActivityCompat.finishAffinity
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import dev.fishit.mapper.webkit.compat.MapperWebViewCompat
 import info.plateaukao.einkbro.R
 import info.plateaukao.einkbro.browser.Cookie
 import info.plateaukao.einkbro.database.RecordDb
@@ -426,9 +427,20 @@ object BrowserUnit : KoinComponent {
 
     @JvmStatic
     fun clearCookie() {
-        val cookieManager = CookieManager.getInstance()
-        cookieManager.flush()
-        cookieManager.removeAllCookies { }
+        MapperWebViewCompat().clearSiteData(
+            url = null,
+            includeCookies = true,
+            includeStorage = false,
+        )
+    }
+
+    @JvmStatic
+    fun clearSiteDataForUrl(url: String) {
+        MapperWebViewCompat().clearSiteData(
+            url = url,
+            includeCookies = true,
+            includeStorage = true,
+        )
     }
 
     @JvmStatic

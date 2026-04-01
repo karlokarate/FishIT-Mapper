@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.print.PrintDocumentAdapter
 import android.util.Base64
+import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.ViewGroup
@@ -19,8 +20,8 @@ import android.webkit.ValueCallback
 import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.lifecycle.LifecycleCoroutineScope
-import androidx.webkit.WebSettingsCompat
-import androidx.webkit.WebViewFeature
+import dev.fishit.mapper.webkit.compat.MapperRendererHealthListener
+import dev.fishit.mapper.webkit.compat.MapperWebViewCompat
 import info.plateaukao.einkbro.BuildConfig
 import info.plateaukao.einkbro.R
 import info.plateaukao.einkbro.browser.AlbumController
@@ -82,6 +83,7 @@ open class EBWebView(
     var baseUrl: String? = null
     protected var isEpubReaderMode = false
     private val cookieManager: CookieManager = CookieManager.getInstance()
+    private val mapperWebViewCompat = MapperWebViewCompat()
 
     private val config: ConfigManager by inject()
     private val bookmarkManager: BookmarkManager by inject()
@@ -224,6 +226,18 @@ open class EBWebView(
         setWebViewClient(webViewClient)
         setWebChromeClient(webChromeClient)
         setDownloadListener(downloadListener)
+        mapperWebViewCompat.installRendererHealthHooks(
+            webView = this,
+            listener = object : MapperRendererHealthListener {
+                override fun onRendererUnresponsive(url: String?) {
+                    Log.w("EBWebView", "WebView renderer unresponsive on $url")
+                }
+
+                override fun onRendererResponsive(url: String?) {
+                    Log.i("EBWebView", "WebView renderer responsive on $url")
+                }
+            },
+        )
 
         updateDarkMode()
         setupJsWebInterface()
@@ -239,12 +253,10 @@ open class EBWebView(
             return
         }
 
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
-            WebSettingsCompat.setForceDarkStrategy(
-                settings,
-                WebSettingsCompat.DARK_STRATEGY_PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING
-            )
-        }
+        mapperWebViewCompat.applySafeDarkModeSettings(
+            settings = settings,
+            allowAlgorithmicDarkening = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
+        )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val nightModeFlags = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
@@ -256,11 +268,6 @@ open class EBWebView(
                 setBackgroundColor(Color.parseColor("#000000"))
             }
 
-        }
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, true)
-            }
         }
     }
 

@@ -104,6 +104,48 @@
       "supersedes": [],
       "superseded_by": null,
       "summary": "Replay and validation are first-class workflows: seeds from triage/incident-pack are replayed and diffed against named versioned baselines, with local advisory reporting and CI blocking on critical assertion failures."
+    },
+    {
+      "id": "DEC-0009",
+      "aliases": [
+        "ADR-0009",
+        "MAPPER-TOOLKIT-CAPTURE-CORRELATION-HARDENING",
+        "MAPPER-TOOLKIT-SECOND-ACTIVITY-EMBEDDABLE"
+      ],
+      "title": "Capture completeness, deterministic request/response correlation, and host-app second-activity embedding are mandatory",
+      "status": "accepted",
+      "date": "2026-04-01",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Runtime capture must emit request_id/response_id-linked chains with pipeline-ready quality gates and generic host coverage while exposing a stable second-activity integration contract for future FishIT-Player embedding."
+    },
+    {
+      "id": "DEC-0010",
+      "aliases": [
+        "ADR-0010",
+        "MAPPER-TOOLKIT-DETERMINISTIC-PROBE-PIPELINE",
+        "MAPPER-TOOLKIT-STRICT-SCOPE-PROVENANCE"
+      ],
+      "title": "Deterministic probe pipeline is canonical: strict scope, phase markers, provenance graph, and dedup quality gates",
+      "status": "accepted",
+      "date": "2026-04-01",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Mapper-Toolkit evolves to deterministic probe execution with strict target host scoping, canonical request deduplication, first-class probe phases, provenance graph outputs, replay-driven header minimization, and pipeline-ready thresholds for duplicate ratio and phase completeness."
+    },
+    {
+      "id": "DEC-0011",
+      "aliases": [
+        "ADR-0011",
+        "MAPPER-WEBKIT-COMPAT-MODULE",
+        "MAPPER-NATIVE-CRONET-MODULE"
+      ],
+      "title": "Jetpack WebKit and Cronet are integrated as isolated mapper modules without replacing EinkBro core",
+      "status": "accepted",
+      "date": "2026-04-01",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "The app keeps EinkBro as browser foundation and layers two additive modules: mapper-webkit-compat for runtime WebView compatibility/reset hooks and mapper-native-network-cronet for mapper-owned replay/validation requests behind a feature-flagged client abstraction."
     }
   ]
 }

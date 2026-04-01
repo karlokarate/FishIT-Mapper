@@ -1,3 +1,5 @@
 include ':adblock-client'
 include ':ad-filter'
 include ':app'
+include ':mapper-webkit-compat'
+include ':mapper-native-network-cronet'

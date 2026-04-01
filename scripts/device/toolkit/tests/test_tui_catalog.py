@@ -87,6 +87,22 @@ class MapperToolkitTuiCatalogTests(unittest.TestCase):
         }
         self.assertTrue(expected.issubset(command_ids))
 
+    def test_scope_probe_and_provenance_commands_present(self) -> None:
+        command_ids = {cmd.id for cmd in self.catalog.commands}
+        expected = {
+            "settings.scope_set",
+            "settings.scope_show",
+            "session.probe_start_phase",
+            "session.probe_stop_phase",
+            "session.probe_status",
+            "trace.provenance_query",
+            "trace.provenance_graph",
+            "trace.provenance_export",
+            "settings.provenance_mark",
+            "headers.infer_required_active",
+        }
+        self.assertTrue(expected.issubset(command_ids))
+
     def test_replay_commands_present(self) -> None:
         command_ids = {cmd.id for cmd in self.catalog.commands}
         expected = {
