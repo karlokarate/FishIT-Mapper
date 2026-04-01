@@ -1,0 +1,943 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAtUtc": "2026-03-26T11:24:22Z",
+  "adb": {
+    "host": "127.0.0.1",
+    "port": 5037
+  },
+  "device": {
+    "serial": "10.91.158.20:41595",
+    "model": "SM-G991B",
+    "androidRelease": "14"
+  },
+  "captureMethods": {
+    "home": "goto home",
+    "library": "goto library",
+    "settings": "benchmark_start_destination_settings"
+  },
+  "screens": [
+    {
+      "screenId": "home",
+      "xmlPath": "logs/device/live/ui_anchors/hierarchy_20260326T112339Z_matrix_home.xml",
+      "controlClickables": [
+        {
+          "path": "0/0/0/0/0/0/0/0/0/0/4",
+          "label": "Search",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[635,48][779,192]",
+          "centerX": 707,
+          "centerY": 120,
+          "area": 20736,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "home:c000"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/0/5",
+          "label": "Library",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[803,48][947,192]",
+          "centerX": 875,
+          "centerY": 120,
+          "area": 20736,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "home:c001"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/0/6",
+          "label": "Refresh",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[971,48][1080,192]",
+          "centerX": 1025,
+          "centerY": 120,
+          "area": 15696,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "home:c002"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/1/0",
+          "label": "Expand sync progress",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[430,222][650,366]",
+          "centerX": 540,
+          "centerY": 294,
+          "area": 31680,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "home:c003"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/2/0/0",
+          "label": "Search",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.widget.EditText",
+          "bounds": "[144,384][936,596]",
+          "centerX": 540,
+          "centerY": 490,
+          "area": 167904,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "home:c004"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/2/0/0/4",
+          "label": "Close search",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[792,418][936,562]",
+          "centerX": 864,
+          "centerY": 490,
+          "area": 20736,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "home:c005"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/2/0/1",
+          "label": "Sortieren",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[192,656][434,800]",
+          "centerX": 313,
+          "centerY": 728,
+          "area": 34848,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": true,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "home:c006"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/2/0/2",
+          "label": "Filtern",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[470,656][702,800]",
+          "centerX": 586,
+          "centerY": 728,
+          "area": 33408,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "home:c007"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/3/2/0",
+          "label": "Wild Cards",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[0,1076][108,1886]",
+          "centerX": 54,
+          "centerY": 1481,
+          "area": 87480,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "home:c008"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/3/5/1",
+          "label": "DE: Comedy Central",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[720,2150][1080,2400]",
+          "centerX": 900,
+          "centerY": 2275,
+          "area": 90000,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "home:c009"
+        }
+      ],
+      "rowPositions": [
+        {
+          "path": "0/0/0/0/0/0/0/0/0/0",
+          "bounds": "[0,0][1080,240]",
+          "centerX": 540,
+          "centerY": 120,
+          "className": "android.widget.HorizontalScrollView"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/3/2",
+          "bounds": "[0,1052][1080,1910]",
+          "centerX": 540,
+          "centerY": 1481,
+          "className": "android.view.View"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/3",
+          "bounds": "[0,860][1080,2400]",
+          "centerX": 540,
+          "centerY": 1630,
+          "className": "android.view.View"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/3/5",
+          "bounds": "[0,2126][1080,2400]",
+          "centerX": 540,
+          "centerY": 2263,
+          "className": "android.view.View"
+        }
+      ],
+      "headings": [
+        {
+          "text": "\ud83d\udc1f",
+          "bounds": "[72,76][160,165]",
+          "centerX": 116,
+          "centerY": 120,
+          "path": "0/0/0/0/0/0/0/0/0/0/0"
+        },
+        {
+          "text": "FishIT",
+          "bounds": "[196,77][370,164]",
+          "centerX": 283,
+          "centerY": 120,
+          "path": "0/0/0/0/0/0/0/0/0/0/1"
+        },
+        {
+          "text": "100%",
+          "bounds": "[502,98][587,142]",
+          "centerX": 544,
+          "centerY": 120,
+          "path": "0/0/0/0/0/0/0/0/0/0/3"
+        },
+        {
+          "text": "100%",
+          "bounds": "[544,277][620,312]",
+          "centerX": 582,
+          "centerY": 294,
+          "path": "0/0/0/0/0/0/0/0/0/1/0/1"
+        },
+        {
+          "text": "Suche nach Titel, Jahr...",
+          "bounds": "[300,432][780,548]",
+          "centerX": 540,
+          "centerY": 490,
+          "path": "0/0/0/0/0/0/0/0/0/2/0/0/3/0"
+        },
+        {
+          "text": "Name",
+          "bounds": "[294,706][386,750]",
+          "centerX": 340,
+          "centerY": 728,
+          "path": "0/0/0/0/0/0/0/0/0/2/0/1/1"
+        },
+        {
+          "text": "Filter",
+          "bounds": "[572,706][654,750]",
+          "centerX": 613,
+          "centerY": 728,
+          "path": "0/0/0/0/0/0/0/0/0/2/0/2/1"
+        },
+        {
+          "text": "Recently Added",
+          "bounds": "[240,936][549,1001]",
+          "centerX": 394,
+          "centerY": 968,
+          "path": "0/0/0/0/0/0/0/0/0/3/0"
+        },
+        {
+          "text": "Die Maiwald",
+          "bounds": "[168,1783][358,1827]",
+          "centerX": 263,
+          "centerY": 1805,
+          "path": "0/0/0/0/0/0/0/0/0/3/2/1/2"
+        },
+        {
+          "text": "Einfach Elli",
+          "bounds": "[744,1783][918,1827]",
+          "centerX": 831,
+          "centerY": 1805,
+          "path": "0/0/0/0/0/0/0/0/0/3/2/2/2"
+        },
+        {
+          "text": "Drama",
+          "bounds": "[168,1827][262,1862]",
+          "centerX": 215,
+          "centerY": 1844,
+          "path": "0/0/0/0/0/0/0/0/0/3/2/1/3"
+        },
+        {
+          "text": "Drama",
+          "bounds": "[744,1827][838,1862]",
+          "centerX": 791,
+          "centerY": 1844,
+          "path": "0/0/0/0/0/0/0/0/0/3/2/2/3"
+        },
+        {
+          "text": "Live TV",
+          "bounds": "[240,2010][388,2075]",
+          "centerX": 314,
+          "centerY": 2042,
+          "path": "0/0/0/0/0/0/0/0/0/3/3"
+        }
+      ],
+      "quickTargets": {
+        "Search": {
+          "anchorId": "home:c000",
+          "label": "Search",
+          "centerX": 707,
+          "centerY": 120,
+          "bounds": "[635,48][779,192]"
+        },
+        "Refresh": {
+          "anchorId": "home:c002",
+          "label": "Refresh",
+          "centerX": 1025,
+          "centerY": 120,
+          "bounds": "[971,48][1080,192]"
+        },
+        "Library": {
+          "anchorId": "home:c001",
+          "label": "Library",
+          "centerX": 875,
+          "centerY": 120,
+          "bounds": "[803,48][947,192]"
+        }
+      },
+      "tileFilterStats": {
+        "totalClickablesRaw": 13,
+        "keptControlClickables": 10,
+        "droppedProbableTiles": 3,
+        "droppedTileLabelSamples": [
+          "Die Maiwald",
+          "Einfach Elli",
+          "DE: 13th Street"
+        ]
+      }
+    },
+    {
+      "screenId": "library",
+      "xmlPath": "logs/device/live/ui_anchors/hierarchy_20260326T112356Z_matrix_library.xml",
+      "controlClickables": [
+        {
+          "path": "0/0/0/0/0/0/0/0/0/7/0/0",
+          "label": "Back",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[12,104][156,248]",
+          "centerX": 84,
+          "centerY": 176,
+          "area": 20736,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "library:c000"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/7/0/2",
+          "label": "Search",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[924,104][1068,248]",
+          "centerX": 996,
+          "centerY": 176,
+          "area": 20736,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "library:c001"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/0/0",
+          "label": "Expand sync progress",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[430,278][650,422]",
+          "centerX": 540,
+          "centerY": 350,
+          "area": 31680,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "library:c002"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/1/0",
+          "label": "Movies",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[0,428][540,644]",
+          "centerX": 270,
+          "centerY": 536,
+          "area": 116640,
+          "clickable": false,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": true,
+          "scrollable": false,
+          "anchorId": "library:c003"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/1/1",
+          "label": "Series",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[540,428][1080,644]",
+          "centerX": 810,
+          "centerY": 536,
+          "area": 116640,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "library:c004"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/3",
+          "label": "All",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[239,668][383,812]",
+          "centerX": 311,
+          "centerY": 740,
+          "area": 20736,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "library:c005"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/4",
+          "label": "Sortieren",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[96,872][338,1016]",
+          "centerX": 217,
+          "centerY": 944,
+          "area": 34848,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": true,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "library:c006"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/5",
+          "label": "Filtern",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[374,872][606,1016]",
+          "centerX": 490,
+          "centerY": 944,
+          "area": 33408,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "library:c007"
+        }
+      ],
+      "rowPositions": [
+        {
+          "path": "0/0/0/0/0/0/0/0/0/6",
+          "bounds": "[0,1052][1080,2256]",
+          "centerX": 540,
+          "centerY": 1654,
+          "className": "android.view.View"
+        }
+      ],
+      "headings": [
+        {
+          "text": "Library",
+          "bounds": "[168,138][351,214]",
+          "centerX": 259,
+          "centerY": 176,
+          "path": "0/0/0/0/0/0/0/0/0/7/0/1/0"
+        },
+        {
+          "text": "100%",
+          "bounds": "[544,333][620,368]",
+          "centerX": 582,
+          "centerY": 350,
+          "path": "0/0/0/0/0/0/0/0/0/0/0/1"
+        },
+        {
+          "text": "Movies",
+          "bounds": "[209,553][331,607]",
+          "centerX": 270,
+          "centerY": 580,
+          "path": "0/0/0/0/0/0/0/0/0/1/0/0"
+        },
+        {
+          "text": "Series",
+          "bounds": "[757,553][863,607]",
+          "centerX": 810,
+          "centerY": 580,
+          "path": "0/0/0/0/0/0/0/0/0/1/1/0"
+        },
+        {
+          "text": "Category:",
+          "bounds": "[48,718][214,762]",
+          "centerX": 131,
+          "centerY": 740,
+          "path": "0/0/0/0/0/0/0/0/0/2"
+        },
+        {
+          "text": "All",
+          "bounds": "[288,713][333,767]",
+          "centerX": 310,
+          "centerY": 740,
+          "path": "0/0/0/0/0/0/0/0/0/3/0"
+        },
+        {
+          "text": "Name",
+          "bounds": "[198,922][290,966]",
+          "centerX": 244,
+          "centerY": 944,
+          "path": "0/0/0/0/0/0/0/0/0/4/1"
+        },
+        {
+          "text": "Filter",
+          "bounds": "[476,922][558,966]",
+          "centerX": 517,
+          "centerY": 944,
+          "path": "0/0/0/0/0/0/0/0/0/5/1"
+        },
+        {
+          "text": "#DoYouThinkIAmSexy?",
+          "bounds": "[72,1664][426,1708]",
+          "centerX": 249,
+          "centerY": 1686,
+          "path": "0/0/0/0/0/0/0/0/0/6/0/2"
+        },
+        {
+          "text": "#SchwarzeSchafe",
+          "bounds": "[582,1664][857,1708]",
+          "centerX": 719,
+          "centerY": 1686,
+          "path": "0/0/0/0/0/0/0/0/0/6/1/2"
+        },
+        {
+          "text": "Comedy \u2022 1h 34m",
+          "bounds": "[582,1743][829,1778]",
+          "centerX": 705,
+          "centerY": 1760,
+          "path": "0/0/0/0/0/0/0/0/0/6/1/4"
+        }
+      ],
+      "quickTargets": {
+        "Search": {
+          "anchorId": "library:c001",
+          "label": "Search",
+          "centerX": 996,
+          "centerY": 176,
+          "bounds": "[924,104][1068,248]"
+        },
+        "Movies": {
+          "anchorId": "library:c003",
+          "label": "Movies",
+          "centerX": 270,
+          "centerY": 536,
+          "bounds": "[0,428][540,644]"
+        },
+        "Series": {
+          "anchorId": "library:c004",
+          "label": "Series",
+          "centerX": 810,
+          "centerY": 536,
+          "bounds": "[540,428][1080,644]"
+        },
+        "Back": {
+          "anchorId": "library:c000",
+          "label": "Back",
+          "centerX": 84,
+          "centerY": 176,
+          "bounds": "[12,104][156,248]"
+        }
+      },
+      "tileFilterStats": {
+        "totalClickablesRaw": 12,
+        "keptControlClickables": 8,
+        "droppedProbableTiles": 4,
+        "droppedTileLabelSamples": [
+          "#DoYouThinkIAmSexy?",
+          "#SchwarzeSchafe",
+          "'Ne g\u00fcnstige Gelegenheit",
+          "(2)"
+        ]
+      }
+    },
+    {
+      "screenId": "settings",
+      "xmlPath": "logs/device/live/ui_anchors/hierarchy_20260326T112416Z_matrix_settings.xml",
+      "controlClickables": [
+        {
+          "path": "0/0/0/0/0/0/0/0/0/0",
+          "label": "Zur\u00fcck",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[48,36][192,180]",
+          "centerX": 120,
+          "centerY": 108,
+          "area": 20736,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "settings:c000"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/2/0/2",
+          "label": "E-Mail",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.widget.EditText",
+          "bounds": "[120,517][960,707]",
+          "centerX": 540,
+          "centerY": 612,
+          "area": 159600,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "settings:c001"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/2/0/3",
+          "label": "Passwort",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.widget.EditText",
+          "bounds": "[120,731][960,921]",
+          "centerX": 540,
+          "centerY": 826,
+          "area": 159600,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "settings:c002"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/2/0/4",
+          "label": "Anmelden",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[120,957][528,1101]",
+          "centerX": 324,
+          "centerY": 1029,
+          "area": 58752,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "settings:c003"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/2/0/5",
+          "label": "Registrieren",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[552,957][960,1101]",
+          "centerX": 756,
+          "centerY": 1029,
+          "area": 58752,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "settings:c004"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/2/1/2",
+          "label": "",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[804,1682][960,1826]",
+          "centerX": 882,
+          "centerY": 1754,
+          "area": 22464,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "settings:c005"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/2/1/4",
+          "label": "",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[804,1838][960,1982]",
+          "centerX": 882,
+          "centerY": 1910,
+          "area": 22464,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "settings:c006"
+        },
+        {
+          "path": "0/0/0/0/0/0/0/0/0/2/1/6",
+          "label": "",
+          "text": "",
+          "contentDesc": "",
+          "resourceId": "",
+          "className": "android.view.View",
+          "bounds": "[804,1994][960,2138]",
+          "centerX": 882,
+          "centerY": 2066,
+          "area": 22464,
+          "clickable": true,
+          "focusable": true,
+          "enabled": true,
+          "checked": false,
+          "selected": false,
+          "scrollable": false,
+          "anchorId": "settings:c007"
+        }
+      ],
+      "rowPositions": [
+        {
+          "path": "0/0/0/0/0/0/0/0/0/2",
+          "bounds": "[72,216][1008,2400]",
+          "centerX": 540,
+          "centerY": 1308,
+          "className": "android.view.View"
+        }
+      ],
+      "headings": [
+        {
+          "text": "Einstellungen",
+          "bounds": "[312,73][669,143]",
+          "centerX": 490,
+          "centerY": 108,
+          "path": "0/0/0/0/0/0/0/0/0/1"
+        },
+        {
+          "text": "Account",
+          "bounds": "[204,336][368,401]",
+          "centerX": 286,
+          "centerY": 368,
+          "path": "0/0/0/0/0/0/0/0/0/2/0/0"
+        },
+        {
+          "text": "Nicht angemeldet",
+          "bounds": "[120,437][422,481]",
+          "centerX": 271,
+          "centerY": 459,
+          "path": "0/0/0/0/0/0/0/0/0/2/0/1"
+        },
+        {
+          "text": "E-Mail",
+          "bounds": "[168,591][295,656]",
+          "centerX": 231,
+          "centerY": 623,
+          "path": "0/0/0/0/0/0/0/0/0/2/0/2/1"
+        },
+        {
+          "text": "Passwort",
+          "bounds": "[168,805][361,870]",
+          "centerX": 264,
+          "centerY": 837,
+          "path": "0/0/0/0/0/0/0/0/0/2/0/3/1"
+        },
+        {
+          "text": "Anmelden",
+          "bounds": "[238,1002][410,1056]",
+          "centerX": 324,
+          "centerY": 1029,
+          "path": "0/0/0/0/0/0/0/0/0/2/0/4/0"
+        },
+        {
+          "text": "Registrieren",
+          "bounds": "[654,1002][858,1056]",
+          "centerX": 756,
+          "centerY": 1029,
+          "path": "0/0/0/0/0/0/0/0/0/2/0/5/0"
+        },
+        {
+          "text": "Google Sign-In nicht konfiguriert",
+          "bounds": "[267,1170][813,1224]",
+          "centerX": 540,
+          "centerY": 1197,
+          "path": "0/0/0/0/0/0/0/0/0/2/0/6/0"
+        },
+        {
+          "text": "Abmelden",
+          "bounds": "[454,1338][627,1392]",
+          "centerX": 540,
+          "centerY": 1365,
+          "path": "0/0/0/0/0/0/0/0/0/2/0/7/0"
+        },
+        {
+          "text": "Backups",
+          "bounds": "[204,1581][373,1646]",
+          "centerX": 288,
+          "centerY": 1613,
+          "path": "0/0/0/0/0/0/0/0/0/2/1/0"
+        },
+        {
+          "text": "Firebase-Backup optional aktivieren",
+          "bounds": "[120,1732][729,1776]",
+          "centerX": 424,
+          "centerY": 1754,
+          "path": "0/0/0/0/0/0/0/0/0/2/1/1"
+        },
+        {
+          "text": "Secrets einbeziehen",
+          "bounds": "[120,1888][465,1932]",
+          "centerX": 292,
+          "centerY": 1910,
+          "path": "0/0/0/0/0/0/0/0/0/2/1/3"
+        },
+        {
+          "text": "Telegram-Session einbeziehen",
+          "bounds": "[120,2044][640,2088]",
+          "centerX": 380,
+          "centerY": 2066,
+          "path": "0/0/0/0/0/0/0/0/0/2/1/5"
+        },
+        {
+          "text": "Passphrase (optional)",
+          "bounds": "[276,2248][726,2313]",
+          "centerX": 501,
+          "centerY": 2280,
+          "path": "0/0/0/0/0/0/0/0/0/2/1/7/1"
+        }
+      ],
+      "quickTargets": {},
+      "tileFilterStats": {
+        "totalClickablesRaw": 11,
+        "keptControlClickables": 8,
+        "droppedProbableTiles": 3,
+        "droppedTileLabelSamples": [
+          "Google Sign-In nicht konfiguriert",
+          "Abmelden",
+          "Passphrase (optional)"
+        ]
+      }
+    }
+  ],
+  "validation": {
+    "settingsScreenDetectedByLabel": false,
+    "notes": [
+      "Settings labels not detected; verify route/UI path on this build."
+    ]
+  }
+}

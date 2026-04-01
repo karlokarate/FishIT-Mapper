@@ -1,0 +1,242 @@
+{
+  "version": 1,
+  "plan_id": "fishit-mapper-v2-platinum-roadmap",
+  "execution_strategy": "bottom_up_agent_first_vertical_slices",
+  "release_rule": "next_phase_requires_all_exit_criteria_and_required_gates_green",
+  "workstreams": [
+    {
+      "id": "WS-A",
+      "name": "Governance and Contracts",
+      "purpose": "Maintain normative contracts, generators, guards, and decision traceability."
+    },
+    {
+      "id": "WS-B",
+      "name": "Browser and Capture",
+      "purpose": "Implement browser-near observation, session capture, and event collection."
+    },
+    {
+      "id": "WS-C",
+      "name": "Classifier and Profile",
+      "purpose": "Build candidate scoring, capability classification, and profile contracts."
+    },
+    {
+      "id": "WS-D",
+      "name": "Replay and Validation",
+      "purpose": "Deliver deterministic replay flows and replay validation reporting."
+    },
+    {
+      "id": "WS-E",
+      "name": "External Bridge and Import Contract",
+      "purpose": "Provide provider-scoped bridge outputs and FishIT-Player import path."
+    }
+  ],
+  "phases": [
+    {
+      "phase_id": "P0",
+      "name": "agent_governance_foundation",
+      "depends_on": [],
+      "entry_criteria": [
+        "contracts_ssot_exists",
+        "docs_generation_pipeline_exists"
+      ],
+      "exit_criteria": [
+        "agent_ruleset_contract_accepted",
+        "roadmap_contract_accepted",
+        "ci_contract_accepted",
+        "required_docs_generated_without_drift",
+        "blocking_ci_guard_job_enabled",
+        "pr_template_requires_scope_contracts_gates_handover"
+      ],
+      "workstreams": [
+        "WS-A"
+      ],
+      "required_outputs": [
+        "docs/ROADMAP.md",
+        "docs/AGENT_RULESET.md",
+        "docs/DELIVERY_GATES.md",
+        "contracts/decision_trace.json",
+        "handovers/HO-*.json"
+      ],
+      "required_gates": [
+        "generate-check",
+        "decision-guard",
+        "hard-cutover-guard",
+        "handover-guard",
+        "roadmap-guard",
+        "ci-contract-guard"
+      ]
+    },
+    {
+      "phase_id": "P1",
+      "name": "browser_near_mapping_lab",
+      "wave_id": "WAVE-01",
+      "artifact_target": "artifacts/wave01/mapper-debug.apk",
+      "device_required": true,
+      "acceptance_checks": [
+        "apk_installable_on_physical_device",
+        "main_activity_launches_on_device",
+        "browser_lab_loads_https_example_org"
+      ],
+      "depends_on": [
+        "P0"
+      ],
+      "entry_criteria": [
+        "p0_exit_criteria_satisfied"
+      ],
+      "exit_criteria": [
+        "embedded_browser_flow_operational",
+        "structured_jsonl_events_emitted_for_major_actions",
+        "session_snapshot_exported_machine_readable"
+      ],
+      "workstreams": [
+        "WS-B",
+        "WS-A"
+      ],
+      "required_outputs": [
+        "artifacts/wave01/mapper-debug.apk",
+        "artifacts/wave01/device-smoke.json",
+        "structured_log_stream.jsonl",
+        "session_metadata.json"
+      ],
+      "required_gates": [
+        "generate-check",
+        "decision-guard",
+        "hard-cutover-guard",
+        "handover-guard",
+        "roadmap-guard",
+        "ci-contract-guard",
+        "dependency-intake-guard"
+      ]
+    },
+    {
+      "phase_id": "P2",
+      "name": "candidate_detection_and_classification",
+      "depends_on": [
+        "P1"
+      ],
+      "entry_criteria": [
+        "p1_exit_criteria_satisfied"
+      ],
+      "exit_criteria": [
+        "home_and_search_candidates_scored",
+        "capability_classification_generated_with_confidence",
+        "draft_profile_generated_machine_readable"
+      ],
+      "workstreams": [
+        "WS-C",
+        "WS-B",
+        "WS-A"
+      ],
+      "required_outputs": [
+        "capability_scan_report.json",
+        "site_profile.json"
+      ],
+      "required_gates": [
+        "generate-check",
+        "decision-guard",
+        "hard-cutover-guard",
+        "handover-guard",
+        "roadmap-guard",
+        "ci-contract-guard"
+      ]
+    },
+    {
+      "phase_id": "P3",
+      "name": "replay_and_validation",
+      "depends_on": [
+        "P2"
+      ],
+      "entry_criteria": [
+        "p2_exit_criteria_satisfied"
+      ],
+      "exit_criteria": [
+        "at_least_one_deterministic_replay_flow_passes",
+        "session_restore_validated_or_failure_classified",
+        "replay_report_generated_per_profile"
+      ],
+      "workstreams": [
+        "WS-D",
+        "WS-C",
+        "WS-A"
+      ],
+      "required_outputs": [
+        "replay_report.json",
+        "session_metadata.json"
+      ],
+      "required_gates": [
+        "generate-check",
+        "decision-guard",
+        "hard-cutover-guard",
+        "handover-guard",
+        "roadmap-guard",
+        "ci-contract-guard"
+      ]
+    },
+    {
+      "phase_id": "P4",
+      "name": "external_catalog_bridge",
+      "depends_on": [
+        "P3"
+      ],
+      "entry_criteria": [
+        "p3_exit_criteria_satisfied"
+      ],
+      "exit_criteria": [
+        "provider_scoped_home_sections_mirrored",
+        "unified_external_search_result_model_available",
+        "provider_scoped_playback_resolution_available"
+      ],
+      "workstreams": [
+        "WS-E",
+        "WS-D",
+        "WS-A"
+      ],
+      "required_outputs": [
+        "site_profile.json",
+        "capability_scan_report.json",
+        "structured_log_stream.jsonl"
+      ],
+      "required_gates": [
+        "generate-check",
+        "decision-guard",
+        "hard-cutover-guard",
+        "handover-guard",
+        "roadmap-guard",
+        "ci-contract-guard"
+      ]
+    },
+    {
+      "phase_id": "P5",
+      "name": "fishit_player_import_path",
+      "depends_on": [
+        "P4"
+      ],
+      "entry_criteria": [
+        "p4_exit_criteria_satisfied"
+      ],
+      "exit_criteria": [
+        "profile_import_contract_ready",
+        "minimal_runtime_adapter_contract_ready",
+        "reauth_and_session_status_signals_defined"
+      ],
+      "workstreams": [
+        "WS-E",
+        "WS-C",
+        "WS-A"
+      ],
+      "required_outputs": [
+        "site_profile.json",
+        "replay_report.json",
+        "capability_scan_report.json"
+      ],
+      "required_gates": [
+        "generate-check",
+        "decision-guard",
+        "hard-cutover-guard",
+        "handover-guard",
+        "roadmap-guard",
+        "ci-contract-guard"
+      ]
+    }
+  ]
+}

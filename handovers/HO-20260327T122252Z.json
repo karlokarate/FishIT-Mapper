@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260327T122252Z",
+  "generated_at_utc": "2026-03-27T12:22:52Z",
+  "agent": {
+    "name": "Codex",
+    "session_label": "e2e-validation-no-runtime-lint-fix"
+  },
+  "scope": "End-to-end validation without runtime/device execution. Fixed all lint-blocking errors so Gradle check and repository gates pass.",
+  "highlights": [
+    "Resolved NewApi lint errors by removing File.toPath() usage in EPUB path resolution.",
+    "Fixed SuspiciousIndentation in FabImageViewController position validation logic.",
+    "Updated receiver registration to ContextCompat.registerReceiver with RECEIVER_NOT_EXPORTED.",
+    "Resolved UnusedMaterialScaffoldPaddingParameter in two Compose screens by applying scaffold padding.",
+    "Cleared remaining AppLinkUrlError blockers in AndroidManifest intent filters for Wave-01 baseline.",
+    "Validation status: ./gradlew :app:lintDebug passed, ./gradlew check passed, make guard passed."
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/activity/BrowserActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/activity/GptQueryListActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/activity/ToolbarConfigActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/epub/EpubCoverParser.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/epub/EpubXMLFileParser.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/view/viewControllers/FabImageViewController.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260327T122252Z.json",
+      "old_path": null
+    }
+  ]
+}

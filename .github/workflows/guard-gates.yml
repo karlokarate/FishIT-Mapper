@@ -1,0 +1,35 @@
+name: Guard Gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  contract-and-guard-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq make
+      - name: Run blocking guard stack
+        run: make guard
+
+  wave01-debug-apk-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Build Wave-01 debug APK
+        run: ./scripts/waves/build-wave01.sh

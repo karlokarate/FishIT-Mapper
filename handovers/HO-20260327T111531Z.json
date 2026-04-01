@@ -1,0 +1,1385 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260327T111531Z",
+  "generated_at_utc": "2026-03-27T11:15:31Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260327T111531Z"
+  },
+  "scope": "Contract and gate update: mandatory machine-readable session handover",
+  "highlights": [
+    "Added versioned handover schema contract",
+    "Added session handover generator script",
+    "Added handover guard and integrated it into make guard"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "AGENTS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "Makefile",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/decision_trace.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/doc_contract.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/generation_plan.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/handover.schema.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/ssot.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "docs/README.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "docs/V2_ssot.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "docs/archive/.gitkeep",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/.gitkeep",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/generate.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/guards/decision-guard.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/guards/handover-guard.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/guards/hard-cutover-guard.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/handover/create-handover.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/CODEOWNERS",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/ISSUE_TEMPLATE/automated-workflow.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/README.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/copilot-instructions.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/copilot-ruleset.json",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/copilot/agents.json",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/copilot/mcp.json",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/copilot/workflow-automation.json",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/settings.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/agent-pr-ready.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/android-build.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/auto-review-request.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/build-app.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/codex-agent.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/copilot-agent.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/copilot-permissions.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/generate-keystore-secrets.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/orchestrator.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/prepare-fix-task.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/sonarqube-analysis.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "AGENT_QUICK_REFERENCE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "AGENT_SETUP.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "BUILD_ISSUE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "CERTIFICATE_VPN_IMPROVEMENTS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "COMPLETE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "COMPREHENSIVE_APP_REVIEW.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "COPILOT_RULESET_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "COPILOT_SETUP.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "FEATURE_STATUS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "IMPLEMENTATION_DETAILS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "IMPLEMENTATION_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "IMPLEMENTATION_SUMMARY_HTTPS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "IMPLEMENTATION_SUMMARY_SONARQUBE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "LIBRARY_INTEGRATION.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "MAVEN_TUN2SOCKS_INTEGRATION.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "MVP_COMPLETION_REPORT.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "PHASE2_IMPLEMENTATION_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "SOLUTION_RULESET_PROBLEM.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "SONARQUBE_FIX_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "SONARQUBE_LINT_FIX.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "SONARQUBE_QUICK_START.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "SONARQUBE_SSL_FIX.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "TESTING_GUIDE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "TUN2SOCKS_IMPLEMENTATION.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "VPN_FUNCTIONALITY_REVIEW.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "VPN_IMPLEMENTATION_PLAN.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "VPN_INTEGRATION_COMPLETE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "WEBAUTHN_ERROR_HANDLING_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/proguard-rules.pro",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/assets/tracking.js",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/FishitApp.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/MainActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/capture/CaptureSessionManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/capture/CaptureStorageManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/capture/HarSessionStore.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/capture/SessionToEngineAdapter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/capture/TrafficInterceptWebView.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/cert/CertificateManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/data/AndroidProjectStore.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/di/AppContainer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/di/LocalAppContainer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/export/ExportManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/export/SessionExportManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/import/ImportManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/import/httpcanary/AuthFlowAnalyzer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/import/httpcanary/HttpCanaryImportManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/import/httpcanary/HttpCanaryModels.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/import/httpcanary/HttpCanaryZipImporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/import/httpcanary/WebsiteMapBuilder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/proxy/MitmProxyServer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/proxy/ProxyCaptureManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/api/ApiBlueprintScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/api/EndpointDetailScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/capture/CaptureWebViewScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/common/SimpleVmFactory.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/export/ExportDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/graph/GraphVisualization.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/BrowserScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/ChainsScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/GraphDiffScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/GraphScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/NodeTaggingDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/ProjectHomeScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/ProjectViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/SessionsScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/projects/ProjectsScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/projects/ProjectsViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/session/CredentialsScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/session/SessionDetailScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/session/SessionManagerScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/session/UnifiedTimelineScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/settings/SettingsScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/settings/WebViewDiagnosticsScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/AuthAwareCookieManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/CookieUtils.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/CustomTabsManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/HybridAuthFlowManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/JavaScriptBridge.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/TrackingScript.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/WebAuthnDetector.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/WebViewDebugManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/WebViewDiagnosticsManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/WebViewProxyController.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/res/values/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/res/values/themes.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/res/xml/file_paths.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/res/xml/network_security_config.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/test/java/dev/fishit/mapper/android/export/SessionExportManagerTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/test/java/dev/fishit/mapper/android/webview/HybridAuthFlowTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/test/java/dev/fishit/mapper/android/webview/WebAuthnErrorDetectionTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "codex/CHECKPOINT.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "codex/TODO_QUEUE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/ANDROID_SIGNING_QUICKSTART.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/ANDROID_SIGNING_SETUP.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/ARCHITECTURE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/AUTOMATIC_RETURN_FLOW.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/BUILD_WORKFLOW.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/COPILOT_RULESET.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/COPILOT_RULESET_IMPORT.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/COPILOT_RULESET_MIGRATION.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/COPILOT_RULESET_QUICKSTART.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/FEATURE_TRACKING_README.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/GITHUB_ISSUE_TEMPLATE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/GITHUB_RULESETS_ERKLAERUNG.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/HYBRID_AUTH_FLOW.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/KEYSTORE_WORKFLOW_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/OPEN_FEATURES_ISSUE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/ORCHESTRATOR.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/OUTPUT_STRATEGY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/PRIORITY_3_FEATURES.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/PRIORITY_3_IMPLEMENTATION_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/ROADMAP.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/SCOPE_API_REVERSE_ENGINEERING.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/SONARQUBE_SETUP.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/TRAFFIC_CAPTURE_STRATEGIES.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/WEBVIEW_DIAGNOSTICS_IMPLEMENTATION.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/WEBVIEW_TROUBLESHOOTING.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/features/HTTPS_TRAFFIC_CAPTURE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/features/TECHNICAL_IMPLEMENTATION.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/features/UNIFIED_TIMELINE_AND_CREDENTIALS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/new_vpn_roadmap.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "full-build.log",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "gradle.properties",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "gradle/libs.versions.toml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "gradle/wrapper/gradle-wrapper.jar",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "gradle/wrapper/gradle-wrapper.properties",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "gradlew.bat",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "gradlew",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "keystore/.gitignore",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "schema/contract.schema.json",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/README.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/cms_request.zip",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/codex-setup.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/generate-keystore.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/maintenance.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/orchestrator/transition.mjs",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/quick-start.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/validate-env.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/verify-ruleset.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "settings-gradle.lockfile",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "settings.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/contract/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/contract/src/androidMain/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/contract/src/commonMain/kotlin/dev/fishit/mapper/contract/Placeholder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/androidMain/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/CredentialExtractor.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/ExportBundleBuilder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/FormAnalyzer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/GraphDiff.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/HubDetector.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/IdGenerator.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/MappingEngine.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/RedirectDetector.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/TimelineBuilder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/UrlNormalizer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/WebsiteMapBuilder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/ApiBlueprint.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/ApiBlueprintBuilder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/AuthPatternDetector.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/EndpointExtractor.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/EngineTypes.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/FlowDetector.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/ParameterAnalyzer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/ApiExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/CopilotReadyExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/ExportOrchestrator.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/GitHubRepoGenerator.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/HarExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/MermaidSequenceExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/NormalizedTimeline.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/StateGraphExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonTest/kotlin/dev/fishit/mapper/engine/CredentialExtractorTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonTest/kotlin/dev/fishit/mapper/engine/TimelineBuilderTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonTest/kotlin/dev/fishit/mapper/engine/api/EngineTypesFlowTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonTest/kotlin/dev/fishit/mapper/engine/export/ExportPipelineTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonTest/kotlin/dev/fishit/mapper/engine/recording/ChainpointAndEditingTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonTest/kotlin/dev/fishit/mapper/engine/recording/RecordingFlowTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "tools/codegen-contract/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "tools/codegen-contract/src/main/kotlin/dev/fishit/mapper/codegen/Args.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "tools/codegen-contract/src/main/kotlin/dev/fishit/mapper/codegen/ContractGenerator.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "tools/codegen-contract/src/main/kotlin/dev/fishit/mapper/codegen/ContractSchemaLoader.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "tools/codegen-contract/src/main/kotlin/dev/fishit/mapper/codegen/Main.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "tools/codegen-contract/src/main/kotlin/dev/fishit/mapper/codegen/Schema.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": ".devcontainer/devcontainer.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": ".devcontainer/setup.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": ".gitignore",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "README.md",
+      "old_path": null
+    }
+  ]
+}

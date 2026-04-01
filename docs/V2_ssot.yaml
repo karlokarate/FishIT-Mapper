@@ -1,0 +1,632 @@
+# GENERATED FILE - DO NOT EDIT DIRECTLY.
+# source: contracts/ssot.yaml
+# regenerate via: ./scripts/generate.sh
+
+ssot:
+  id: fishit-mapper-v2
+  version: 1
+  status: draft-binding
+  owner: Chris
+  date: 2026-03-27
+  purpose: >-
+    Define the exact target architecture, scope, use cases, capability model,
+    module layout, donor repositories, copy-in modules, tooling, persistence,
+    logging, and phased implementation plan for the new FishIT-Mapper parallel repo.
+    This repo is a browser-near mapping and pipeline-lab application whose output is
+    deterministic site/pipeline profiles that can later be imported into FishIT-Player.
+
+product:
+  name: FishIT-Mapper
+  role: parallel_repo_pipeline_lab
+  mission: >-
+    Turn websites and media portals into analyzable, replayable, and sometimes adapter-ready
+    sources by combining embedded browser behavior, session/state capture, request inspection,
+    replay validation, and rule/profile export.
+  non_goals:
+    - Do not attempt to become a universal full browser.
+    - Do not attempt to guarantee native Kotlin adapters for all websites.
+    - Do not import every external catalog into the FishIT-Player main catalog by default.
+    - Do not place heavy reverse-engineering logic directly into FishIT-Player.
+    - Do not start with a headless-only HTTP client approach.
+
+core_principles:
+  - browser_near_first
+  - deterministic_profile_export
+  - session_reuse_over_relogin
+  - external_catalog_separation
+  - structured_machine_readable_logging
+  - replay_before_runtime_adapter
+  - minimal_functional_stack
+  - explicit_capability_classification
+  - phase_gated_complexity
+  - secure_persistence_only_for_required_secrets
+
+problem_statement:
+  summary: >-
+    FishIT-Player needs a future-safe way to add external websites and media portals as
+    pipeline-like sources without prematurely hardcoding custom adapters. The system must
+    observe how a portal behaves in a browser-like environment, detect the minimum stable
+    endpoint and session set required for home feed, search, details, and playback, and then
+    export deterministic profiles for later use in FishIT-Player.
+  why_parallel_repo:
+    - Keep reverse-engineering and browser tooling outside the main player app.
+    - Allow faster iteration with custom UI and debugging workflows.
+    - Enable Codex/ADB/live-log driven development without destabilizing FishIT-Player.
+    - Produce only the minimal reusable code and profiles that are later imported.
+
+capability_model:
+  classes:
+    WEB_ONLY:
+      description: >-
+        Website works mainly as embedded web experience. Native extraction is weak or unstable.
+      suitable_for:
+        - embedded_detail_or_playback
+        - shallow_home_mirroring
+        - minimal_search_bridge
+      markers:
+        - login_only_stable_in_webview
+        - unstable_or_unclear_api_patterns
+        - playback_requires_browser_context
+    HYBRID:
+      description: >-
+        Home, search, and often details can be replayed or resolved natively, but some auth,
+        refresh, or playback logic remains browser-near.
+      suitable_for:
+        - external_catalog_search_provider
+        - home_feed_mirroring
+        - native_search_plus_browser_near_playback
+      markers:
+        - stable_home_or_search_endpoints
+        - reusable_session_state
+        - playback_or_refresh_needs_browser_context
+    NATIVE_READY:
+      description: >-
+        Core endpoints and session logic are stable enough for a true Kotlin provider adapter.
+      suitable_for:
+        - native_external_provider
+        - parallel_internal_and_external_search
+        - direct_playback_resolution
+      markers:
+        - stable_home_search_details_playback_endpoints
+        - reproducible_headers_cookies_params
+        - session_refresh_deterministic
+    BLOCKED:
+      description: >-
+        Strong technical barriers prevent useful interception, replay, or native adaptation.
+      suitable_for:
+        - no_adapter
+        - optional_thin_web_wrap_only
+      markers:
+        - suspected_or_confirmed_drm_barrier
+        - certificate_pinning_or_equivalent_barrier
+        - device_or_sdk_bound_tokens
+        - strong_attestation_or_anti_bot_dependency
+  default_target_class: HYBRID
+  escalation_policy:
+    - Start every site in WEB_ONLY or HYBRID investigation mode.
+    - Promote to NATIVE_READY only after deterministic replay succeeds.
+    - Mark BLOCKED early if interception and replay are fundamentally broken.
+
+use_cases:
+  primary:
+    - id: uc_add_media_portal
+      title: Add media portal as external source
+      outcome: >-
+        User can browse selected portal content through FishIT-Player-backed integration
+        without merging the full external catalog into the internal main catalog.
+    - id: uc_home_feed_catalogization
+      title: Catalogize portal home feed
+      outcome: >-
+        Start page or selected rails from an external site are parsed, normalized into
+        a lightweight UI model, and mirrored into the UI.
+    - id: uc_global_search_bridge
+      title: Search internal and external sources together
+      outcome: >-
+        Global search returns internal FishIT results and external provider results in a
+        unified UI model.
+    - id: uc_playback_resolution
+      title: Resolve playback from external provider
+      outcome: >-
+        Search or home results from external sites are playable using provider-specific
+        resolution logic.
+    - id: uc_login_and_session_persistence
+      title: Persist login/session state
+      outcome: >-
+        Cookies, local state, and other required session primitives are cached and restored
+        to avoid repeated manual login.
+    - id: uc_site_mapping_lab
+      title: Map and inspect sites interactively
+      outcome: >-
+        Developer can use internal tooling, logs, click automation, and request inspection
+        to identify endpoints, headers, tokens, and parsing rules.
+    - id: uc_profile_export
+      title: Export deterministic site profile
+      outcome: >-
+        Mapper outputs a stable machine-readable profile that FishIT-Player can later import.
+  secondary:
+    - id: uc_replay_validation
+      title: Replay and validate extracted flows
+    - id: uc_capability_auto_classification
+      title: Auto-classify site into WEB_ONLY, HYBRID, NATIVE_READY, or BLOCKED
+    - id: uc_rule_synthesis
+      title: Generate extractor rules from observed traffic
+    - id: uc_codex_live_debug
+      title: Use Codex with live logcat and ADB-driven interaction for rapid iteration
+
+functional_scope:
+  included:
+    - embedded_browser_session
+    - request_response_inspection
+    - cookie_capture_and_restore
+    - local_storage_capture
+    - indexeddb_relevance_detection
+    - endpoint_candidate_detection
+    - request_diffing
+    - header_cookie_token_dependency_analysis
+    - profile_export_import
+    - replay_validation
+    - lightweight_ui_mirroring
+    - external_search_provider_support
+    - structured_json_logging
+    - python_assisted_analysis_via_chaquopy
+  excluded_v1:
+    - universal_code_generation_for_all_websites
+    - full_general_purpose_browser_feature_parity
+    - guaranteed_native_support_for_drm_bound_sites
+    - generic_bypass_of_strong_platform_security_controls
+    - full_internal_catalog_merging_of_all_external_sources
+
+minimal_open_stack:
+  android_browser_base:
+    chosen: EinkBro
+    donor_repo: https://github.com/plateaukao/einkbro
+    reserve_candidate: https://github.com/Slion/Fulguris
+  request_inspection:
+    chosen: Android-Request-Inspector-WebView
+    donor_repo: https://github.com/acsbendi/Android-Request-Inspector-WebView
+  traffic_analysis:
+    chosen: mitmproxy
+    donor_repo: https://github.com/mitmproxy/mitmproxy
+  browser_replay_validation:
+    chosen: Playwright
+    donor_repo: https://github.com/microsoft/playwright
+  optional_future_upgrades:
+    - name: Jetpack WebKit
+      reason: prefer over raw framework-only WebView integration
+    - name: Cronet
+      reason: modern Chromium-network-stack upgrade path for runtime networking
+    - name: Android Keystore + custom AES-GCM wrapper
+      reason: prefer over adding deprecated security-crypto as new dependency
+
+repo_strategy:
+  type: parallel_repo
+  import_into_fishit_player_later: true
+  import_style:
+    - import_profiles_first
+    - import_runtime_adapter_second
+    - import_only_minimal_required_code
+  deliverables:
+    - mapper_app
+    - machine_readable_site_profiles
+    - replay_reports
+    - capability_scan_reports
+    - importable_runtime_contracts
+
+modules:
+  app_lab:
+    required: true
+    contains:
+      - home_activity
+      - session_lab_activity
+      - capability_scan_activity
+      - profile_export_screen
+      - debug_controls
+  feature_browser_lab:
+    required: true
+    copy_from:
+      - donor: EinkBro
+        copy_candidates:
+          - webview_hosting_patterns
+          - tab_or_single_page_navigation_patterns
+          - browser_settings_patterns
+          - url_loading_patterns
+          - basic_navigation_ui_patterns
+    adapt:
+      - remove_nonessential_general_browser_features
+      - keep_scope_tooling_focused
+  feature_request_inspector:
+    required: true
+    copy_from:
+      - donor: Android-Request-Inspector-WebView
+        copy_candidates:
+          - request_interception_logic
+          - response_capture_logic
+          - header_and_body_exposure_patterns
+          - cookie_visibility_patterns
+  core_capture:
+    required: true
+    submodules:
+      - webview_event_capture
+      - network_event_capture
+      - cookie_snapshotter
+      - storage_state_capture
+      - redirect_chain_capture
+      - playback_observation_capture
+  core_profile:
+    required: true
+    contracts:
+      - SiteProfile
+      - AuthProfile
+      - EndpointProfile
+      - PlaybackProfile
+      - FingerprintRule
+      - HeaderRule
+      - CookieRule
+      - ExtractorRule
+      - CachePolicy
+      - CapabilitySignals
+      - CapabilityClassificationReport
+  core_classifier:
+    required: true
+    outputs:
+      - endpoint_candidates
+      - role_scores
+      - site_capability_class
+      - confidence_report
+  core_replay:
+    required: true
+    supports:
+      - session_restore
+      - home_replay
+      - search_replay
+      - details_replay
+      - playback_resolution_replay
+      - token_refresh_validation
+  core_runtime_adapter_contract:
+    required: true
+    outputs:
+      - ExternalProviderDescriptor
+      - ExternalSearchRequest
+      - ExternalSearchResult
+      - ExternalPlaybackRequest
+      - ExternalPlaybackResult
+      - ExternalSessionStatus
+  feature_external_catalog_bridge:
+    required: true
+    supports:
+      - mirrored_home_sections
+      - unified_search_result_model
+      - provider_scoped_items
+  feature_codex_debug_bridge:
+    required: true
+    controls:
+      - mark_login_start
+      - mark_login_success
+      - mark_home_loaded
+      - mark_search_start
+      - mark_search_result
+      - mark_playback_start
+      - export_session_snapshot
+  py_tools:
+    required: true
+    runtime: Chaquopy
+    capabilities:
+      - url_clustering
+      - request_shape_fingerprinting
+      - json_payload_shape_analysis
+      - token_source_inference
+      - header_cookie_diffing
+      - extractor_rule_synthesis
+      - m3u8_mpd_detection
+      - replay_report_generation
+      - flow_graph_generation
+  tooling_mitmproxy:
+    required: true
+    runtime: external_dev_tool
+  tooling_playwright:
+    required: true
+    runtime: external_dev_tool
+
+copy_plan:
+  direct_copy_modules:
+    - source_repo: EinkBro
+      into_module: feature_browser_lab
+      what_to_copy:
+        - reusable_webview_host_infrastructure
+        - browser_navigation_and_settings_patterns
+        - minimal_ui_shell_patterns
+      do_not_copy:
+        - broad_end_user_browser_feature_surface_not_needed_for_lab
+        - unnecessary_general_purpose_browser_customization
+    - source_repo: Android-Request-Inspector-WebView
+      into_module: feature_request_inspector
+      what_to_copy:
+        - webview_request_inspection_components
+        - request_response_interception_patterns
+        - capture_and_exposure_helpers
+      do_not_copy:
+        - unnecessary_demo_only_code
+  reference_only_repos:
+    - repo: mitmproxy
+      role: external_tooling_and_reference_implementation
+    - repo: Playwright
+      role: external_tooling_and_reference_implementation
+
+data_models:
+  SiteProfile:
+    fields:
+      - profileId
+      - displayName
+      - baseUrl
+      - capabilityClass
+      - auth
+      - homeEndpoint
+      - searchEndpoint
+      - detailsEndpoint
+      - playbackEndpoint
+      - refreshEndpoint
+      - headerRules
+      - cookieRules
+      - fingerprintRules
+      - extractorRules
+      - cachePolicy
+      - createdAt
+      - updatedAt
+      - profileVersion
+      - confidence
+  AuthProfile:
+    fields:
+      - authMode
+      - cookieDependencies
+      - localStorageDependencies
+      - indexedDbDependencies
+      - tokenSources
+      - refreshStrategy
+      - sessionValidationRule
+  EndpointProfile:
+    fields:
+      - role
+      - method
+      - urlTemplate
+      - requiredHeaders
+      - requiredCookies
+      - requiredQueryParams
+      - requiredBodyFields
+      - preconditions
+      - successMatcher
+      - extractorRules
+      - cacheTtlSeconds
+  PlaybackProfile:
+    fields:
+      - resolverMode
+      - streamKinds
+      - urlSourceRules
+      - tokenDependencies
+      - browserContextRequired
+      - drmSuspected
+  CapabilitySignals:
+    fields:
+      - hasReusableCookies
+      - hasReusableLocalState
+      - homeEndpointStable
+      - searchEndpointStable
+      - detailsEndpointStable
+      - playbackEndpointStable
+      - proxyInterceptionWorks
+      - replayWorks
+      - requiresBrowserContextForPlayback
+      - drmSuspected
+      - pinningSuspected
+      - nativeSdkDependencySuspected
+
+persistence:
+  session_store:
+    stores:
+      - cookies
+      - selected_local_storage_keys
+      - selected_indexeddb_references_or_exports_when_needed
+      - token_metadata
+      - last_successful_session_validation
+    avoid:
+      - blind_full_storage_dumps_when_not_required
+      - storing_values_without_provenance
+  provenance_required_for_all_session_primitives:
+    examples:
+      - COOKIE(sessionid)
+      - LOCAL_STORAGE(auth.accessToken)
+      - INDEXED_DB(site.auth.db.key)
+      - HTML_META(csrf-token)
+      - RESPONSE_JSON(refresh.access_token)
+  security_requirements:
+    - use_android_keystore_backed_encryption_for_secrets
+    - prefer_custom_small_secure_wrapper_over_adding_new_deprecated_security_layers
+    - separate_profile_data_from_secret_material
+
+logging_contract:
+  format: json_line
+  requirements:
+    - every_important_event_must_be_machine_readable
+    - avoid_free_form_only_debug_strings_for_core_flows
+    - all_user_marked_workflow_transitions_must_emit_explicit_semantic_events
+  tags:
+    - PIPELAB/AUTH
+    - PIPELAB/WEBVIEW
+    - PIPELAB/NET
+    - PIPELAB/COOKIE
+    - PIPELAB/STORAGE
+    - PIPELAB/CLASSIFIER
+    - PIPELAB/EXTRACTOR
+    - PIPELAB/REPLAY
+    - PIPELAB/PLAYER
+    - PIPELAB/ERROR
+
+endpoint_candidate_rules:
+  home_candidate:
+    signals:
+      - called_after_home_or_landing
+      - returns_json_or_structured_payload
+      - contains_list_like_items
+      - includes_title_or_name_plus_image_or_id_patterns
+      - repeats_on_reload
+  search_candidate:
+    signals:
+      - triggered_after_text_input
+      - query_or_body_changes_with_search_text
+      - returns_list_like_results
+      - shape_compatible_with_catalog_items
+  details_candidate:
+    signals:
+      - follows_tile_selection
+      - returns_single_item_or_enriched_object
+      - contains_more_fields_than_home
+      - stable_resource_identifier_present
+  playback_candidate:
+    signals:
+      - follows_play_action
+      - contains_stream_url_or_license_or_source_payload
+      - may_include_redirect_chain
+      - often_depends_on_short_lived_tokens
+  auth_or_refresh_candidate:
+    signals:
+      - appears_after_401_or_auth_boundary
+      - changes_cookie_or_authorization_state
+      - retry_after_refresh_succeeds
+
+classification_logic:
+  WEB_ONLY_when:
+    - stable_endpoints_not_confident_enough
+    - playback_requires_browser_context
+    - session_restore_not_reliable_for_native_calls
+  HYBRID_when:
+    - stable_home_or_search_or_details_endpoints_exist
+    - session_can_be_reused
+    - playback_or_refresh_still_browser_near
+  NATIVE_READY_when:
+    - home_search_details_playback_all_stable
+    - replay_succeeds_deterministically
+    - session_refresh_is_deterministic
+  BLOCKED_when:
+    - strong_drm_or_pinning_or_native_sdk_dependency_detected
+    - interception_or_replay_fails_for_fundamental_reasons
+
+ui_screens:
+  - name: MapperHomeActivity
+    purpose: entry_and_site_session_overview
+  - name: BrowserLabActivity
+    purpose: login_navigation_observation_and_request_inspection
+  - name: CapabilityScanActivity
+    purpose: show_auto_detected_signals_scores_and_classification
+  - name: ReplayValidationActivity
+    purpose: run_profile_replay_checks_and_show_results
+  - name: ProfileExportActivity
+    purpose: export_site_profile_and_session_safe_artifacts
+
+codex_adb_workflow:
+  purpose: accelerate_deterministic_development_by_combining_adb_control_and_structured_logs
+  loop:
+    - open_activity
+    - perform_defined_click_sequence
+    - capture_logcat
+    - segment_events_by_semantic_markers
+    - generate_candidate_report
+    - replay_or_retry_with_changes
+  app_controls_required:
+    - mark_login_start
+    - mark_login_success
+    - mark_home_loaded
+    - mark_search_start
+    - mark_search_result
+    - mark_playback_start
+    - export_session_snapshot
+
+fishit_player_integration_contract:
+  policy:
+    - external_catalog_is_logically_separate_from_internal_catalog
+    - ui_unifies_results_not_storage_domains
+    - import_profiles_before_runtime_provider_logic
+  runtime_expectations:
+    - provider_scoped_home_sections
+    - unified_search_result_model
+    - provider_specific_playback_resolver
+    - session_status_and_reauth_signal
+  future_imports:
+    - SiteProfile_parser
+    - runtime_adapter_contract
+    - optional_external_provider_module
+
+phases:
+  - phase: 1
+    name: browser_near_mapping_lab
+    goals:
+      - embedded_browser_works
+      - request_inspection_works
+      - structured_logging_works
+      - session_snapshot_export_works
+  - phase: 2
+    name: candidate_detection_and_classification
+    goals:
+      - endpoint_candidate_scoring
+      - capability_classification
+      - profile_draft_generation
+  - phase: 3
+    name: replay_and_validation
+    goals:
+      - deterministic_replay
+      - session_restore_validation
+      - playback_resolution_validation
+  - phase: 4
+    name: external_catalog_bridge
+    goals:
+      - mirrored_home_sections
+      - unified_search_results
+      - provider_scoped_playback
+  - phase: 5
+    name: fishit_player_import_path
+    goals:
+      - profile_import_contract
+      - minimal_runtime_adapter
+      - reauth_and_status_signals
+
+quality_gates:
+  must_pass:
+    - browser_lab_can_complete_login_for_target_site
+    - structured_logs_are_emitted_for_all_major_actions
+    - session_restore_works_or_failure_is_classified
+    - home_and_search_candidates_are_scored_and_reported
+    - profile_export_is_machine_readable_and_reimportable
+    - replay_report_is_generated_for_each_profile
+
+external_tools:
+  strongly_recommended:
+    - mitmproxy
+    - Playwright
+  future_quality_and_debug_extensions:
+    - Chrome_DevTools_for_WebView_debugging
+    - Cronet_for_runtime_network_performance_validation
+    - SonarQube_or_Detekt_for_static_quality_checks
+
+implementation_notes:
+  - Prefer androidx.webkit over raw framework-only usage where practical.
+  - Prefer secure secret persistence with Android Keystore-backed encryption.
+  - Keep Kotlin runtime modules small and move heuristic-heavy analysis into Python first.
+  - Treat mitmproxy and Playwright as validation companions, not app-runtime dependencies.
+  - Promote sites to NATIVE_READY only after replay proves stability.
+  - Keep external provider data provider-scoped; do not silently merge everything into the main catalog.
+
+machine_readable_outputs:
+  required:
+    - site_profile_yaml_or_json
+    - capability_scan_report_json
+    - replay_report_json
+    - session_metadata_json
+    - structured_log_stream_jsonl
+
+acceptance_definition:
+  v1_done_when:
+    - Mapper_can_open_a_target_site_in_embedded_browser
+    - Mapper_can_capture_and_persist_required_session_primitives
+    - Mapper_can_identify_at_least_draft_home_and_search_endpoint_candidates
+    - Mapper_can_classify_the_site_capability
+    - Mapper_can_export_a_machine_readable_SiteProfile
+    - Mapper_can_replay_at_least_one_deterministic_flow_from_the_exported_profile
+    - Output_is_ready_to_be_consumed_later_by_FishIT_Player

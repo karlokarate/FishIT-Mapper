@@ -1,0 +1,57 @@
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="sc_bookmark"
+        android:enabled="true"
+        android:icon="@drawable/qc_bookmarks"
+        android:shortcutShortLabel="@string/bookmarks"
+        android:shortcutLongLabel="@string/bookmarks"
+        android:shortcutDisabledMessage="@string/bookmarks">
+        <intent
+            android:action="sc_bookmark"
+            android:targetPackage="info.plateaukao.einkbro"
+            android:targetClass="info.plateaukao.einkbro.activity.BrowserActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="sc_history"
+        android:enabled="true"
+        android:icon="@drawable/qc_history"
+        android:shortcutShortLabel="@string/album_title_history"
+        android:shortcutLongLabel="@string/album_title_history"
+        android:shortcutDisabledMessage="@string/album_title_history">
+        <intent
+            android:action="sc_history"
+            android:targetPackage="info.plateaukao.einkbro"
+            android:targetClass="info.plateaukao.einkbro.activity.BrowserActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="sc_home"
+        android:enabled="true"
+        android:shortcutShortLabel="@string/album_title_home"
+        android:shortcutLongLabel="@string/album_title_home"
+        android:shortcutDisabledMessage="@string/album_title_home">
+        <intent
+            android:action="sc_home"
+            android:targetPackage="info.plateaukao.einkbro"
+            android:targetClass="info.plateaukao.einkbro.activity.BrowserActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="sc_disable_adblock"
+        android:enabled="true"
+        android:shortcutShortLabel="@string/sc_disable_adblock_short"
+        android:shortcutLongLabel="@string/sc_disable_adblock_long"
+        android:shortcutDisabledMessage="@string/sc_disable_adblock_disabled">
+        <intent
+            android:action="sc_disable_adblock"
+            android:targetPackage="info.plateaukao.einkbro"
+            android:targetClass="info.plateaukao.einkbro.activity.BrowserActivity" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+</shortcuts>
+        
+

@@ -1,0 +1,4571 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260327T113111Z",
+  "generated_at_utc": "2026-03-27T11:31:11Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260327T113111Z"
+  },
+  "scope": "Dependency intake framework plus first external module integration (EinkBro)",
+  "highlights": [
+    "Added dependency_intake contract, guard and generated docs interface",
+    "Wired dependency-intake gate into Makefile, CI contract and hard-cutover",
+    "Integrated EinkBro as pinned vendor snapshot under third_party/einkbro"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": ".github/pull_request_template.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": ".github/workflows/guard-gates.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "AGENTS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "Makefile",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/agent_ruleset.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/ci_contract.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/decision_trace.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/dependency_intake.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/doc_contract.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/generation_plan.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/handover.schema.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/roadmap.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/ssot.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "docs/AGENT_RULESET.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "docs/DELIVERY_GATES.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "docs/DEPENDENCY_INTAKE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "docs/README.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "docs/V2_ssot.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "docs/archive/.gitkeep",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/.gitkeep",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260327T111531Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260327T112528Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/generate.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/guards/ci-contract-guard.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/guards/decision-guard.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/guards/dependency-intake-guard.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/guards/handover-guard.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/guards/hard-cutover-guard.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/guards/roadmap-guard.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/handover/create-handover.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/.github/ISSUE_TEMPLATE/bug-report-only.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/.github/copilot-instructions.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/.github/workflows/buid-app-workflow.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/.gitignore",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/.mainframer/config",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/.mainframer/ignore",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/.mainframer/localignore",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/.travis.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/CHANGELOG.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/CLAUDE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/CODE_OF_CONDUCT.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/CONTRIBUTORS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/Contributing.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/FAQs.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/LICENSE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/PRIVACY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/README.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/SCREENSHOTS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/UPSTREAM_REF.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/.gitignore",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/README.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/build.gradle",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/consumer-rules.pro",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/proguard-rules.pro",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/scriptlets_src/.gitignore",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/scriptlets_src/README.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/scriptlets_src/gulpfile.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/scriptlets_src/package.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/scriptlets_src/scriptlets.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/AdFilter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/CustomFilter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/Filter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/FilterResult.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/FilterViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/impl/AdFilterImpl.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/impl/BinaryDataStore.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/impl/Constants.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/impl/CustomFilterImpl.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/impl/Detector.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/impl/FilterDataLoader.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/impl/FilterSharedPreferences.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/impl/FilterViewModelImpl.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/script/ElementHiding.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/script/ScriptInjection.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/script/Scriptlet.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/util/Checksum.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/util/HashUtilities.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/util/None.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/util/RuleIterator.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/workers/DownloadWorker.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/java/io/github/edsuns/adfilter/workers/InstallationWorker.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/js/element_hiding.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/js/elemhide_blocked.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/js/extended-css.min.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/js/inject.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/js/scriptlets.min.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ad-filter/src/main/js/scriptlets_inject.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/.gitignore",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/CMakeLists.txt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/build.gradle",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/consumer-rules.pro",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/proguard-rules.pro",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/androidTest/resources/binary/easylist_sample",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/androidTest/resources/binary/easyprivacy_sample",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/adblockclient-lib.cpp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/ad_block_client.cc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/ad_block_client.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/bad_fingerprint.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/bad_fingerprints.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/base.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/context_domain.cc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/context_domain.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/cosmetic_filter.cc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/cosmetic_filter.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/filter.cc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/filter.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/hash_map.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/linked_list.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/no_fingerprint_domain.cc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/no_fingerprint_domain.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/protocol.cc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/ad-block/protocol.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/bloom-filter-cpp/BloomFilter.cpp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/bloom-filter-cpp/BloomFilter.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/bloom-filter-cpp/base.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/hashset-cpp/base.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/hashset-cpp/hashFn.cc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/hashset-cpp/hashFn.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/hashset-cpp/hash_item.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/hashset-cpp/hash_set.cc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/cpp/third-party/hashset-cpp/hash_set.h",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/java/io/github/edsuns/adblockclient/AdBlockClient.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/java/io/github/edsuns/adblockclient/Client.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/java/io/github/edsuns/adblockclient/MatchResult.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/adblock-client/src/main/java/io/github/edsuns/adblockclient/ResourceType.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/lint-baseline.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/proguard-rules.txt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/schemas/de.baumann.browser.database.AppDatabase/2.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/schemas/info.plateaukao.einkbro.database.AppDatabase/2.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/schemas/info.plateaukao.einkbro.database.AppDatabase/3.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/schemas/info.plateaukao.einkbro.database.AppDatabase/4.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/schemas/info.plateaukao.einkbro.database.AppDatabase/5.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/schemas/info.plateaukao.einkbro.database.AppDatabase/6.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/schemas/info.plateaukao.einkbro.database.AppDatabase/7.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/MozReadability.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/chat.html",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/eVoiceList.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/fix_scrolling.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/get_remaining_images.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/get_selected_text_with_context.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/github_include_fragment.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/highlight.css",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/process_text_nodes.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/readerview.css",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/recent_bookmarks.html",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/select_paragraph.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/select_sentence.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/text_node_monitor.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/text_selection_change.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/text_selection_highlight.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/translate_by_paragraph.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/translate_image_overlay.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/translate_processing.html",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/translated_image.html",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/verticalReaderview.css",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/video_auto_fullscreen.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/assets/zoom-text-wrap-reflow.js",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/EinkBroApplication.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/activity/AdBlockSettingActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/activity/BrowserActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/activity/DataListActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/activity/DictActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/activity/EpubReaderActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/activity/ExtraBrowserActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/activity/GptActionsActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/activity/GptQueryListActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/activity/HighlightsActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/activity/KeyHandler.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/activity/SettingActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/activity/ToolbarConfigActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/AlbumController.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/BaseWebConfig.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/BrowserContainer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/BrowserController.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/ChatWebInterface.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/DataItemInterface.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/EBClickHandler.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/EBDownloadListener.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/EBWebChromeClient.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/JsWebInterface.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/LongPressGestureListener.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/NinjaWebViewClient.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/browser/WebContentPostProcessor.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/caption/DualCaptionProcessor.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/caption/TimedText.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/Bookmark.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/BookmarkDao.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/ChatGptQuery.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/ChatGptQueryDao.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/DomainConfiguration.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/DomainConfigurationDao.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/FaviconInfo.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/Highlight.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/History.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/Record.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/RecordDb.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/RecordHelper.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/TranslationCache.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/database/TranslationCacheDao.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/epub/BookTextMapper.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/epub/Epub.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/epub/EpubCoverParser.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/epub/EpubFileInfo.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/epub/EpubManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/epub/EpubParser.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/epub/EpubReaderListener.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/epub/EpubReaderView.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/epub/EpubXMLFileParser.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/epub/HelperExtensions.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/epub/SelectedTextInfo.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/preference/AlbumInfo.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/preference/ChatGPTActionInfo.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/preference/ConfigManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/preference/CustomFontInfo.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/preference/RecentBookmark.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/preference/SplitSearchItemInfo.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/preference/TouchAreaType.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/search/SearchEngine.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/search/SplitSearchListType.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/search/suggestion/DuckDuckGoSuggestionsRepository.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/search/suggestion/GoogleSuggestionsRepository.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/search/suggestion/SearchSuggestionViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/search/suggestion/SearchSuggestionsRepository.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/service/ClearService.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/service/InstapaperRepository.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/service/OpenAiRepository.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/service/TranslateRepository.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/service/TtsManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/service/data/GeminiData.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/setting/SettingComposeData.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/setting/SettingComposeUi.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/task/SaveScreenshotTask.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/tts/ByteArrayMediaSource.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/tts/CustomMediaPlayer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/tts/ETts.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/tts/entity/VoiceItem.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/tts/entity/VoiceTag.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/unit/BackupUnit.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/unit/BrowserUnit.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/unit/HelperUnit.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/unit/IntentUnit.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/unit/LocaleManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/unit/RecordUnit.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/unit/ShareUtil.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/unit/ViewUnit.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/util/Constants.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/util/CustomExceptionHandler.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/util/DebugT.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/util/KeyHandler.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/util/KeyHandlingManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/util/PdfDocumentAdapter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/util/TranslationLanguage.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/util/WebViewUtil.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/Album.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/EBToast.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/EBWebView.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/GuestureType.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/MainActivityLayout.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/MainContentLayout.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/MultitouchListener.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/SwipeTouchListener.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/TranslationPanelView.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/TwoPaneLayout.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/ZoomableFrameLayout.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/compose/AutoCompleteTextField.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/compose/BrowseHistoryList.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/compose/HistoryAndTabs.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/compose/MyTheme.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/compose/SearchBar.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/compose/SelectableItem.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/compose/Shapes.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/compose/Toolbar.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/data/MenuInfo.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/BookmarkEditDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/DialogManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/ListSettingDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/PrinterDocumentPaperSizeDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/ReceiveDataDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/SendLinkDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/ShortcutEditDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/TextInputDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/TranslationLanguageDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/TtsLanguageDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/ActionModeView.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/AuthenticationDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/BookmarkContextMenuDlgFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/BookmarksDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/ComposeDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/ContextMenuDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/DraggableComposeDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/ETtsVoiceDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/FastToggleDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/FontBoldnessDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/FontDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/HighlightStyleDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/LanguageSettingDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/MenuDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/PageAiActionDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/ReaderFontDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/ShowEditGptActionDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/ToolbarConfigDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/TouchAreaDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/TranslateDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/TranslationConfigDlgFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/dialog/compose/TtsSettingDialogFragment.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/handlers/GestureHandler.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/handlers/MenuActionHandler.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/handlers/ToolbarActionHandler.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/toolbaricons/ToolbarAction.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/viewControllers/ComposeToolbarViewController.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/viewControllers/FabImageViewController.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/viewControllers/OverviewDialogController.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/viewControllers/TouchAreaViewController.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/view/viewControllers/TwoPaneController.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/viewmodel/ActionModeMenuViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/viewmodel/AlbumViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/viewmodel/BookmarkViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/viewmodel/ExternalSearchViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/viewmodel/GptQueryViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/viewmodel/HighlightViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/viewmodel/InstapaperViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/viewmodel/RemoteConnViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/viewmodel/SplitSearchViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/viewmodel/TranslationViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/java/info/plateaukao/einkbro/viewmodel/TtsViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable-hdpi/qc_bookmarks.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable-hdpi/qc_history.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable-mdpi/qc_bookmarks.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable-mdpi/qc_history.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable-xhdpi/qc_bookmarks.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable-xhdpi/qc_history.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable-xxhdpi/qc_bookmarks.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable-xxhdpi/qc_history.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable-xxxhdpi/qc_bookmarks.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable-xxxhdpi/qc_history.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/background_transparent_with_border.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/background_with_border.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/background_with_border_margin.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/button_border_bg.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/button_border_bg_dash.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/gesture_tap.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_add_folder.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_black_font_off.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_black_font_on.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_bold_font.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_bold_font_active.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_book.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_chat_gpt.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_copy.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_data.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_drag.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_earth.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_folder.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_font_decrease.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_font_increase.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_gemini.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_grid_view.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_hamburger.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_highlight.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_highlight_color.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_history.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_history_activated.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_home.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_incognito.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_link_here.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_minimize.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_ollama.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_page_count.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_papago.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_paragraph.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_paste.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_phone.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_reader.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_receive.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_remove.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_remove_all_tabs.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_reselect.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_rotate.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_send.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_sort.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_split_screen.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_split_screen_vertical.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_stop.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_sync.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_sync_scroll.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_tab_plus_activated.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_toolbar.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_touch_direction_down.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_touch_direction_left.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_touch_direction_right.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_touch_direction_up.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_touch_disabled.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_touch_enabled.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_touch_left.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_touch_left_right.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_touch_long.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_touch_middle_left_right.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_touch_right.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_translate.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_translate_google.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_tts.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_underscore.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_voice_off.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_white_background.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/ic_white_background_active.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_arrow_down_gest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_arrow_left_gest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_arrow_right_gest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_arrow_up_gest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_backup.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_bookmark.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_close.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_copyright.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_delete.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_desktop.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_desktop_activate.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_dots.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_earth.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_edit.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_exit.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_export.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_info.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_list.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_menu_save.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_menu_share.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_overflow.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_plus.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_refresh.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_search.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_tab_plus.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_tab_unselected.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/icon_ui.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/item_bg_selector.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/roundcorner.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/selected.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/selected_border_bg.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/top_border_bg.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/touch_area_border.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/drawable/unselected.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/layout-v26/dialog_edit_extension.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/menu/menu_clear.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/menu/menu_ereader.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-hdpi/ic_launcher.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-hdpi/ic_launcher_round.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-mdpi/ic_launcher.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-mdpi/ic_launcher_round.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-xhdpi/ic_launcher.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/styles.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-af/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-ar/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-ca/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-cs/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-da/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-de/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-el/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-es/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-fi/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-fr/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-he/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-hu/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-in/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-it/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-ja/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-ko/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-night/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-night/styles.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-nl/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-no/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-pl/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-pt/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-ro/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-ru/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-sat/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-sr/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-sv/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-tr/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-uk/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-vi/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-zh-rCN/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values-zh-rTW/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values/attrs.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values/colors.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values/dimens.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values/ic_launcher_background.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values/ids.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/values/styles.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/xml-v25/shortcuts.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/xml/backup_descriptor.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/xml/filepaths.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/xml/network_security_config.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/app/src/main/res/xml/searchable.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/crowdin.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/fastlane/metadata/android/en-US/changelogs/853.txt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/fastlane/metadata/android/en-US/full_description.txt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/fastlane/metadata/android/en-US/images/featureGraphic.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/fastlane/metadata/android/en-US/images/icon.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/fastlane/metadata/android/en-US/images/phoneScreenshots/1_1.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/fastlane/metadata/android/en-US/images/phoneScreenshots/1_3.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/fastlane/metadata/android/en-US/images/phoneScreenshots/1_4.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/fastlane/metadata/android/en-US/images/phoneScreenshots/1_5.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/fastlane/metadata/android/en-US/images/phoneScreenshots/1_6.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/fastlane/metadata/android/en-US/images/phoneScreenshots/7.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/fastlane/metadata/android/en-US/short_description.txt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/fastlane/metadata/android/en-US/title.txt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/gradle.properties",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/gradle/libs.versions.toml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/gradle/wrapper/gradle-wrapper.jar",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/gradle/wrapper/gradle-wrapper.properties",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/gradlew.bat",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/gradlew",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ic_launcher-playstore.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/ideas.txt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/mainframer.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/screenshots/01_main_browsing.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/screenshots/02_menu_panel.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/screenshots/03_translate.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/screenshots/04_chat_with_web.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/screenshots/05_bookmarks.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/screenshots/06_toolbar_config.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/screenshots/07_touch_setting.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/screenshots/08_settings.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/screenshots/09_vertical_read.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/screenshots/10_font_size.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/screenshots/11_bookmarks_grid.png",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/settings.gradle",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/test_server/index.html",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/test_server/inner_scroll.html",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/tools/screenshots.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/tools/settings_arch.excalidraw",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/CODEOWNERS",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/ISSUE_TEMPLATE/automated-workflow.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/README.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/copilot-instructions.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/copilot-ruleset.json",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/copilot/agents.json",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/copilot/mcp.json",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/copilot/workflow-automation.json",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/settings.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/agent-pr-ready.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/android-build.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/auto-review-request.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/build-app.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/codex-agent.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/copilot-agent.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/copilot-permissions.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/generate-keystore-secrets.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/orchestrator.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/prepare-fix-task.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": ".github/workflows/sonarqube-analysis.yml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "AGENT_QUICK_REFERENCE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "AGENT_SETUP.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "BUILD_ISSUE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "CERTIFICATE_VPN_IMPROVEMENTS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "COMPLETE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "COMPREHENSIVE_APP_REVIEW.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "COPILOT_RULESET_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "COPILOT_SETUP.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "FEATURE_STATUS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "IMPLEMENTATION_DETAILS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "IMPLEMENTATION_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "IMPLEMENTATION_SUMMARY_HTTPS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "IMPLEMENTATION_SUMMARY_SONARQUBE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "LIBRARY_INTEGRATION.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "MAVEN_TUN2SOCKS_INTEGRATION.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "MVP_COMPLETION_REPORT.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "PHASE2_IMPLEMENTATION_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "SOLUTION_RULESET_PROBLEM.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "SONARQUBE_FIX_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "SONARQUBE_LINT_FIX.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "SONARQUBE_QUICK_START.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "SONARQUBE_SSL_FIX.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "TESTING_GUIDE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "TUN2SOCKS_IMPLEMENTATION.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "VPN_FUNCTIONALITY_REVIEW.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "VPN_IMPLEMENTATION_PLAN.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "VPN_INTEGRATION_COMPLETE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "WEBAUTHN_ERROR_HANDLING_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/proguard-rules.pro",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/assets/tracking.js",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/FishitApp.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/MainActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/capture/CaptureSessionManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/capture/CaptureStorageManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/capture/HarSessionStore.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/capture/SessionToEngineAdapter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/capture/TrafficInterceptWebView.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/cert/CertificateManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/data/AndroidProjectStore.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/di/AppContainer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/di/LocalAppContainer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/export/ExportManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/export/SessionExportManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/import/ImportManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/import/httpcanary/AuthFlowAnalyzer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/import/httpcanary/HttpCanaryImportManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/import/httpcanary/HttpCanaryModels.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/import/httpcanary/HttpCanaryZipImporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/import/httpcanary/WebsiteMapBuilder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/proxy/MitmProxyServer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/proxy/ProxyCaptureManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/api/ApiBlueprintScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/api/EndpointDetailScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/capture/CaptureWebViewScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/common/SimpleVmFactory.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/export/ExportDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/graph/GraphVisualization.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/BrowserScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/ChainsScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/GraphDiffScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/GraphScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/NodeTaggingDialog.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/ProjectHomeScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/ProjectViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/project/SessionsScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/projects/ProjectsScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/projects/ProjectsViewModel.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/session/CredentialsScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/session/SessionDetailScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/session/SessionManagerScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/session/UnifiedTimelineScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/settings/SettingsScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/ui/settings/WebViewDiagnosticsScreen.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/AuthAwareCookieManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/CookieUtils.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/CustomTabsManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/HybridAuthFlowManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/JavaScriptBridge.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/TrackingScript.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/WebAuthnDetector.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/WebViewDebugManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/WebViewDiagnosticsManager.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/java/dev/fishit/mapper/android/webview/WebViewProxyController.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/res/values/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/res/values/themes.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/res/xml/file_paths.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/main/res/xml/network_security_config.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/test/java/dev/fishit/mapper/android/export/SessionExportManagerTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/test/java/dev/fishit/mapper/android/webview/HybridAuthFlowTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "androidApp/src/test/java/dev/fishit/mapper/android/webview/WebAuthnErrorDetectionTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "codex/CHECKPOINT.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "codex/TODO_QUEUE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/ANDROID_SIGNING_QUICKSTART.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/ANDROID_SIGNING_SETUP.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/ARCHITECTURE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/AUTOMATIC_RETURN_FLOW.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/BUILD_WORKFLOW.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/COPILOT_RULESET.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/COPILOT_RULESET_IMPORT.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/COPILOT_RULESET_MIGRATION.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/COPILOT_RULESET_QUICKSTART.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/FEATURE_TRACKING_README.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/GITHUB_ISSUE_TEMPLATE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/GITHUB_RULESETS_ERKLAERUNG.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/HYBRID_AUTH_FLOW.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/KEYSTORE_WORKFLOW_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/OPEN_FEATURES_ISSUE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/ORCHESTRATOR.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/OUTPUT_STRATEGY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/PRIORITY_3_FEATURES.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/PRIORITY_3_IMPLEMENTATION_SUMMARY.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/SCOPE_API_REVERSE_ENGINEERING.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/SONARQUBE_SETUP.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/TRAFFIC_CAPTURE_STRATEGIES.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/WEBVIEW_DIAGNOSTICS_IMPLEMENTATION.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/WEBVIEW_TROUBLESHOOTING.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/features/HTTPS_TRAFFIC_CAPTURE.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/features/TECHNICAL_IMPLEMENTATION.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/features/UNIFIED_TIMELINE_AND_CREDENTIALS.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "docs/new_vpn_roadmap.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "full-build.log",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "gradle.properties",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "gradle/libs.versions.toml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "gradle/wrapper/gradle-wrapper.jar",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "gradle/wrapper/gradle-wrapper.properties",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "gradlew.bat",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "gradlew",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "keystore/.gitignore",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "schema/contract.schema.json",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/README.md",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/cms_request.zip",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/codex-setup.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/generate-keystore.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/maintenance.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/orchestrator/transition.mjs",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/quick-start.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/validate-env.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "scripts/verify-ruleset.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "settings-gradle.lockfile",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "settings.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/contract/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/contract/src/androidMain/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/contract/src/commonMain/kotlin/dev/fishit/mapper/contract/Placeholder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/androidMain/AndroidManifest.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/CredentialExtractor.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/ExportBundleBuilder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/FormAnalyzer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/GraphDiff.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/HubDetector.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/IdGenerator.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/MappingEngine.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/RedirectDetector.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/TimelineBuilder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/UrlNormalizer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/WebsiteMapBuilder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/ApiBlueprint.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/ApiBlueprintBuilder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/AuthPatternDetector.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/EndpointExtractor.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/EngineTypes.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/FlowDetector.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/api/ParameterAnalyzer.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/ApiExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/CopilotReadyExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/ExportOrchestrator.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/GitHubRepoGenerator.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/HarExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/MermaidSequenceExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/NormalizedTimeline.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonMain/kotlin/dev/fishit/mapper/engine/export/StateGraphExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonTest/kotlin/dev/fishit/mapper/engine/CredentialExtractorTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonTest/kotlin/dev/fishit/mapper/engine/TimelineBuilderTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonTest/kotlin/dev/fishit/mapper/engine/api/EngineTypesFlowTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonTest/kotlin/dev/fishit/mapper/engine/export/ExportPipelineTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonTest/kotlin/dev/fishit/mapper/engine/recording/ChainpointAndEditingTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "shared/engine/src/commonTest/kotlin/dev/fishit/mapper/engine/recording/RecordingFlowTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "tools/codegen-contract/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "tools/codegen-contract/src/main/kotlin/dev/fishit/mapper/codegen/Args.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "tools/codegen-contract/src/main/kotlin/dev/fishit/mapper/codegen/ContractGenerator.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "tools/codegen-contract/src/main/kotlin/dev/fishit/mapper/codegen/ContractSchemaLoader.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "tools/codegen-contract/src/main/kotlin/dev/fishit/mapper/codegen/Main.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "D",
+      "status": "deleted",
+      "path": "tools/codegen-contract/src/main/kotlin/dev/fishit/mapper/codegen/Schema.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": ".devcontainer/devcontainer.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": ".devcontainer/setup.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": ".gitignore",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "README.md",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/ROADMAP.md",
+      "old_path": null
+    }
+  ]
+}

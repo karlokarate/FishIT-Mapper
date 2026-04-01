@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "decisions": [
+    {
+      "id": "DEC-0001",
+      "aliases": [
+        "ADR-0001",
+        "DOC-CONTRACT-ROOTS"
+      ],
+      "title": "Contracts are the only normative source of truth",
+      "status": "accepted",
+      "date": "2026-03-27",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "All normative rules and structures must live in contracts/."
+    },
+    {
+      "id": "DEC-0002",
+      "aliases": [
+        "ADR-0002",
+        "DOCS-GENERATED-ONLY"
+      ],
+      "title": "docs/ is generated team interface and archive only",
+      "status": "accepted",
+      "date": "2026-03-27",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Human-facing docs are generated views or archival artifacts, never normative."
+    },
+    {
+      "id": "DEC-0003",
+      "aliases": [
+        "ADR-0003",
+        "GENERATOR-HARD-GATES"
+      ],
+      "title": "Drift is blocked by hard local guards",
+      "status": "accepted",
+      "date": "2026-03-27",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "generate --check, decision-guard, and hard-cutover-guard are mandatory local gates."
+    }
+  ]
+}

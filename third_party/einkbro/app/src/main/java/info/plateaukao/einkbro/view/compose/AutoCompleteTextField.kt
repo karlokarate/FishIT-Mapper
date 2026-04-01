@@ -1,0 +1,277 @@
+package info.plateaukao.einkbro.view.compose
+
+import android.annotation.SuppressLint
+import android.view.KeyEvent.KEYCODE_ENTER
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.Icon
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import info.plateaukao.einkbro.R
+import info.plateaukao.einkbro.database.BookmarkManager
+import info.plateaukao.einkbro.database.Record
+import info.plateaukao.einkbro.view.dialog.compose.HorizontalSeparator
+import kotlinx.coroutines.launch
+
+@Composable
+fun AutoCompleteTextField(
+    focusRequester: FocusRequester,
+    bookmarkManager: BookmarkManager? = null,
+    shouldReverse: Boolean = false,
+    isWideLayout: Boolean = false,
+    text: MutableState<TextFieldValue>,
+    recordList: MutableState<List<Record>>,
+    hasCopiedText: Boolean = false,
+    onTextSubmit: (String) -> Unit,
+    onTextChange: (String) -> Unit,
+    onPasteClick: () -> Unit,
+    closeAction: () -> Unit,
+    onRecordClick: (Record) -> Unit,
+) {
+    val requester = remember { focusRequester }
+
+    Column(
+        Modifier
+            .background(Color.Transparent)
+            .clickable { closeAction() },
+        verticalArrangement = if (shouldReverse) Arrangement.Bottom else Arrangement.Top
+    ) {
+        if (!shouldReverse) {
+            TextInputBar(requester, text, onTextSubmit, onTextChange, hasCopiedText, onPasteClick, closeAction)
+        }
+
+        HorizontalSeparator()
+        BrowseHistoryList(
+            modifier = Modifier
+                .weight(1F, fill = false)
+                .background(MaterialTheme.colors.background),
+            records = recordList.value,
+            bookmarkManager = bookmarkManager,
+            shouldReverse = shouldReverse,
+            shouldShowTwoColumns = isWideLayout,
+            onClick = onRecordClick,
+            onLongClick = { _, _ -> },
+            onAppendClick = { suggestion ->
+                val resultString = "$suggestion "
+                text.value = TextFieldValue(resultString, selection = TextRange(resultString.length))
+            },
+        )
+        HorizontalSeparator()
+
+        if (shouldReverse) {
+            TextInputBar(requester, text, onTextSubmit, onTextChange, hasCopiedText, onPasteClick, closeAction)
+        }
+    }
+}
+
+@Composable
+private fun TextInputBar(
+    focusRequester: FocusRequester,
+    text: MutableState<TextFieldValue>,
+    onTextSubmit: (String) -> Unit,
+    onTextChange: (String) -> Unit,
+    hasCopiedText: Boolean,
+    onPasteClick: () -> Unit,
+    onDownClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .height(50.dp)
+            .fillMaxWidth()
+            .background(MaterialTheme.colors.background),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.End
+    ) {
+        TextInput(
+            modifier = Modifier.weight(1F),
+            focusRequester,
+            state = text,
+            onValueSubmit = onTextSubmit,
+            onValueChange = onTextChange,
+        )
+
+        TextBarIcon(
+            iconResId = R.drawable.icon_close,
+            onClick = { text.value = TextFieldValue("") })
+        if (hasCopiedText) {
+            TextBarIcon(iconResId = R.drawable.ic_paste, onClick = onPasteClick)
+        }
+        TextBarIcon(iconResId = R.drawable.icon_arrow_down_gest, onClick = onDownClick)
+    }
+}
+
+@Composable
+fun TextInput(
+    modifier: Modifier,
+    focusRequester: FocusRequester,
+    state: MutableState<TextFieldValue>,
+    onValueSubmit: (String) -> Unit,
+    onValueChange: (String) -> Unit,
+) {
+    val scrollState = remember { androidx.compose.foundation.ScrollState(0) }
+    val coroutineScope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var isFocused by remember { mutableStateOf(false) }
+    val cursorColor = MaterialTheme.colors.onBackground // Cache the color outside Canvas
+
+    Box(modifier = modifier.padding(start = 5.dp)) {
+        BasicTextField(
+            value = state.value,
+            singleLine = true,
+            modifier = modifier
+                .fillMaxWidth()
+                .focusRequester(focusRequester)
+                .horizontalScroll(scrollState)
+                .onKeyEvent {
+                    if (it.nativeKeyEvent.keyCode == KEYCODE_ENTER) {
+                        onValueSubmit(state.value.text)
+                        true
+                    }
+                    false
+                }
+                .onFocusChanged { focusState ->
+                    isFocused = focusState.isFocused
+                    if (focusState.isFocused) {
+                        val text = state.value.text
+                        state.value = state.value.copy(
+                            selection = TextRange(0, text.length)
+                        )
+                        coroutineScope.launch {
+                            scrollState.scrollTo(scrollState.maxValue)
+                        }
+                    }
+                },
+            textStyle = TextStyle.Default.copy(color = MaterialTheme.colors.onBackground),
+            cursorBrush = SolidColor(Color.Transparent), // Hide default cursor
+            onValueChange = { state.value = it; onValueChange(it.text) },
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Search,
+                autoCorrectEnabled = false,
+            ),
+            keyboardActions = KeyboardActions(onSearch = { onValueSubmit(state.value.text) }),
+            onTextLayout = { textLayoutResult = it },
+
+            )
+
+        // Custom static cursor - draws a non-blinking cursor line
+        if (isFocused && textLayoutResult != null) {
+            val cursorPosition = state.value.selection.start
+            val textLength = textLayoutResult!!.layoutInput.text.length
+            // Ensure cursor position is within valid bounds for the current text layout
+            // Use coerceIn to ensure the cursor position is always within valid range
+            val safeCursorPosition = cursorPosition.coerceIn(0, textLength)
+
+            // draw cursor when position is 0 and text is empty too
+            if (safeCursorPosition == 0 && textLength == 0) {
+                Canvas(modifier = Modifier.matchParentSize()) {
+                    drawLine(
+                        color = cursorColor,
+                        start = Offset(x = 0f, y = 0f),
+                        end = Offset(x = 0f, y = size.height),
+                        strokeWidth = with(density) { 2.dp.toPx() }
+                    )
+                }
+            } else if (safeCursorPosition <= textLength) {
+                val cursorOffset = textLayoutResult!!.getCursorRect(safeCursorPosition)
+                Canvas(modifier = Modifier.matchParentSize()) {
+                    drawLine(
+                        color = cursorColor,
+                        start = Offset(
+                            x = cursorOffset.left - scrollState.value.toFloat() + 2F,
+                            y = cursorOffset.top
+                        ),
+                        end = Offset(
+                            x = cursorOffset.left - scrollState.value.toFloat() + 2F,
+                            y = cursorOffset.bottom
+                        ),
+                        strokeWidth = with(density) { 2.dp.toPx() }
+                    )
+                }
+            }
+        }
+
+        if (state.value.text.isEmpty()) {
+            Text(
+                stringResource(R.string.main_omnibox_input_hint),
+                color = MaterialTheme.colors.onBackground
+            )
+        }
+    }
+}
+
+@Composable
+fun TextBarIcon(
+    iconResId: Int,
+    onClick: () -> Unit,
+) {
+    Icon(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(40.dp)
+            .clickable { onClick() }
+            .padding(8.dp),
+        imageVector = ImageVector.vectorResource(id = iconResId),
+        contentDescription = null,
+        tint = MaterialTheme.colors.onBackground
+    )
+}
+
+@SuppressLint("UnrememberedMutableState")
+@Preview
+@Composable
+fun PreviewTextBar() {
+    MyTheme {
+        AutoCompleteTextField(
+            text = mutableStateOf(TextFieldValue("")),
+            onTextSubmit = {},
+            onPasteClick = {},
+            closeAction = {},
+            focusRequester = FocusRequester(),
+            recordList = mutableStateOf(listOf()),
+            onRecordClick = {},
+            onTextChange = {},
+        )
+    }
+}

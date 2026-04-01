@@ -1,0 +1,9 @@
+{
+  "name": "FishIT Runtime Toolkit",
+  "source_url": "https://github.com/karlokarate/FishIT-Player",
+  "source_path": "scripts/device",
+  "integration_mode": "adapted_copy",
+  "pinned_ref": "HEAD",
+  "adapted_for": "dev.fishit.mapper.wave01",
+  "fetched_at_utc": "2026-03-27T12:00:00Z"
+}

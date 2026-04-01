@@ -1,30 +1,25 @@
-.gradle/
-**/build/
-local.properties
-*.iml
-.idea/
+# Operating system files
 .DS_Store
+Thumbs.db
 
-# Android
-**/captures/
-**/.externalNativeBuild/
-**/.cxx/
-**/*.keystore
-**/*.jks
+# Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
 
-# Generated contract sources (moved from build/ to src/generated/ for reliability)
-shared/contract/src/generated/
+# Environment and secrets
+.env
+.env.*
 
-# Archive files
-*.zip
-*.tar.gz
-*.rar
+# Logs
+*.log
 
-# HTTP Traffic Captures (HTTPCatcher, mitmproxy, etc.)
-scripts/cms_requests/
-scripts/cms_traffic/
-*.hcy
-*.har
-
-# MCP Logs
-.github/copilot/mcp.log
+# Build and cache directories
+build/
+dist/
+out/
+.gradle/
+.cache/
+node_modules/
+artifacts/

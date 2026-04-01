@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260327T120730Z",
+  "generated_at_utc": "2026-03-27T12:07:30Z",
+  "agent": {
+    "name": "Codex",
+    "session_label": "wave01-runtime-set-adaptation-followup"
+  },
+  "scope": "FishIT runtime-set integration for mapper completed and stabilized by fixing dependency intake guard metadata contract and re-running wave/gate validation.",
+  "highlights": [
+    "Fixed runtime upstream reference field mismatch for dependency-intake guard compatibility.",
+    "Validated full governance gates with make guard (all passed).",
+    "Confirmed required runtime dependencies available in codespace (adb and tmux).",
+    "Rebuilt Wave-01 debug artifact successfully via scripts/waves/build-wave01.sh.",
+    "Executed device smoke script; current environment reports no online device attached."
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/UPSTREAM_REF.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260327T120730Z.json",
+      "old_path": null
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include
+        domain="database"
+        path="einkbro_db" />
+    <include
+        domain="database"
+        path="Ninja4.db" />
+</full-backup-content>

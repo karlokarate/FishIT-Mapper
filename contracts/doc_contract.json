@@ -1,0 +1,110 @@
+{
+  "contract_id": "fishit-mapper-doc-contract",
+  "version": 1,
+  "principles": {
+    "contracts_root": "contracts",
+    "docs_root": "docs",
+    "contracts_are_normative": true,
+    "docs_are_generated_or_archived_only": true,
+    "generator_driven_derivation_required": true,
+    "session_handover_machine_readable_required": true,
+    "phase_zero_agent_governance_first_required": true
+    ,
+    "dependency_intake_contract_required": true
+  },
+  "canonical_sources": [
+    {
+      "id": "ssot.v2",
+      "path": "contracts/ssot.yaml",
+      "generated_outputs": [
+        "docs/V2_ssot.yaml"
+      ]
+    },
+    {
+      "id": "decision.trace",
+      "path": "contracts/decision_trace.json",
+      "generated_outputs": []
+    },
+    {
+      "id": "session.handover.schema",
+      "path": "contracts/handover.schema.json",
+      "generated_outputs": [
+        "handovers/**"
+      ]
+    },
+    {
+      "id": "delivery.roadmap",
+      "path": "contracts/roadmap.json",
+      "generated_outputs": [
+        "docs/ROADMAP.md"
+      ]
+    },
+    {
+      "id": "agent.ruleset",
+      "path": "contracts/agent_ruleset.json",
+      "generated_outputs": [
+        "docs/AGENT_RULESET.md"
+      ]
+    },
+    {
+      "id": "ci.contract",
+      "path": "contracts/ci_contract.json",
+      "generated_outputs": [
+        "docs/DELIVERY_GATES.md"
+      ]
+    },
+    {
+      "id": "dependency.intake",
+      "path": "contracts/dependency_intake.json",
+      "generated_outputs": [
+        "docs/DEPENDENCY_INTAKE.md"
+      ]
+    }
+  ],
+  "allowed_docs_paths": [
+    "docs/README.md",
+    "docs/V2_ssot.yaml",
+    "docs/ROADMAP.md",
+    "docs/AGENT_RULESET.md",
+    "docs/DELIVERY_GATES.md",
+    "docs/DEPENDENCY_INTAKE.md",
+    "docs/archive/**"
+  ],
+  "gates": [
+    {
+      "id": "generate-check",
+      "command": "./scripts/generate.sh --check",
+      "level": "hard"
+    },
+    {
+      "id": "decision-guard",
+      "command": "./scripts/guards/decision-guard.sh",
+      "level": "hard"
+    },
+    {
+      "id": "hard-cutover-guard",
+      "command": "./scripts/guards/hard-cutover-guard.sh",
+      "level": "hard"
+    },
+    {
+      "id": "handover-guard",
+      "command": "./scripts/guards/handover-guard.sh",
+      "level": "hard"
+    },
+    {
+      "id": "roadmap-guard",
+      "command": "./scripts/guards/roadmap-guard.sh",
+      "level": "hard"
+    },
+    {
+      "id": "ci-contract-guard",
+      "command": "./scripts/guards/ci-contract-guard.sh",
+      "level": "hard"
+    },
+    {
+      "id": "dependency-intake-guard",
+      "command": "./scripts/guards/dependency-intake-guard.sh",
+      "level": "hard"
+    }
+  ]
+}

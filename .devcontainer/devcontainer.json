@@ -1,14 +1,16 @@
 {
   "name": "FishIT-Mapper Development",
-  "image": "mcr.microsoft.com/devcontainers/java:17-bookworm",
+  "image": "mcr.microsoft.com/devcontainers/java:21",
   "features": {
-    "ghcr.io/devcontainers/features/java:1": {
-      "version": "17",
-      "installGradle": "true",
-      "gradleVersion": "8.5"
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false
     },
     "ghcr.io/devcontainers/features/node:1": {
       "version": "20"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11",
+      "installJupyterlab": true
     },
     "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "latest"
@@ -33,9 +35,21 @@
         "eamodio.gitlens",
         "redhat.vscode-yaml",
         "yzhang.markdown-all-in-one",
-        "Gruntfuggly.todo-tree"
+        "Gruntfuggly.todo-tree",
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "ms-toolsai.jupyter-keymap",
+        "ms-toolsai.jupyter-renderers",
+        "openai.chatgpt"
       ],
       "settings": {
+        "java.configuration.runtimes": [
+          {
+            "name": "JavaSE-21",
+            "path": "/usr/lib/jvm/msopenjdk-current",
+            "default": true
+          }
+        ],
         "github.copilot.enable": {
           "*": true,
           "kotlin": true,
@@ -43,6 +57,32 @@
           "json": true,
           "markdown": true,
           "yaml": true
+        },
+        "github.copilot.chat.mcp.enabled": true,
+        "mcp": {
+          "servers": {
+            "github": {
+              "command": "docker",
+              "args": [
+                "run",
+                "-i",
+                "--rm",
+                "-e",
+                "GITHUB_PERSONAL_ACCESS_TOKEN",
+                "ghcr.io/github/github-mcp-server"
+              ],
+              "env": {
+                "GITHUB_PERSONAL_ACCESS_TOKEN": "${localEnv:GITHUB_TOKEN}"
+              }
+            },
+            "sequential-thinking": {
+              "command": "npx",
+              "args": [
+                "-y",
+                "@modelcontextprotocol/server-sequential-thinking"
+              ]
+            }
+          }
         },
         "editor.formatOnSave": true,
         "editor.tabSize": 4,
@@ -89,9 +129,23 @@
     8080,
     8888
   ],
+  "portsAttributes": {
+    "8888": {
+      "label": "JupyterLab",
+      "protocol": "http",
+      "onAutoForward": "notify",
+      "elevateIfNeeded": true
+    }
+  },
   "postCreateCommand": "bash .devcontainer/setup.sh",
   "postStartCommand": "echo '🚀 FishIT-Mapper ready!'",
   "remoteUser": "vscode",
+  "remoteEnv": {
+    "JAVA_HOME": "/usr/lib/jvm/msopenjdk-current",
+    "ANDROID_HOME": "/home/vscode/.android-sdk",
+    "ANDROID_SDK_ROOT": "/home/vscode/.android-sdk",
+    "PATH": "${containerEnv:PATH}:/home/vscode/.android-sdk/cmdline-tools/latest/bin:/home/vscode/.android-sdk/platform-tools"
+  },
   "mounts": [
     "source=fishit-gradle-cache,target=/home/vscode/.gradle,type=volume"
   ],

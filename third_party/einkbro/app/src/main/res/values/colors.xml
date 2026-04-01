@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+
+    <color name="lightGray">#AAAAAA</color>
+
+    <color name="color_transparent">@android:color/transparent</color>
+    <color name="color_light">#fafafa</color>
+    <color name="color_hint">#E0E0E0</color>
+
+</resources>

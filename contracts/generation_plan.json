@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "pipelines": [
+    {
+      "id": "ssot-doc-interface",
+      "type": "copy_with_header",
+      "source": "contracts/ssot.yaml",
+      "target": "docs/V2_ssot.yaml",
+      "header": [
+        "# GENERATED FILE - DO NOT EDIT DIRECTLY.",
+        "# source: contracts/ssot.yaml",
+        "# regenerate via: ./scripts/generate.sh",
+        ""
+      ]
+    },
+    {
+      "id": "roadmap-doc-interface",
+      "type": "roadmap_markdown",
+      "source": "contracts/roadmap.json",
+      "target": "docs/ROADMAP.md",
+      "header": [
+        "<!-- GENERATED FILE - DO NOT EDIT DIRECTLY. -->",
+        "<!-- source: contracts/roadmap.json -->",
+        "<!-- regenerate via: ./scripts/generate.sh -->",
+        ""
+      ]
+    },
+    {
+      "id": "agent-ruleset-doc-interface",
+      "type": "agent_ruleset_markdown",
+      "source": "contracts/agent_ruleset.json",
+      "target": "docs/AGENT_RULESET.md",
+      "header": [
+        "<!-- GENERATED FILE - DO NOT EDIT DIRECTLY. -->",
+        "<!-- source: contracts/agent_ruleset.json -->",
+        "<!-- regenerate via: ./scripts/generate.sh -->",
+        ""
+      ]
+    },
+    {
+      "id": "delivery-gates-doc-interface",
+      "type": "ci_contract_markdown",
+      "source": "contracts/ci_contract.json",
+      "target": "docs/DELIVERY_GATES.md",
+      "header": [
+        "<!-- GENERATED FILE - DO NOT EDIT DIRECTLY. -->",
+        "<!-- source: contracts/ci_contract.json -->",
+        "<!-- regenerate via: ./scripts/generate.sh -->",
+        ""
+      ]
+    },
+    {
+      "id": "dependency-intake-doc-interface",
+      "type": "dependency_intake_markdown",
+      "source": "contracts/dependency_intake.json",
+      "target": "docs/DEPENDENCY_INTAKE.md",
+      "header": [
+        "<!-- GENERATED FILE - DO NOT EDIT DIRECTLY. -->",
+        "<!-- source: contracts/dependency_intake.json -->",
+        "<!-- regenerate via: ./scripts/generate.sh -->",
+        ""
+      ]
+    }
+  ]
+}

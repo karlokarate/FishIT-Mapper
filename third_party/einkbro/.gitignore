@@ -1,0 +1,27 @@
+# built application files
+# files for the dex VM
+# Java class files
+# generated files
+gen/
+
+.kotlin/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Eclipse project files
+# Android Studio
+.idea/
+.gradle
+build
+*.iml
+app/release
+.DS_Store
+.idea/gradle.xml
+tools/*.png
+
+.externalNativeBuild
+.cxx/
+adblock-client/.cxx
+
+.claude/

@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "1.0",
+  "contractId": "fishit_mapper_runtime_toolkit",
+  "status": "active",
+  "generatedAtUtc": "2026-03-26T00:00:00Z",
+  "trigger": {
+    "chatPhrase": "FISHIT_RUNTIME_TOOLKIT_ON",
+    "shellCommand": "scripts/device/fishit-runtime-toolkit.sh on --profile full"
+  },
+  "entrypoints": {
+    "mainCli": "scripts/device/fishit-runtime-toolkit.sh",
+    "commandMatrix": "scripts/device/anchors/command_matrix.latest.json",
+    "runbook": "scripts/device/toolkit/README_runtime_toolkit.md"
+  },
+  "defaults": {
+    "navigationMode": "hybrid_direct_ui",
+    "daemonProfile": "full",
+    "safetyProfile": "power_mode_default"
+  },
+  "sessions": [
+    {
+      "name": "fishit_rt_logcat",
+      "purpose": "Rotating logcat chunk capture",
+      "required": true
+    },
+    {
+      "name": "fishit_rt_guard",
+      "purpose": "ADB/device/app heartbeat",
+      "required": true
+    },
+    {
+      "name": "fishit_rt_watchdog",
+      "purpose": "Restart missing runtime lanes",
+      "required": true
+    },
+    {
+      "name": "fishit_rt_perf",
+      "purpose": "Periodic perf probes (gfxinfo/framestats/meminfo/top)",
+      "required": true
+    },
+    {
+      "name": "fishit_rt_parser",
+      "purpose": "Incremental event indexing + rollups",
+      "required": true
+    }
+  ],
+  "artifacts": {
+    "activeRoot": "logs/device/runtime-toolkit/current",
+    "archiveRoot": "logs/device/runtime-toolkit/archive",
+    "requiredRollups": [
+      "runtime_health.json",
+      "runtime_perf_summary.json",
+      "runtime_sync_summary.json"
+    ],
+    "inspectWork": {
+      "path": "logs/device/runtime-toolkit/current/snapshots/inspect_work_<UTC>/",
+      "files": [
+        "latest.meta.json",
+        "latest.graph.json",
+        "log_trace.txt",
+        "log_trace_summary.json",
+        "inspect_manifest.json"
+      ]
+    }
+  },
+  "operations": {
+    "nonDestructiveByDefault": true,
+    "forbiddenDefaultSteps": [
+      "adb kill-server",
+      "am start -S"
+    ],
+    "reentry": {
+      "supported": true,
+      "resumeCommand": "scripts/device/fishit-runtime-toolkit.sh resume --target <...>",
+      "inspectWorkCommand": "scripts/device/fishit-runtime-toolkit.sh inspect-work --work-key <...> | --title <...>",
+      "queryEntitiesCommand": "scripts/device/fishit-runtime-toolkit.sh query-entities --entity-type <id|ALL|*> --filters-json <json>"
+    }
+  },
+  "inputStrategyOrder": [
+    "direct_command_ingress",
+    "start_destination_route",
+    "adb_keyboard_paste",
+    "ui_anchor_tap_fallback"
+  ],
+  "optionalCaptureModes": {
+    "uiEvidenceMode": [
+      "off",
+      "minimal",
+      "full"
+    ],
+    "flags": [
+      "--with-screenshot",
+      "--with-perfetto"
+    ],
+    "notes": [
+      "Machine-readable UI evidence is screenshot-free by default.",
+      "Screenshot and perfetto are opt-in for special visual/performance cases."
+    ]
+  },
+  "debugIngress": {
+    "action": "dev.fishit.mapper.wave01.debug.RUNTIME_TOOLKIT_COMMAND",
+    "receiver": "dev.fishit.mapper.wave01.debug.RuntimeToolkitCommandReceiver",
+    "supportedOps": [
+      "open_screen",
+      "open_detail",
+      "set_setting",
+      "inspect_work",
+      "query_entities"
+    ]
+  }
+}

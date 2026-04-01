@@ -1,0 +1,280 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAtUtc": "2026-03-26T14:56:30Z",
+  "sources": {
+    "routes": "apps/mapper-app/app/src/main/AndroidManifest.xml",
+    "benchmarkExtras": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/activity/BrowserActivity.kt",
+    "settingsRepo": "apps/mapper-app/app/src/main/res/values/strings.xml",
+    "fallbackMatrix": "scripts/device/anchors/ui_anchor_matrix_latest.json"
+  },
+  "routes": [
+    {
+      "id": "TAG",
+      "route": "AppNavHost"
+    },
+    {
+      "id": "START",
+      "route": "start"
+    },
+    {
+      "id": "HOME",
+      "route": "home"
+    },
+    {
+      "id": "LIBRARY",
+      "route": "library"
+    },
+    {
+      "id": "SETTINGS",
+      "route": "settings"
+    },
+    {
+      "id": "CATEGORY_SELECTION",
+      "route": "category_selection"
+    },
+    {
+      "id": "TELEGRAM_CHAT_SELECTION",
+      "route": "telegram_chat_selection"
+    },
+    {
+      "id": "DB_INSPECTOR",
+      "route": "db_inspector"
+    },
+    {
+      "id": "DB_INSPECTOR_ENTITY_PATTERN",
+      "route": "$DB_INSPECTOR/{${DbInspectorNavArgs.ARG_ENTITY_TYPE}}"
+    },
+    {
+      "id": "DB_INSPECTOR_ENTITY_DETAIL_PATTERN",
+      "route": "$DB_INSPECTOR/{${DbInspectorNavArgs.ARG_ENTITY_TYPE}}/{${DbInspectorNavArgs.ARG_ROW_ID}}"
+    },
+    {
+      "id": "ARG_MEDIA_ID",
+      "route": "mediaId"
+    },
+    {
+      "id": "ARG_SOURCE_TYPE",
+      "route": "sourceType"
+    },
+    {
+      "id": "DETAIL_PATTERN",
+      "route": "detail/{$ARG_MEDIA_ID}/{$ARG_SOURCE_TYPE}"
+    },
+    {
+      "id": "PLAYER_PATTERN",
+      "route": "player/{$ARG_MEDIA_ID}/{$ARG_SOURCE_TYPE}"
+    }
+  ],
+  "directActions": [
+    {
+      "id": "open_home",
+      "type": "startDestination",
+      "route": "home",
+      "intentExtra": "benchmark.startDestination",
+      "knownExtras": [
+        {
+          "const": "EXTRA_BENCHMARK_START_DESTINATION",
+          "key": "benchmark.startDestination"
+        },
+        {
+          "const": "EXTRA_BENCHMARK_DIRECT_SOURCE_URL",
+          "key": "benchmark.directSourceUrl"
+        }
+      ]
+    },
+    {
+      "id": "open_library",
+      "type": "startDestination",
+      "route": "library",
+      "intentExtra": "benchmark.startDestination"
+    },
+    {
+      "id": "open_settings",
+      "type": "startDestination",
+      "route": "settings",
+      "intentExtra": "benchmark.startDestination"
+    },
+    {
+      "id": "open_detail",
+      "type": "startDestinationPattern",
+      "routePattern": "detail/{$ARG_MEDIA_ID}/{$ARG_SOURCE_TYPE}",
+      "intentExtra": "benchmark.startDestination",
+      "args": [
+        "workKey",
+        "sourceType"
+      ]
+    },
+    {
+      "id": "open_player_direct_url",
+      "type": "extra",
+      "intentExtra": "benchmark.directSourceUrl"
+    }
+  ],
+  "settingsActions": [
+    {
+      "key": "db_inspector_enabled",
+      "method": "setDbInspectorEnabled",
+      "signature": "setDbInspectorEnabled(enabled: Boolean)"
+    },
+    {
+      "key": "jank_verbose_enabled",
+      "method": "setJankVerboseEnabled",
+      "signature": "setJankVerboseEnabled(enabled: Boolean)"
+    },
+    {
+      "key": "ops_diagnostics_auto_load",
+      "method": "setOpsDiagnosticsAutoLoad",
+      "signature": "setOpsDiagnosticsAutoLoad(enabled: Boolean)"
+    },
+    {
+      "key": "log_level",
+      "method": "setLogLevel",
+      "signature": "setLogLevel(level: String)"
+    },
+    {
+      "key": "diag_sm_enabled",
+      "method": "setDiagSmEnabled",
+      "signature": "setDiagSmEnabled(enabled: Boolean)"
+    },
+    {
+      "key": "diag_flood_wait_enabled",
+      "method": "setDiagFloodWaitEnabled",
+      "signature": "setDiagFloodWaitEnabled(enabled: Boolean)"
+    },
+    {
+      "key": "diag_detail_enabled",
+      "method": "setDiagDetailEnabled",
+      "signature": "setDiagDetailEnabled(enabled: Boolean)"
+    },
+    {
+      "key": "diag_sync_enabled",
+      "method": "setDiagSyncEnabled",
+      "signature": "setDiagSyncEnabled(enabled: Boolean)"
+    },
+    {
+      "key": "diag_ui_enabled",
+      "method": "setDiagUiEnabled",
+      "signature": "setDiagUiEnabled(enabled: Boolean)"
+    },
+    {
+      "key": "diag_work_enabled",
+      "method": "setDiagWorkEnabled",
+      "signature": "setDiagWorkEnabled(enabled: Boolean)"
+    }
+  ],
+  "tileSelectors": [
+    {
+      "screen": "home",
+      "row": 1,
+      "col": 1,
+      "label": "Wild Cards",
+      "labelNormalized": "wild cards",
+      "anchorId": "home:c008",
+      "bounds": "[0,1076][108,1886]",
+      "center": {
+        "x": 54,
+        "y": 1481
+      }
+    },
+    {
+      "screen": "home",
+      "row": 2,
+      "col": 1,
+      "label": "DE: Comedy Central",
+      "labelNormalized": "de: comedy central",
+      "anchorId": "home:c009",
+      "bounds": "[720,2150][1080,2400]",
+      "center": {
+        "x": 900,
+        "y": 2275
+      }
+    }
+  ],
+  "fallbackSelectors": {
+    "available": true,
+    "source": "/workspaces/FishIT-Player/scripts/device/anchors/ui_anchor_matrix_latest.json",
+    "generatedAtUtc": "2026-03-26T11:24:22Z",
+    "quickTargets": {
+      "home": {
+        "Search": {
+          "anchorId": "home:c000",
+          "label": "Search",
+          "centerX": 707,
+          "centerY": 120,
+          "bounds": "[635,48][779,192]"
+        },
+        "Refresh": {
+          "anchorId": "home:c002",
+          "label": "Refresh",
+          "centerX": 1025,
+          "centerY": 120,
+          "bounds": "[971,48][1080,192]"
+        },
+        "Library": {
+          "anchorId": "home:c001",
+          "label": "Library",
+          "centerX": 875,
+          "centerY": 120,
+          "bounds": "[803,48][947,192]"
+        }
+      },
+      "library": {
+        "Search": {
+          "anchorId": "library:c001",
+          "label": "Search",
+          "centerX": 996,
+          "centerY": 176,
+          "bounds": "[924,104][1068,248]"
+        },
+        "Movies": {
+          "anchorId": "library:c003",
+          "label": "Movies",
+          "centerX": 270,
+          "centerY": 536,
+          "bounds": "[0,428][540,644]"
+        },
+        "Series": {
+          "anchorId": "library:c004",
+          "label": "Series",
+          "centerX": 810,
+          "centerY": 536,
+          "bounds": "[540,428][1080,644]"
+        },
+        "Back": {
+          "anchorId": "library:c000",
+          "label": "Back",
+          "centerX": 84,
+          "centerY": 176,
+          "bounds": "[12,104][156,248]"
+        }
+      },
+      "settings": {}
+    }
+  },
+  "matcherModes": {
+    "rawRegex": "Direct regex matching on visible labels.",
+    "normalized": "Diacritics/emoji-insensitive folded matcher using NFKD + lowercase + whitespace collapse."
+  },
+  "inputStrategies": [
+    {
+      "priority": 1,
+      "name": "direct_command_ingress",
+      "description": "Debug broadcast command ingress for route/settings/inspect-work operations."
+    },
+    {
+      "priority": 2,
+      "name": "start_destination_route",
+      "description": "MainActivity benchmark.startDestination route launch."
+    },
+    {
+      "priority": 3,
+      "name": "adb_keyboard_paste",
+      "description": "ADB text input/paste for deterministic form values."
+    },
+    {
+      "priority": 4,
+      "name": "ui_anchor_tap_fallback",
+      "description": "Fallback to matrix/regex tap when direct route or setting command is unavailable."
+    }
+  ]
+}

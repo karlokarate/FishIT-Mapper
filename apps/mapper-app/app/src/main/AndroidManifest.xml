@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <queries>
+        <package android:name="com.ideashower.readitlater.pro" />
+        <package android:name="info.plateaukao.naverdict" />
+
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+
+            <data android:mimeType="text/plain" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries> <!-- Permission -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /> <!-- https://developer.android.com/guide/topics/manifest/uses-feature-element#permissions -->
+    <uses-feature
+        android:name="android.hardware.location"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false" />
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
+
+    <uses-permission android:name="android.permission.AUDIO_CAPTURE" />
+
+    <application
+        android:name=".EinkBroApplication"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_descriptor"
+        android:hardwareAccelerated="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:largeHeap="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:requestLegacyExternalStorage="true"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="true"
+        tools:ignore="UnusedAttribute">
+        <activity
+            android:name=".activity.DictActivity"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:theme="@style/TransparentActivity">
+            <intent-filter>
+                <action android:name="colordict.intent.action.SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="colordict.intent.action.PICK_RESULT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter
+                android:order="1"
+                android:priority="1">
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".activity.SettingActivity"
+            android:exported="false"
+            android:label="@string/title_activity_setting"
+            android:theme="@style/AppTheme">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="" />
+        </activity>
+        <activity
+            android:name=".activity.ExtraBrowserActivity"
+            android:configChanges="orientation|keyboard|keyboardHidden|screenSize|uiMode|screenLayout|smallestScreenSize"
+            android:theme="@style/AppTheme"
+            android:windowSoftInputMode="adjustResize|stateAlwaysHidden" /> <!-- BrowserActivity -->
+        <activity
+            android:name=".activity.BrowserActivity"
+            android:configChanges="orientation|keyboard|keyboardHidden|screenSize|uiMode|screenLayout|smallestScreenSize"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:supportsPictureInPicture="true"
+            android:theme="@style/AppTheme"
+            android:windowSoftInputMode="adjustResize|stateAlwaysHidden">
+            <intent-filter tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+
+                <data android:scheme="einkbro" />
+                <data android:scheme="einkbros" />
+            </intent-filter>
+            <intent-filter tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:scheme="content" />
+
+                <data android:mimeType="text/html" />
+                <data android:mimeType="application/xhtml+xml" />
+            </intent-filter>
+            <intent-filter android:icon="@mipmap/ic_launcher">
+                <action android:name="android.intent.action.SEND" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <action android:name="android.intent.action.WEB_SEARCH" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+
+                <action android:name="sc_startPage" />
+                <action android:name="sc_bookmark" />
+                <action android:name="sc_history" />
+                <action android:name="notification" />
+            </intent-filter>
+            <intent-filter tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data
+                    android:mimeType="message/rfc822"
+                    android:scheme="file" />
+                <data
+                    android:mimeType="message/rfc822"
+                    android:scheme="content" />
+                <data
+                    android:mimeType="multipart/related"
+                    android:scheme="file" />
+                <data
+                    android:mimeType="multipart/related"
+                    android:scheme="content" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:pathPattern=".*\\.mht" />
+                <data android:pathPattern=".*\\.mhtml" />
+            </intent-filter>
+            <intent-filter tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/x-subrip" />
+                <data android:pathPattern=".*\\.srt" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.app.searchable"
+                android:resource="@xml/searchable" />
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+        </activity>
+        <activity
+            android:name=".activity.EpubReaderActivity"
+            android:exported="true"
+            android:label="@string/menu_open_epub"
+            android:launchMode="singleInstance"
+            android:theme="@style/AppTheme">
+            <intent-filter tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:mimeType="application/epub+zip"
+                    android:pathPattern=".*\\.epub"
+                    android:scheme="file" />
+                <data
+                    android:mimeType="application/epub+zip"
+                    android:pathPattern=".*\\.epub"
+                    android:scheme="content" />
+            </intent-filter>
+        </activity> <!-- Settings -->
+        <activity
+            android:name=".activity.DataListActivity"
+            android:label="@string/setting_title_whitelist" />
+        <activity
+            android:name=".activity.GptActionsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activity.GptQueryListActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activity.HighlightsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activity.ToolbarConfigActivity"
+            android:exported="false" />
+        <activity
+            android:name=".activity.AdBlockSettingActivity"
+            android:exported="false" />
+
+        <service
+            android:name=".service.ClearService"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/app_name" /> <!-- android:authorities="info.plateaukao.einkbro.debug.fileprovider" -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="info.plateaukao.einkbro.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/filepaths" />
+        </provider>
+
+        <meta-data
+            android:name="android.webkit.WebView.MetricsOptOut"
+            android:value="true" />
+        <meta-data
+            android:name="android.allow_multiple_resumed_activities"
+            android:value="true" />
+    </application>
+
+</manifest>

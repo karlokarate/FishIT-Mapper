@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "contract_id": "fishit-mapper-ci-contract",
+  "failure_policy": "fail_fast_block_merge",
+  "local_contract": {
+    "commands": [
+      "./scripts/generate.sh --check",
+      "./scripts/guards/decision-guard.sh",
+      "./scripts/guards/hard-cutover-guard.sh",
+      "./scripts/guards/handover-guard.sh",
+      "./scripts/guards/roadmap-guard.sh",
+      "./scripts/guards/ci-contract-guard.sh",
+      "./scripts/guards/dependency-intake-guard.sh"
+    ],
+    "blocking": true
+  },
+  "jobs": [
+    {
+      "job_id": "contract-and-guard-gate",
+      "blocking": true,
+      "order": 1,
+      "commands": [
+        "./scripts/generate.sh --check",
+        "./scripts/guards/decision-guard.sh",
+        "./scripts/guards/roadmap-guard.sh",
+        "./scripts/guards/ci-contract-guard.sh",
+        "./scripts/guards/dependency-intake-guard.sh",
+        "./scripts/guards/hard-cutover-guard.sh",
+        "./scripts/guards/handover-guard.sh"
+      ],
+      "artifacts": [
+        "docs/V2_ssot.yaml",
+        "docs/ROADMAP.md",
+        "docs/AGENT_RULESET.md",
+        "docs/DELIVERY_GATES.md",
+        "docs/DEPENDENCY_INTAKE.md"
+      ]
+    },
+    {
+      "job_id": "handover-presence-and-validity",
+      "blocking": true,
+      "order": 2,
+      "commands": [
+        "./scripts/guards/handover-guard.sh"
+      ],
+      "artifacts": [
+        "handovers/HO-*.json"
+      ]
+    },
+    {
+      "job_id": "wave01-debug-apk-build",
+      "blocking": true,
+      "order": 3,
+      "commands": [
+        "./scripts/waves/build-wave01.sh"
+      ],
+      "artifacts": [
+        "artifacts/wave01/mapper-debug.apk",
+        "artifacts/wave01/build-metadata.json"
+      ]
+    }
+  ]
+}
