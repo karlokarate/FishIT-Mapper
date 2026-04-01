@@ -1,0 +1,112 @@
+name: Wave01 Manual Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build type to produce"
+        required: true
+        type: choice
+        options:
+          - debug
+          - release
+        default: debug
+      abi:
+        description: "ABI target (all = universal + splits defined by Gradle)"
+        required: true
+        type: choice
+        options:
+          - arm64-v8a
+          - all
+        default: arm64-v8a
+
+jobs:
+  wave01-manual-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Prepare Gradle Wrapper
+        run: chmod +x apps/mapper-app/gradlew
+
+      - name: Build APK
+        env:
+          BUILD_TYPE: ${{ inputs.build_type }}
+          ABI: ${{ inputs.abi }}
+        run: |
+          set -euo pipefail
+          cd apps/mapper-app
+
+          if [[ "$BUILD_TYPE" == "debug" ]]; then
+            TASK=":app:assembleDebug"
+          else
+            TASK=":app:assembleRelease"
+          fi
+
+          ABI_ARG=""
+          if [[ "$ABI" != "all" ]]; then
+            ABI_ARG="-PbuildAbis=$ABI"
+          fi
+
+          ./gradlew "$TASK" $ABI_ARG --no-daemon
+
+      - name: Collect Build Artifacts
+        env:
+          BUILD_TYPE: ${{ inputs.build_type }}
+          ABI: ${{ inputs.abi }}
+        run: |
+          set -euo pipefail
+
+          OUT_DIR="artifacts/wave01/${BUILD_TYPE}"
+          mkdir -p "$OUT_DIR"
+
+          case "$BUILD_TYPE" in
+            debug)
+              mapfile -t APKS < <(find apps/mapper-app/app/build/outputs/apk -type f -name "*debug*.apk" | sort)
+              ;;
+            release)
+              mapfile -t APKS < <(find apps/mapper-app/app/build/outputs/apk -type f -name "*release*.apk" | sort)
+              ;;
+          esac
+
+          if [[ "${#APKS[@]}" -eq 0 ]]; then
+            echo "No APK files found for build_type=$BUILD_TYPE" >&2
+            exit 1
+          fi
+
+          for apk in "${APKS[@]}"; do
+            cp -f "$apk" "$OUT_DIR/"
+          done
+
+          cat >"$OUT_DIR/build-metadata.txt" <<EOF
+          build_type=$BUILD_TYPE
+          abi=$ABI
+          run_id=${GITHUB_RUN_ID}
+          run_number=${GITHUB_RUN_NUMBER}
+          sha=${GITHUB_SHA}
+          ref=${GITHUB_REF}
+          built_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          EOF
+
+          ls -lah "$OUT_DIR"
+
+      - name: Upload APK Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wave01-${{ inputs.build_type }}-apk-${{ github.run_number }}
+          path: artifacts/wave01/${{ inputs.build_type }}
+          if-no-files-found: error
