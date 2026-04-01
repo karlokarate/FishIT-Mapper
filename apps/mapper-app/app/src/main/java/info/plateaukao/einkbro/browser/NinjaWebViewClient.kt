@@ -43,6 +43,7 @@ import info.plateaukao.einkbro.view.dialog.compose.AuthenticationDialogFragment
 import io.github.edsuns.adfilter.AdFilter
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.IOException
 
@@ -96,6 +97,12 @@ class EBWebViewClient(
             ),
         )
         RuntimeToolkitTelemetry.recordCookieSnapshot(context, url)
+        view?.let { injectRuntimeToolkitNetworkHook(it) }
+    }
+
+    override fun onPageCommitVisible(view: WebView, url: String?) {
+        super.onPageCommitVisible(view, url)
+        injectRuntimeToolkitNetworkHook(view)
     }
 
     override fun onPageFinished(view: WebView, url: String) {
@@ -150,6 +157,8 @@ class EBWebViewClient(
         if (url != "about:blank") {
             onPageFinishedAction()
         }
+        injectRuntimeToolkitNetworkHook(view)
+        captureMainFrameHtmlResponse(view, url)
 
         activePageLoadCorrelation?.let { correlation ->
             RuntimeToolkitTelemetry.finishUiAction(
@@ -467,6 +476,59 @@ class EBWebViewClient(
         return headers.mapKeys { it.key.orEmpty() }.mapValues { it.value.orEmpty() }
     }
 
+    private fun injectRuntimeToolkitNetworkHook(webView: WebView) {
+        RuntimeToolkitTelemetry.logCorrelationEvent(
+            context = context,
+            operation = "js_network_hook_inject_attempt",
+            payload = mapOf(
+                "url" to (webView.url ?: ""),
+                "screen_id" to "browser",
+            ),
+        )
+        webView.evaluateJavascript(RUNTIME_TOOLKIT_NETWORK_HOOK_JS, null)
+    }
+
+    private fun captureMainFrameHtmlResponse(webView: WebView, url: String) {
+        if (url.isBlank() || url == "about:blank") return
+        webView.evaluateJavascript(
+            "(function(){try{return document.documentElement && document.documentElement.outerHTML ? document.documentElement.outerHTML : '';}catch(e){return '';}})();",
+        ) { raw ->
+            val html = decodeEvaluateJavascriptString(raw).trim()
+            if (html.isBlank()) return@evaluateJavascript
+            val bytes = html.toByteArray(Charsets.UTF_8)
+            val capped = if (bytes.size > MAX_MAIN_FRAME_HTML_CAPTURE_BYTES) {
+                bytes.copyOf(MAX_MAIN_FRAME_HTML_CAPTURE_BYTES)
+            } else {
+                bytes
+            }
+            val requestId = RuntimeToolkitTelemetry.resolveRecentRequestId(url = url, method = "GET")
+            RuntimeToolkitTelemetry.logNetworkResponse(
+                context = context,
+                source = "webview_main_frame_html",
+                url = url,
+                method = "GET",
+                statusCode = 200,
+                reason = "page_finished_dom_snapshot",
+                mimeType = "text/html",
+                headers = emptyMap(),
+                rawBody = capped,
+                requestId = requestId,
+                payload = mapOf(
+                    "capture_mode" to "main_frame_dom_snapshot",
+                    "capture_truncated" to (bytes.size > MAX_MAIN_FRAME_HTML_CAPTURE_BYTES),
+                    "captured_body_bytes" to capped.size,
+                ),
+            )
+        }
+    }
+
+    private fun decodeEvaluateJavascriptString(raw: String?): String {
+        if (raw.isNullOrBlank() || raw == "null") return ""
+        return runCatching {
+            JSONObject("""{"v":$raw}""").optString("v")
+        }.getOrElse { raw.trim('"') }
+    }
+
     private fun processCustomFontRequest(uri: Uri): WebResourceResponse? {
         if (uri.path?.contains("mycustomfont") == true) {
             val fontUri = if (!ebWebView.shouldUseReaderFont()) {
@@ -485,6 +547,237 @@ class EBWebViewClient(
             }
         }
         return null
+    }
+
+    private val RUNTIME_TOOLKIT_NETWORK_HOOK_JS = """
+            (function() {
+              try {
+                if (window.__mapperToolkitNetworkHookInstalled) { return; }
+                if (!window.androidApp || typeof window.androidApp.runtimeToolkitNetworkEvent !== 'function') { return; }
+                window.__mapperToolkitNetworkHookInstalled = true;
+                var __mapperToolkitReqSeq = 0;
+                function makeRequestId() {
+                  __mapperToolkitReqSeq += 1;
+                  return "jsreq_" + Date.now().toString(36) + "_" + __mapperToolkitReqSeq.toString(36);
+                }
+                function truncate(value, maxLen) {
+                  if (value == null) { return null; }
+                  var text = String(value);
+                  if (text.length <= maxLen) { return text; }
+                  return text.slice(0, maxLen);
+                }
+                function safeHeaders(headers) {
+                  var out = {};
+                  if (!headers) { return out; }
+                  try {
+                    if (typeof headers.forEach === 'function') {
+                      headers.forEach(function(value, key) {
+                        out[String(key)] = truncate(value, 512);
+                      });
+                      return out;
+                    }
+                  } catch (_ignored) {}
+                  try {
+                    if (Array.isArray(headers)) {
+                      headers.forEach(function(item) {
+                        if (Array.isArray(item) && item.length >= 2) {
+                          out[String(item[0])] = truncate(item[1], 512);
+                        }
+                      });
+                      return out;
+                    }
+                  } catch (_ignored2) {}
+                  try {
+                    Object.keys(headers).forEach(function(key) {
+                      out[String(key)] = truncate(headers[key], 512);
+                    });
+                  } catch (_ignored3) {}
+                  return out;
+                }
+                function parseRawHeaders(raw) {
+                  var out = {};
+                  if (!raw) { return out; }
+                  raw.trim().split(/[\r\n]+/).forEach(function(line) {
+                    var idx = line.indexOf(':');
+                    if (idx <= 0) { return; }
+                    var key = line.slice(0, idx).trim();
+                    var value = line.slice(idx + 1).trim();
+                    if (key) { out[key] = truncate(value, 512); }
+                  });
+                  return out;
+                }
+                function shouldCaptureBody(url, mimeType) {
+                  var mime = (mimeType || '').toLowerCase();
+                  var lowerUrl = (url || '').toLowerCase();
+                  return mime.indexOf('json') >= 0 ||
+                    mime.indexOf('text/') === 0 ||
+                    mime.indexOf('xml') >= 0 ||
+                    mime.indexOf('javascript') >= 0 ||
+                    mime.indexOf('html') >= 0 ||
+                    lowerUrl.endsWith('.m3u8') ||
+                    lowerUrl.endsWith('.mpd');
+                }
+                function emitNetworkEvent(event) {
+                  try {
+                    window.androidApp.runtimeToolkitNetworkEvent(JSON.stringify(event));
+                  } catch (_ignored) {}
+                }
+
+                if (typeof window.fetch === 'function' && !window.__mapperToolkitFetchHookInstalled) {
+                  window.__mapperToolkitFetchHookInstalled = true;
+                  var originalFetch = window.fetch;
+                  window.fetch = function(input, init) {
+                    var requestId = makeRequestId();
+                    var requestUrl = '';
+                    var requestMethod = 'GET';
+                    var requestHeaders = {};
+                    try {
+                      var requestObj = (typeof Request !== 'undefined' && input instanceof Request) ? input : null;
+                      requestUrl = requestObj ? requestObj.url : String(input || '');
+                      requestMethod = ((init && init.method) || (requestObj && requestObj.method) || 'GET').toUpperCase();
+                      requestHeaders = safeHeaders((init && init.headers) || (requestObj && requestObj.headers));
+                    } catch (_ignored) {}
+
+                    emitNetworkEvent({
+                      stage: 'request',
+                      source: 'fetch',
+                      requestId: requestId,
+                      url: requestUrl,
+                      method: requestMethod,
+                      requestHeaders: requestHeaders
+                    });
+
+                    return originalFetch.apply(this, arguments)
+                      .then(function(response) {
+                        var responseUrl = response && response.url ? response.url : requestUrl;
+                        var headers = safeHeaders(response && response.headers ? response.headers : null);
+                        var mimeType = '';
+                        try {
+                          mimeType = (response && response.headers && response.headers.get('content-type')) || '';
+                        } catch (_ignored2) {}
+                        var bodyPromise = Promise.resolve(null);
+                        if (response && shouldCaptureBody(responseUrl, mimeType)) {
+                          bodyPromise = response.clone().text()
+                            .then(function(text) { return truncate(text, 16384); })
+                            .catch(function() { return null; });
+                        }
+                        return bodyPromise.then(function(bodyPreview) {
+                          emitNetworkEvent({
+                            stage: 'response',
+                            source: 'fetch',
+                            requestId: requestId,
+                            url: responseUrl,
+                            responseUrl: responseUrl,
+                            method: requestMethod,
+                            status: response ? response.status : null,
+                            reason: response ? response.statusText : null,
+                            mimeType: mimeType,
+                            headers: headers,
+                            bodyPreview: bodyPreview
+                          });
+                          return response;
+                        });
+                      })
+                      .catch(function(error) {
+                        emitNetworkEvent({
+                          stage: 'response',
+                          source: 'fetch',
+                          requestId: requestId,
+                          url: requestUrl,
+                          method: requestMethod,
+                          status: null,
+                          reason: (error && error.message) ? String(error.message) : 'fetch_error',
+                          headers: {}
+                        });
+                        throw error;
+                      });
+                  };
+                }
+
+                if (window.XMLHttpRequest && !window.__mapperToolkitXhrHookInstalled) {
+                  window.__mapperToolkitXhrHookInstalled = true;
+                  var originalOpen = XMLHttpRequest.prototype.open;
+                  var originalSend = XMLHttpRequest.prototype.send;
+                  var originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+
+                  XMLHttpRequest.prototype.open = function(method, url) {
+                    this.__mapperToolkitMeta = {
+                      requestId: makeRequestId(),
+                      method: String(method || 'GET').toUpperCase(),
+                      url: String(url || ''),
+                      requestHeaders: {}
+                    };
+                    return originalOpen.apply(this, arguments);
+                  };
+
+                  XMLHttpRequest.prototype.setRequestHeader = function(key, value) {
+                    try {
+                      if (this.__mapperToolkitMeta) {
+                        this.__mapperToolkitMeta.requestHeaders[String(key)] = truncate(value, 512);
+                      }
+                    } catch (_ignored) {}
+                    return originalSetRequestHeader.apply(this, arguments);
+                  };
+
+                  XMLHttpRequest.prototype.send = function() {
+                    var meta = this.__mapperToolkitMeta || {
+                      requestId: makeRequestId(),
+                      method: 'GET',
+                      url: this.responseURL || '',
+                      requestHeaders: {}
+                    };
+                    emitNetworkEvent({
+                      stage: 'request',
+                      source: 'xhr',
+                      requestId: meta.requestId,
+                      url: meta.url,
+                      method: meta.method,
+                      requestHeaders: meta.requestHeaders
+                    });
+
+                    var xhr = this;
+                    var onReadyState = function() {
+                      if (xhr.readyState !== 4) { return; }
+                      xhr.removeEventListener('readystatechange', onReadyState);
+                      var responseHeaders = {};
+                      var mimeType = '';
+                      try {
+                        responseHeaders = parseRawHeaders(xhr.getAllResponseHeaders ? xhr.getAllResponseHeaders() : '');
+                        mimeType = (xhr.getResponseHeader && xhr.getResponseHeader('content-type')) || '';
+                      } catch (_ignored2) {}
+                      var responseUrl = xhr.responseURL || meta.url;
+                      var bodyPreview = null;
+                      try {
+                        if (shouldCaptureBody(responseUrl, mimeType) &&
+                          (xhr.responseType === '' || xhr.responseType === 'text')) {
+                          bodyPreview = truncate(xhr.responseText, 16384);
+                        }
+                      } catch (_ignored3) {}
+                      emitNetworkEvent({
+                        stage: 'response',
+                        source: 'xhr',
+                        requestId: meta.requestId,
+                        url: responseUrl,
+                        responseUrl: responseUrl,
+                        method: meta.method,
+                        status: xhr.status || null,
+                        reason: xhr.statusText || null,
+                        mimeType: mimeType,
+                        headers: responseHeaders,
+                        bodyPreview: bodyPreview
+                      });
+                    };
+                    xhr.addEventListener('readystatechange', onReadyState);
+                    return originalSend.apply(this, arguments);
+                  };
+                }
+              } catch (_ignoredTop) {}
+            })();
+        """.trimIndent()
+
+    companion object {
+        private const val TAG = "ebWebViewClient"
+        private const val MAX_MAIN_FRAME_HTML_CAPTURE_BYTES = 512 * 1024
     }
 
     override fun onFormResubmission(view: WebView, doNotResend: Message, resend: Message) {
@@ -601,7 +894,4 @@ class EBWebViewClient(
         }
     }
 
-    companion object {
-        private const val TAG = "ebWebViewClient"
-    }
 }

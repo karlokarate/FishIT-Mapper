@@ -9,6 +9,15 @@ LEGACY_TUI_SCRIPT="$ROOT_DIR/scripts/device/toolkit/mapper_toolkit_tui.sh"
 MITM_SCRIPT="$ROOT_DIR/scripts/device/toolkit/mitm_bridge.sh"
 UI_SCRIPT="$ROOT_DIR/scripts/device/ui-anchor-nav.sh"
 
+ADB_HOST_EXPLICIT=0
+if [[ "${ADB_HOST+set}" == "set" ]]; then
+  ADB_HOST_EXPLICIT=1
+fi
+ADB_PORT_EXPLICIT=0
+if [[ "${ADB_PORT+set}" == "set" ]]; then
+  ADB_PORT_EXPLICIT=1
+fi
+
 ADB_BIN="${ADB_BIN:-adb}"
 ADB_HOST="${ADB_HOST:-127.0.0.1}"
 ADB_PORT="${ADB_PORT:-5037}"
@@ -91,6 +100,24 @@ read_state_field() {
   local field="$1"
   [[ -f "$STATE_FILE" ]] || return 1
   jq -r "$field // empty" "$STATE_FILE"
+}
+
+maybe_restore_adb_endpoint_from_state() {
+  [[ -f "$STATE_FILE" ]] || return 0
+
+  local state_host=""
+  local state_port=""
+  state_host="$(read_state_field '.adb.host' || true)"
+  state_port="$(read_state_field '.adb.port' || true)"
+
+  if [[ "$ADB_HOST_EXPLICIT" -eq 0 && -n "$state_host" ]]; then
+    ADB_HOST="$state_host"
+  fi
+  if [[ "$ADB_PORT_EXPLICIT" -eq 0 && -n "$state_port" ]]; then
+    ADB_PORT="$state_port"
+  fi
+
+  export ADB_HOST ADB_PORT
 }
 
 resolve_device_serial() {
@@ -301,20 +328,49 @@ pull_response_store() {
   local target_dir="$CURRENT_DIR/response_store"
   mkdir -p "$target_dir"
 
-  local list_output
-  list_output="$(adb_device "$serial" shell "run-as $APP_ID sh -lc 'cd files/runtime-toolkit/response_store 2>/dev/null && ls -1 || true'" 2>/dev/null | tr -d '\r' || true)"
+  local -a entries=()
+  mapfile -t entries < <(
+    adb_device "$serial" shell "run-as $APP_ID sh -lc 'cd files/runtime-toolkit/response_store 2>/dev/null && ls -1 || true'" 2>/dev/null \
+      | tr -d '\r' \
+      | tr '\0' '\n'
+  )
 
-  if [[ -z "$list_output" ]]; then
-    return 0
+  local total="${#entries[@]}"
+  local i=0
+  local use_timeout=0
+  if command -v timeout >/dev/null 2>&1; then
+    use_timeout=1
   fi
 
-  while IFS= read -r entry; do
+  for entry in "${entries[@]}"; do
+    i=$((i + 1))
     [[ -n "$entry" ]] || continue
     if [[ ! "$entry" =~ ^[A-Za-z0-9._-]+$ ]]; then
       continue
     fi
-    adb_device "$serial" shell "run-as $APP_ID cat files/runtime-toolkit/response_store/$entry" >"$target_dir/$entry" || true
-  done <<<"$list_output"
+
+    local out_file="$target_dir/$entry"
+    if [[ "$use_timeout" -eq 1 ]]; then
+      if ! timeout --foreground 20s \
+        "$ADB_BIN" -H "$ADB_HOST" -P "$ADB_PORT" -s "$serial" \
+        shell "run-as $APP_ID cat files/runtime-toolkit/response_store/$entry" < /dev/null >"$out_file"
+      then
+        echo "WARN: response_store pull timeout/failed for $entry; skipped" >&2
+        rm -f "$out_file"
+        continue
+      fi
+    else
+      if ! adb_device "$serial" shell "run-as $APP_ID cat files/runtime-toolkit/response_store/$entry" < /dev/null >"$out_file"; then
+        echo "WARN: response_store pull failed for $entry; skipped" >&2
+        rm -f "$out_file"
+        continue
+      fi
+    fi
+
+    if (( i % 50 == 0 || i == total )); then
+      echo "response_store pull progress: $i/$total"
+    fi
+  done
 }
 
 run_dataset_cli() {
@@ -1070,6 +1126,8 @@ main() {
     exit 1
   fi
   shift || true
+
+  maybe_restore_adb_endpoint_from_state
 
   case "$cmd" in
     bootstrap)

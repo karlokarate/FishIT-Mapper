@@ -2,6 +2,7 @@ package info.plateaukao.einkbro.browser
 
 import android.util.Log
 import android.webkit.JavascriptInterface
+import dev.fishit.mapper.wave01.debug.RuntimeToolkitTelemetry
 import info.plateaukao.einkbro.database.BookmarkManager
 import info.plateaukao.einkbro.database.TranslationCache
 import info.plateaukao.einkbro.preference.ChatGPTActionInfo
@@ -19,10 +20,12 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
 
 private const val CACHE_EXPIRATION_DAYS = 5
 private const val CACHE_TEXT_LENGTH_LIMIT = 15
@@ -33,6 +36,7 @@ class JsWebInterface(private val webView: EBWebView) :
     private val openAiRepository: OpenAiRepository = OpenAiRepository()
     private val configManager: ConfigManager by inject()
     private val bookmarkManager: BookmarkManager by inject()
+    private val jsRequestMap = ConcurrentHashMap<String, String>()
 
     private fun escapeForJs(text: String): String =
         text.replace("\\", "\\\\")
@@ -179,6 +183,161 @@ class JsWebInterface(private val webView: EBWebView) :
         webView.innerScrollHeight = scrollHeight
         webView.innerClientHeight = clientHeight
         webView.post { webView.updatePageInfo() }
+    }
+
+    @JavascriptInterface
+    fun runtimeToolkitNetworkEvent(rawJson: String?) {
+        if (rawJson.isNullOrBlank()) return
+        val context = webView.context.applicationContext
+        runCatching {
+            val event = JSONObject(rawJson)
+            val stage = event.optString("stage").ifBlank { "response" }.lowercase()
+            val method = event.optString("method").ifBlank { "GET" }.uppercase()
+            val url = event.optString("url").ifBlank { event.optString("responseUrl") }
+            if (url.isBlank()) return@runCatching
+            RuntimeToolkitTelemetry.logCorrelationEvent(
+                context = context,
+                operation = "js_bridge_network_event",
+                payload = mapOf(
+                    "stage" to stage,
+                    "url" to url,
+                    "source" to event.optString("source").ifBlank { "unknown" },
+                ),
+            )
+
+            val jsRequestId = event.optString("requestId").ifBlank { null }
+            val requestHeaders = jsonToStringMap(event.optJSONObject("requestHeaders"))
+            val responseHeaders = jsonToStringMap(event.optJSONObject("headers"))
+            val bodyPreview = event.optString("bodyPreview").ifBlank { null }?.take(MAX_BRIDGE_BODY_PREVIEW_CHARS)
+            val mimeType = event.optString("mimeType").ifBlank { null }
+            val reason = event.optString("reason").ifBlank { null }
+            val statusCode = optionalInt(event, "status")
+
+            if (stage == "request") {
+                val existingRequestId = RuntimeToolkitTelemetry.resolveRecentRequestId(url = url, method = method)
+                val requestId = existingRequestId ?: RuntimeToolkitTelemetry.logNetworkRequest(
+                    context = context,
+                    source = "webview_js_bridge",
+                    url = url,
+                    method = method,
+                    headers = requestHeaders,
+                    payload = mapOf(
+                        "bridge_stage" to stage,
+                        "bridge_request_id" to jsRequestId,
+                        "bridge_observed" to true,
+                    ),
+                ).requestId
+
+                if (!jsRequestId.isNullOrBlank()) {
+                    jsRequestMap[jsRequestId] = requestId
+                }
+                requestHeaders.forEach { (headerKey, _) ->
+                    if (shouldTrackProvenanceHeader(headerKey)) {
+                        RuntimeToolkitTelemetry.logProvenanceEvent(
+                            context = context,
+                            entityType = "header",
+                            entityKey = headerKey.lowercase(),
+                            consumedBy = requestId,
+                            payload = mapOf(
+                                "url" to url,
+                                "method" to method,
+                                "source" to "webview_js_bridge",
+                            ),
+                        )
+                    }
+                }
+                return@runCatching
+            }
+
+            val requestId = jsRequestId?.let { jsRequestMap.remove(it) }
+                ?: RuntimeToolkitTelemetry.resolveRecentRequestId(url = url, method = method)
+
+            val responseId = RuntimeToolkitTelemetry.logNetworkResponse(
+                context = context,
+                source = "webview_js_bridge",
+                url = url,
+                method = method,
+                statusCode = statusCode,
+                reason = reason,
+                mimeType = mimeType,
+                headers = responseHeaders,
+                rawBody = bodyPreview?.toByteArray(Charsets.UTF_8),
+                requestId = requestId,
+                payload = mapOf(
+                    "bridge_stage" to stage,
+                    "bridge_request_id" to jsRequestId,
+                    "bridge_observed" to true,
+                ),
+            )
+
+            if (statusCode == 401 || statusCode == 403) {
+                RuntimeToolkitTelemetry.logAuthEvent(
+                    context = context,
+                    operation = "auth_state_changed",
+                    payload = mapOf(
+                        "status_code" to statusCode,
+                        "url" to url,
+                        "source" to "webview_js_bridge",
+                        "request_id" to requestId,
+                        "response_id" to responseId,
+                    ),
+                )
+            }
+
+            responseHeaders.forEach { (headerKey, _) ->
+                if (shouldTrackProvenanceHeader(headerKey)) {
+                    RuntimeToolkitTelemetry.logProvenanceEvent(
+                        context = context,
+                        entityType = "header",
+                        entityKey = headerKey.lowercase(),
+                        producedBy = responseId,
+                        consumedBy = requestId,
+                        payload = mapOf(
+                            "url" to url,
+                            "status_code" to statusCode,
+                            "source" to "webview_js_bridge",
+                        ),
+                    )
+                }
+            }
+            RuntimeToolkitTelemetry.recordCookieSnapshot(context, url)
+        }.onFailure { throwable ->
+            RuntimeToolkitTelemetry.logExtractionEvent(
+                context = context,
+                operation = "js_bridge_network_event_failed",
+                payload = mapOf("message" to (throwable.message ?: "unknown")),
+            )
+            Log.w("JsWebInterface", "runtimeToolkitNetworkEvent failed: ${throwable.message}")
+        }
+    }
+
+    private fun jsonToStringMap(obj: JSONObject?): Map<String, String> {
+        if (obj == null) return emptyMap()
+        val out = linkedMapOf<String, String>()
+        val keys = obj.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            out[key] = obj.optString(key)
+        }
+        return out
+    }
+
+    private fun optionalInt(obj: JSONObject, key: String): Int? {
+        if (!obj.has(key) || obj.isNull(key)) return null
+        return runCatching { obj.getInt(key) }.getOrNull()
+    }
+
+    private fun shouldTrackProvenanceHeader(headerKey: String): Boolean {
+        val normalized = headerKey.lowercase()
+        return normalized == "authorization" ||
+            normalized == "cookie" ||
+            normalized == "set-cookie" ||
+            normalized.contains("token") ||
+            normalized.startsWith("x-")
+    }
+
+    companion object {
+        private const val MAX_BRIDGE_BODY_PREVIEW_CHARS = 16 * 1024
     }
 }
 

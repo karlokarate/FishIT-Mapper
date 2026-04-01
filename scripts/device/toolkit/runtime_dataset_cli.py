@@ -1123,6 +1123,17 @@ def pipeline_quality_report(
     rows: List[Dict[str, Any]],
     quality_host: str = "",
 ) -> Dict[str, Any]:
+    run_id = ""
+    for row in reversed(rows):
+        rid = str(row.get("run_id") or "")
+        if rid:
+            run_id = rid
+            break
+    scoped_rows = rows
+    if run_id:
+        scoped_rows = [row for row in rows if str(row.get("run_id") or "") == run_id]
+
+    rows = scoped_rows
     derived = ensure_derived(runtime_dir, rows)
     host = quality_host.strip() or discover_primary_host(rows)
 
@@ -1280,6 +1291,7 @@ def pipeline_quality_report(
     pipeline_ready = all(bool(gate.get("passed")) for gate in gates.values())
     return {
         "schema_version": 1,
+        "run_id": run_id or "unknown",
         "generated_at_utc": utc_now(),
         "quality_host": host,
         "pipeline_ready": pipeline_ready,

@@ -246,7 +246,9 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
         )
 
         context.startActivity(
-            Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            Intent(context, BrowserActivity::class.java)
+                .setAction(Intent.ACTION_VIEW)
+                .setData(Uri.parse(url))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
         )
 

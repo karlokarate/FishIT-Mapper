@@ -82,7 +82,7 @@ object RuntimeToolkitTelemetry {
         context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(PREF_RUN_ID, runId)
-            .apply()
+            .commit()
     }
 
     fun setRunAndContext(context: Context, runId: String, correlation: CorrelationContext) {
@@ -92,7 +92,7 @@ object RuntimeToolkitTelemetry {
             .putString(PREF_TRACE_ID, correlation.traceId)
             .putString(PREF_ACTION_ID, correlation.actionId)
             .putString(PREF_SPAN_ID, correlation.spanId)
-            .apply()
+            .commit()
     }
 
     fun currentCorrelationContext(context: Context): CorrelationContext {
@@ -109,7 +109,7 @@ object RuntimeToolkitTelemetry {
             .putString(PREF_TRACE_ID, correlation.traceId)
             .putString(PREF_ACTION_ID, correlation.actionId)
             .putString(PREF_SPAN_ID, correlation.spanId)
-            .apply()
+            .commit()
     }
 
     fun rotateAction(context: Context, traceId: String? = null): CorrelationContext {
@@ -704,7 +704,7 @@ object RuntimeToolkitTelemetry {
         context.getSharedPreferences(PREF_RUNTIME_SETTINGS, Context.MODE_PRIVATE)
 
     private fun setRuntimeSetting(context: Context, key: String, value: String) {
-        runtimeSettings(context).edit().putString(key, value).apply()
+        runtimeSettings(context).edit().putString(key, value).commit()
     }
 
     private fun canonicalHeaderSubset(headers: Map<String, String>): Map<String, String> {
