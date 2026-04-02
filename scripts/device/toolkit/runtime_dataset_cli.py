@@ -50,39 +50,62 @@ PHASE_PRIORITY = {
     PHASE_BACKGROUND: 1,
 }
 
-HOST_CLASS_TARGET = "target"
-HOST_CLASS_PROVIDER_BOOTSTRAP = "provider_bootstrap"
+HOST_CLASS_TARGET_DOCUMENT = "target_document"
+HOST_CLASS_TARGET_API = "target_api"
+HOST_CLASS_TARGET_PLAYBACK = "target_playback"
+HOST_CLASS_TARGET_ASSET = "target_asset"
 HOST_CLASS_BROWSER_BOOTSTRAP = "browser_bootstrap"
 HOST_CLASS_GOOGLE_NOISE = "google_noise"
 HOST_CLASS_ANALYTICS_NOISE = "analytics_noise"
-HOST_CLASS_AD_NOISE = "ad_noise"
-HOST_CLASS_EXTERNAL_NOISE = "external_noise"
 HOST_CLASS_BACKGROUND_NOISE = "background_noise"
 HOST_CLASS_IGNORED = "ignored"
-HOST_CLASS_UNKNOWN = "unknown"
 
 HOST_SCOPE_BUCKETS = [
-    HOST_CLASS_TARGET,
-    HOST_CLASS_PROVIDER_BOOTSTRAP,
+    HOST_CLASS_TARGET_DOCUMENT,
+    HOST_CLASS_TARGET_API,
+    HOST_CLASS_TARGET_PLAYBACK,
+    HOST_CLASS_TARGET_ASSET,
     HOST_CLASS_BROWSER_BOOTSTRAP,
     HOST_CLASS_GOOGLE_NOISE,
     HOST_CLASS_ANALYTICS_NOISE,
-    HOST_CLASS_AD_NOISE,
-    HOST_CLASS_EXTERNAL_NOISE,
     HOST_CLASS_BACKGROUND_NOISE,
     HOST_CLASS_IGNORED,
-    HOST_CLASS_UNKNOWN,
 ]
+
+CANONICAL_HOST_CLASSES = set(HOST_SCOPE_BUCKETS)
+
+LEGACY_HOST_CLASS_ALIASES = {
+    "target": HOST_CLASS_TARGET_DOCUMENT,
+    "provider_bootstrap": HOST_CLASS_TARGET_DOCUMENT,
+    "ad_noise": HOST_CLASS_ANALYTICS_NOISE,
+    "external_noise": HOST_CLASS_BACKGROUND_NOISE,
+    "unknown": HOST_CLASS_BACKGROUND_NOISE,
+}
 
 ACTIVE_REPLAY_ROLLUP_TIMEOUT_MS = 2_000
 
 NON_SIGNAL_HOST_CLASSES = {
+    HOST_CLASS_TARGET_ASSET,
+    HOST_CLASS_BROWSER_BOOTSTRAP,
     HOST_CLASS_GOOGLE_NOISE,
     HOST_CLASS_ANALYTICS_NOISE,
-    HOST_CLASS_AD_NOISE,
-    HOST_CLASS_EXTERNAL_NOISE,
     HOST_CLASS_BACKGROUND_NOISE,
     HOST_CLASS_IGNORED,
+}
+
+EXTRACTION_ELIGIBLE_HOST_CLASSES = {
+    HOST_CLASS_TARGET_DOCUMENT,
+    HOST_CLASS_TARGET_API,
+    HOST_CLASS_TARGET_PLAYBACK,
+}
+
+KNOWN_TARGET_PLAYBACK_HOST_SUFFIXES: Dict[str, Tuple[str, ...]] = {
+    "zdf.de": (
+        "akamaihd.net",
+        "akamaized.net",
+        "zdf.de",
+        "zdf-cdn.de",
+    ),
 }
 
 PROVENANCE_TARGET_NAMES = {
@@ -222,6 +245,20 @@ def normalize_phase_id(value: Any) -> str:
     return ""
 
 
+def normalize_host_class_value(value: Any) -> str:
+    host_class = str(value or "").strip().lower()
+    if not host_class:
+        return HOST_CLASS_BACKGROUND_NOISE
+    if host_class in CANONICAL_HOST_CLASSES:
+        return host_class
+    mapped = LEGACY_HOST_CLASS_ALIASES.get(host_class)
+    if mapped:
+        return mapped
+    if host_class in {"ignored", "ignore"}:
+        return HOST_CLASS_IGNORED
+    return HOST_CLASS_BACKGROUND_NOISE
+
+
 def normalize_host(host: str) -> str:
     return host.lower().strip().strip(".")
 
@@ -236,10 +273,33 @@ def normalized_url_components(url: str) -> Tuple[str, str, str, str]:
     scheme = str(parsed.scheme or "").lower()
     host = normalize_host(str(parsed.netloc or ""))
     path = str(parsed.path or "/")
+    query = str(parsed.query or "")
+    if not host and scheme in {"blob", "view-source"}:
+        nested = run_parse_url(path)
+        if nested:
+            nested_scheme, nested_host, nested_path, nested_query = nested
+            host = nested_host
+            if nested_path:
+                path = nested_path
+            if nested_query:
+                query = nested_query
     if not path.startswith("/"):
         path = f"/{path}"
-    query = str(parsed.query or "")
     return (scheme, host, path, query)
+
+
+def run_parse_url(raw: str) -> Optional[Tuple[str, str, str, str]]:
+    try:
+        parsed = urlparse(raw)
+    except Exception:
+        return None
+    if not parsed.netloc:
+        return None
+    nested_scheme = str(parsed.scheme or "").lower()
+    nested_host = normalize_host(str(parsed.netloc or ""))
+    nested_path = str(parsed.path or "/")
+    nested_query = str(parsed.query or "")
+    return (nested_scheme, nested_host, nested_path, nested_query)
 
 
 def normalized_url_for_parts(scheme: str, host: str, path: str, query: str) -> str:
@@ -303,10 +363,23 @@ def looks_like_analytics_noise(host: str, url: str) -> bool:
     return any(hint in value for hint in hints)
 
 
-def looks_like_ad_noise(host: str, url: str) -> bool:
-    value = f"{host} {url}".lower()
-    hints = ["adservice", "ads.", "/ads", "adnxs", "taboola", "outbrain"]
-    return any(hint in value for hint in hints)
+def looks_like_asset(url: str, path: str, source: str = "", mime_type: str = "") -> bool:
+    lower = f"{url} {path} {source} {mime_type}".lower()
+    hints = [
+        "_next/static",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".css",
+        ".svg",
+        ".gif",
+        ".webp",
+        "favicon",
+    ]
+    return any(hint in lower for hint in hints)
 
 
 def looks_like_browser_bootstrap(url: str, path: str, source: str) -> bool:
@@ -325,6 +398,43 @@ def looks_like_browser_bootstrap(url: str, path: str, source: str) -> bool:
         "about:blank",
     ]
     return any(hint in lower for hint in hints)
+
+
+def looks_like_playback(url: str, path: str, operation: str = "", classification: str = "", mime_type: str = "") -> bool:
+    lower = f"{url} {path} {operation} {classification} {mime_type}".lower()
+    tokens = (
+        "playback",
+        "resolver",
+        "manifest",
+        ".m3u8",
+        ".mpd",
+        "stream",
+        "/tmd/",
+        "/ptmd/",
+        "seamless-view-entries",
+        "playbackhistory",
+    )
+    return any(token in lower for token in tokens)
+
+
+def looks_like_target_api(url: str, path: str, operation: str = "", classification: str = "", mime_type: str = "") -> bool:
+    lower = f"{url} {path} {operation} {classification} {mime_type}".lower()
+    tokens = (
+        "/api/",
+        "/v1/",
+        "/v2/",
+        "graphql",
+        "operationname=",
+        "search",
+        "detail",
+        "episode",
+        "query=",
+        "suggest",
+        "auth",
+        "token",
+        "json",
+    )
+    return any(token in lower for token in tokens)
 
 
 def infer_phase_from_hints(url: str, method: str, operation: str, classification: str) -> str:
@@ -466,8 +576,8 @@ def event_host_class(row: Dict[str, Any]) -> str:
     for key in ("host_class", "hostClass"):
         val = payload.get(key)
         if isinstance(val, str) and val:
-            return val
-    return HOST_CLASS_UNKNOWN
+            return normalize_host_class_value(val)
+    return HOST_CLASS_BACKGROUND_NOISE
 
 
 def event_source(row: Dict[str, Any]) -> str:
@@ -704,15 +814,22 @@ def discover_target_hosts(rows: List[Dict[str, Any]], runtime_dir: Optional[path
 
     counter: Counter[str] = Counter()
     for row in rows:
-        if str(row.get("event_type") or "") != "network_request_event":
+        if str(row.get("event_type") or "") not in {"network_request_event", "network_response_event"}:
             continue
         url = event_url(row)
         _, host, _, _ = normalized_url_components(url)
         if not host:
             continue
-        existing = event_host_class(row)
-        if existing and existing != HOST_CLASS_TARGET:
-            continue
+        raw_existing = str(event_payload(row).get("host_class") or event_payload(row).get("hostClass") or "").strip()
+        if raw_existing:
+            existing = normalize_host_class_value(raw_existing)
+            if existing not in {
+                HOST_CLASS_TARGET_DOCUMENT,
+                HOST_CLASS_TARGET_API,
+                HOST_CLASS_TARGET_PLAYBACK,
+                HOST_CLASS_TARGET_ASSET,
+            }:
+                continue
         if looks_like_google_noise(host, url):
             continue
         counter[host] += 1
@@ -742,49 +859,69 @@ def resolve_host_class(
     path: str,
     url: str,
     source: str,
-    phase_id: str,
     target_hosts: List[str],
+    target_site_id: str,
     original_host_class: str,
+    operation: str,
+    classification: str,
+    mime_type: str,
 ) -> str:
-    normalized_original = str(original_host_class or "").strip()
-    if (
-        normalized_original == HOST_CLASS_PROVIDER_BOOTSTRAP
-        and host
-        and not looks_like_google_noise(host, url)
-        and not looks_like_analytics_noise(host, url)
-        and not looks_like_ad_noise(host, url)
-    ):
-        return HOST_CLASS_PROVIDER_BOOTSTRAP
-    if (
-        normalized_original == HOST_CLASS_TARGET
-        and host
-        and not looks_like_google_noise(host, url)
-        and not looks_like_analytics_noise(host, url)
-        and not looks_like_ad_noise(host, url)
-    ):
-        if looks_like_browser_bootstrap(url=url, path=path, source=source):
-            return HOST_CLASS_PROVIDER_BOOTSTRAP
-        return HOST_CLASS_TARGET
-    if is_target_host(host, target_hosts):
-        if looks_like_browser_bootstrap(url=url, path=path, source=source):
-            return HOST_CLASS_PROVIDER_BOOTSTRAP
-        return HOST_CLASS_TARGET
+    # Deterministic precedence:
+    # 1) invalid host => ignored
+    # 2) target playback
+    # 3) target api
+    # 4) target asset
+    # 5) target fallback document
+    # 6) browser bootstrap
+    # 7) google noise
+    # 8) analytics noise
+    # 9) background fallback
+    normalized_original = normalize_host_class_value(original_host_class)
+    if not host:
+        return HOST_CLASS_IGNORED if normalized_original == HOST_CLASS_IGNORED else HOST_CLASS_IGNORED
 
-    if looks_like_google_noise(host, url):
-        return HOST_CLASS_GOOGLE_NOISE
-    if looks_like_ad_noise(host, url):
-        return HOST_CLASS_AD_NOISE
-    if looks_like_analytics_noise(host, url):
-        return HOST_CLASS_ANALYTICS_NOISE
+    is_target = is_target_host(host, target_hosts)
+    if not is_target:
+        known_suffixes = KNOWN_TARGET_PLAYBACK_HOST_SUFFIXES.get(target_site_id, tuple())
+        if known_suffixes and looks_like_playback(
+            url=url,
+            path=path,
+            operation=operation,
+            classification=classification,
+            mime_type=mime_type,
+        ):
+            is_target = any(host == suffix or host.endswith(f".{suffix}") for suffix in known_suffixes)
+
+    if is_target:
+        if looks_like_playback(
+            url=url,
+            path=path,
+            operation=operation,
+            classification=classification,
+            mime_type=mime_type,
+        ):
+            return HOST_CLASS_TARGET_PLAYBACK
+        if looks_like_target_api(
+            url=url,
+            path=path,
+            operation=operation,
+            classification=classification,
+            mime_type=mime_type,
+        ):
+            return HOST_CLASS_TARGET_API
+        if looks_like_asset(url=url, path=path, source=source, mime_type=mime_type):
+            return HOST_CLASS_TARGET_ASSET
+        return HOST_CLASS_TARGET_DOCUMENT
+
     if looks_like_browser_bootstrap(url=url, path=path, source=source):
         return HOST_CLASS_BROWSER_BOOTSTRAP
-    if phase_id == PHASE_BACKGROUND:
-        return HOST_CLASS_BACKGROUND_NOISE
-    if normalized_original in {HOST_CLASS_IGNORED, HOST_CLASS_UNKNOWN}:
-        return normalized_original
-    if host:
-        return HOST_CLASS_EXTERNAL_NOISE
-    return HOST_CLASS_UNKNOWN
+    if looks_like_google_noise(host, url):
+        return HOST_CLASS_GOOGLE_NOISE
+    if looks_like_analytics_noise(host, url):
+        return HOST_CLASS_ANALYTICS_NOISE
+    if normalized_original == HOST_CLASS_IGNORED:
+        return HOST_CLASS_IGNORED
+    return HOST_CLASS_BACKGROUND_NOISE
 
 
 def canonical_request_key(payload: Dict[str, Any], scheme: str, host: str, path: str, query: str) -> str:
@@ -818,9 +955,47 @@ def request_flags(payload: Dict[str, Any], phase_id: str, url: str) -> Dict[str,
     }
 
 
+PHASE_MARKER_ALIASES: Dict[str, Tuple[str, str]] = {
+    "home_probe_start": (PHASE_HOME, "start"),
+    "search_probe_start": (PHASE_SEARCH, "start"),
+    "detail_probe_start": (PHASE_DETAIL, "start"),
+    "playback_probe_start": (PHASE_PLAYBACK, "start"),
+    "auth_probe_start": (PHASE_AUTH, "start"),
+    "probe_end": (PHASE_BACKGROUND, "stop"),
+}
+
+SPECIALIZED_PHASES = {PHASE_SEARCH, PHASE_DETAIL, PHASE_PLAYBACK, PHASE_AUTH}
+
+
+def marker_alias_for_row(row: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    payload = event_payload(row)
+    candidates = [
+        str(payload.get("operation") or "").strip(),
+        str(payload.get("action_name") or "").strip(),
+        str(payload.get("event_name") or "").strip(),
+        str(payload.get("marker") or "").strip(),
+    ]
+    for value in candidates:
+        lowered = value.lower()
+        if lowered in PHASE_MARKER_ALIASES:
+            return PHASE_MARKER_ALIASES[lowered]
+    return None
+
+
+def inferred_phase_for_row(row: Dict[str, Any]) -> str:
+    return infer_phase_from_hints(
+        url=event_url(row),
+        method=event_method(row),
+        operation=event_request_operation(row),
+        classification=event_request_classification(row),
+    )
+
+
 def pick_phase_for_event(
     row: Dict[str, Any],
     current_phase: str,
+    seen_special_phase: bool,
+    target_hosts: List[str],
 ) -> str:
     payload = event_payload(row)
     raw_phase = str(payload.get("phase_id") or payload.get("phaseId") or "").strip()
@@ -829,16 +1004,25 @@ def pick_phase_for_event(
         explicit = ""
     if explicit:
         return explicit
-    inferred = infer_phase_from_hints(
-        url=event_url(row),
-        method=event_method(row),
-        operation=event_request_operation(row),
-        classification=event_request_classification(row),
-    )
-    if inferred:
-        return inferred
-    if current_phase:
+
+    inferred = inferred_phase_for_row(row)
+    if current_phase and current_phase != PHASE_BACKGROUND:
+        # Active marker window wins over inference.
         return current_phase
+    if inferred and inferred != PHASE_BACKGROUND:
+        return inferred
+
+    url = event_url(row)
+    _, host, path, _ = normalized_url_components(url)
+    if host and is_target_host(host, target_hosts):
+        if (
+            not seen_special_phase
+            and not looks_like_playback(url=url, path=path, operation=event_request_operation(row), classification=event_request_classification(row))
+        ):
+            return PHASE_HOME
+        if current_phase and current_phase != PHASE_BACKGROUND:
+            return current_phase
+        return PHASE_HOME
     return PHASE_BACKGROUND
 
 
@@ -851,6 +1035,7 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
     target_site_id = canonical_target_site_id(primary_host)
 
     active_phase = PHASE_BACKGROUND
+    seen_special_phase = False
     canonical_request_id_by_key: Dict[str, str] = {}
     canonical_request_event_by_key: Dict[str, str] = {}
     request_id_aliases: Dict[str, str] = {}
@@ -864,6 +1049,24 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
 
         event_type = str(row.get("event_type") or "")
         transition = str(payload.get("transition") or "").strip().lower()
+        alias_marker = marker_alias_for_row(row)
+        if alias_marker:
+            alias_phase, alias_transition = alias_marker
+            payload["phase_marker_alias"] = str(payload.get("phase_marker_alias") or str(payload.get("operation") or ""))
+            if alias_transition in {"start", "resume", "enter"}:
+                active_phase = alias_phase
+                if alias_phase in SPECIALIZED_PHASES:
+                    seen_special_phase = True
+            elif alias_transition in {"stop", "exit", "pause"}:
+                active_phase = PHASE_BACKGROUND
+            payload.setdefault("phase_id", alias_phase if alias_phase in VALID_PHASES else PHASE_BACKGROUND)
+
+        url = event_url(row)
+        scheme, host, path, query = normalized_url_components(url)
+        request_operation = str(payload.get("request_operation") or payload.get("response_operation") or payload.get("operation") or "")
+        request_classification = str(payload.get("request_classification") or payload.get("response_classification") or payload.get("classification") or "")
+        mime_type = str(payload.get("mime_type") or payload.get("mime") or payload.get("content_type") or "")
+
         if event_type == "probe_phase_event":
             phase = normalize_phase_id(payload.get("phase_id") or payload.get("phaseId")) or active_phase or PHASE_BACKGROUND
             if transition in {"", "mark"}:
@@ -872,6 +1075,8 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
             payload["phase_id"] = phase
             if transition in {"start", "resume", "enter"}:
                 active_phase = phase
+                if phase in SPECIALIZED_PHASES:
+                    seen_special_phase = True
             elif transition in {"stop", "exit", "pause"}:
                 active_phase = PHASE_BACKGROUND
             payload["target_site_id"] = target_site_id
@@ -881,11 +1086,16 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
             payload["host_class"] = HOST_CLASS_BACKGROUND_NOISE
             continue
 
-        phase_id = pick_phase_for_event(row, active_phase)
+        phase_id = pick_phase_for_event(
+            row,
+            current_phase=active_phase,
+            seen_special_phase=seen_special_phase,
+            target_hosts=target_hosts,
+        )
         payload["phase_id"] = phase_id
+        if phase_id in SPECIALIZED_PHASES:
+            seen_special_phase = True
 
-        url = event_url(row)
-        scheme, host, path, query = normalized_url_components(url)
         payload["normalized_scheme"] = scheme
         payload["normalized_host"] = host
         payload["normalized_path"] = path
@@ -897,9 +1107,12 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
             path=path,
             url=url,
             source=event_source(row),
-            phase_id=phase_id,
             target_hosts=target_hosts,
+            target_site_id=target_site_id,
             original_host_class=event_host_class(row),
+            operation=request_operation,
+            classification=request_classification,
+            mime_type=mime_type,
         )
         payload["host_class"] = host_class
 
@@ -976,7 +1189,7 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
                 if linked_phase and linked_phase != PHASE_BACKGROUND:
                     phase_id = linked_phase
                     payload["phase_id"] = linked_phase
-            if str(payload.get("host_class") or "") == HOST_CLASS_BACKGROUND_NOISE:
+            if normalize_host_class_value(payload.get("host_class")) == HOST_CLASS_BACKGROUND_NOISE:
                 linked_host_class = str(request_context.get("host_class") or "")
                 if linked_host_class:
                     payload["host_class"] = linked_host_class
@@ -996,6 +1209,13 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
             headers = event_headers(row)
             content_length = str(headers.get("content-length") or headers.get("Content-Length") or payload.get("content_length_header") or "")
             payload["content_length_header"] = content_length
+            original_content_length = safe_int(
+                payload.get("original_content_length")
+                or payload.get("response_content_length")
+                or content_length,
+                default=0,
+            )
+            payload["original_content_length"] = original_content_length if original_content_length > 0 else 0
             stored_size_bytes = safe_int(
                 payload.get("stored_size_bytes")
                 or payload.get("response_size_bytes")
@@ -1010,6 +1230,8 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
             payload["body_ref"] = body_ref
             capture_truncated = bool(payload.get("capture_truncated"))
             capture_limit_bytes = safe_int(payload.get("capture_limit_bytes") or payload.get("captured_body_bytes"), default=0)
+            if not capture_truncated and original_content_length > 0 and stored_size_bytes > 0 and stored_size_bytes < original_content_length:
+                capture_truncated = True
             if capture_truncated and capture_limit_bytes <= 0 and stored_size_bytes > 0:
                 capture_limit_bytes = stored_size_bytes
             payload["capture_truncated"] = capture_truncated
@@ -1096,6 +1318,20 @@ def event_content_length_header(row: Dict[str, Any]) -> str:
         return value
     headers = event_headers(row)
     return str(headers.get("content-length") or headers.get("Content-Length") or "")
+
+
+def event_original_content_length(row: Dict[str, Any]) -> int:
+    payload = event_payload(row)
+    value = safe_int(
+        payload.get("original_content_length")
+        or payload.get("response_content_length")
+        or payload.get("content_length_header"),
+        default=0,
+    )
+    if value > 0:
+        return value
+    header = event_content_length_header(row)
+    return safe_int(header, default=0)
 
 
 def event_stored_size_bytes(row: Dict[str, Any]) -> int:
@@ -1240,6 +1476,7 @@ def compact_response(row: Dict[str, Any]) -> Dict[str, Any]:
         "mime": event_mime(row),
         "mime_type": str(payload.get("mime_type") or event_mime(row)),
         "content_length_header": event_content_length_header(row),
+        "original_content_length": event_original_content_length(row),
         "stored_size_bytes": event_stored_size_bytes(row),
         "body_ref": str(payload.get("body_ref") or event_response_store_path(row)),
         "capture_truncated": event_capture_truncated(row),
@@ -1392,9 +1629,6 @@ def build_correlation(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             if host_class
         )
         host_scope = {bucket: int(host_class_counter.get(bucket, 0)) for bucket in HOST_SCOPE_BUCKETS}
-        host_scope.setdefault("external_noise", int(host_class_counter.get("external_noise", 0)))
-        host_scope.setdefault("ignored", int(host_class_counter.get("ignored", 0)))
-        host_scope.setdefault("unknown", int(host_class_counter.get("unknown", 0)))
         dedup_ref_count = len(dedup_events) + len(
             [request for request in request_events_raw if event_dedup_of(request)]
         )
@@ -2296,47 +2530,111 @@ def build_field_matrix(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib
     skipped_non_target = 0
     field_hits: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     search_mapping_samples: List[Dict[str, Any]] = []
+    extraction_events: List[Dict[str, Any]] = []
+
+    def confidence_summary_for_attempt(extracted_field_count: int) -> str:
+        if extracted_field_count <= 0:
+            return "none"
+        if extracted_field_count <= 2:
+            return "low"
+        if extracted_field_count <= 5:
+            return "medium"
+        return "high"
 
     for row in response_events:
         host_class = event_host_class(row)
-        if host_class in NON_SIGNAL_HOST_CLASSES:
+        explicit_host_class_present = any(
+            isinstance(event_payload(row).get(key), str) and str(event_payload(row).get(key)).strip()
+            for key in ("host_class", "hostClass")
+        )
+        if host_class == HOST_CLASS_BACKGROUND_NOISE and not explicit_host_class_present:
+            url = event_url(row)
+            _, host, path, _ = normalized_url_components(url)
+            if host and not looks_like_google_noise(host, url) and not looks_like_analytics_noise(host, url):
+                if looks_like_playback(
+                    url=url,
+                    path=path,
+                    operation=event_request_operation(row),
+                    classification=event_request_classification(row),
+                    mime_type=event_mime(row),
+                ):
+                    host_class = HOST_CLASS_TARGET_PLAYBACK
+                elif looks_like_asset(url=url, path=path, source=event_source(row), mime_type=event_mime(row)):
+                    host_class = HOST_CLASS_TARGET_ASSET
+                elif looks_like_target_api(
+                    url=url,
+                    path=path,
+                    operation=event_request_operation(row),
+                    classification=event_request_classification(row),
+                    mime_type=event_mime(row),
+                ):
+                    host_class = HOST_CLASS_TARGET_API
+                else:
+                    host_class = HOST_CLASS_TARGET_DOCUMENT
+        if host_class not in EXTRACTION_ELIGIBLE_HOST_CLASSES:
             skipped_non_target += 1
             continue
+        event_id = str(row.get("event_id") or "")
+        source_ref = str(event_payload(row).get("body_ref") or event_response_store_path(row) or event_id)
+        phase_id = event_phase_id(row)
+        extraction_kind = "unknown"
+        extracted_field_count = 0
         body = read_response_store_payload(row, runtime_dir)
         if not body:
             body = event_body_preview(row)
         if not body:
+            extraction_events.append(
+                {
+                    "source_ref": source_ref,
+                    "phase_id": phase_id,
+                    "host_class": host_class,
+                    "extraction_kind": "missing_body",
+                    "success": False,
+                    "extracted_field_count": 0,
+                    "confidence_summary": "none",
+                    "event_id": event_id,
+                }
+            )
             continue
         try:
+            extraction_kind = "json"
             loaded = json.loads(body)
             parsed_events += 1
             for key in flatten_keys(loaded):
                 key_counter[key] += 1
 
             leaves = list(iter_json_leaf_paths(loaded))
-            event_id = str(row.get("event_id") or "")
             for key, value in leaves:
                 lower_key = key.lower()
                 str_value = value if isinstance(value, str) else ""
                 str_value_lower = str(str_value).lower()
                 if any(token in lower_key for token in ("title", "headline", "name")) and str_value:
                     field_hits["title"].append({"event_id": event_id, "path": key, "value": str_value[:200], "source": "json"})
+                    extracted_field_count += 1
                 if any(token in lower_key for token in ("subtitle", "sub_title", "teaser_title")) and str_value:
                     field_hits["subtitle"].append({"event_id": event_id, "path": key, "value": str_value[:200], "source": "json"})
+                    extracted_field_count += 1
                 if any(token in lower_key for token in ("description", "summary", "teasertext")) and str_value:
                     field_hits["description"].append({"event_id": event_id, "path": key, "value": str_value[:300], "source": "json"})
+                    extracted_field_count += 1
                 if any(token in lower_key for token in ("image", "poster", "thumbnail")) and str_value and str_value_lower.startswith("http"):
                     field_hits["image/poster"].append({"event_id": event_id, "path": key, "value": str_value[:300], "source": "json"})
+                    extracted_field_count += 1
                 if any(token in lower_key for token in ("canonicalid", "canonical_id", "contentid", "content_id")):
                     field_hits["canonical id"].append({"event_id": event_id, "path": key, "value": str(value)[:120], "source": "json"})
+                    extracted_field_count += 1
                 if any(token in lower_key for token in ("collectionid", "collection_id", "seriesid", "series_id", "railid", "rail_id")):
                     field_hits["collection id"].append({"event_id": event_id, "path": key, "value": str(value)[:120], "source": "json"})
+                    extracted_field_count += 1
                 if any(token in lower_key for token in ("type", "itemtype", "item_type", "teasertype", "teaser_type")) and str_value:
                     field_hits["teaser/item type"].append({"event_id": event_id, "path": key, "value": str_value[:120], "source": "json"})
+                    extracted_field_count += 1
                 if any(token in lower_key for token in ("playback", "manifest", "stream", "drm", "resolver")):
                     field_hits["playback hints"].append({"event_id": event_id, "path": key, "value": str(value)[:160], "source": "json"})
+                    extracted_field_count += 1
                 if any(token in lower_key for token in ("section", "rail", "category")) and str_value:
                     field_hits["section/rail names"].append({"event_id": event_id, "path": key, "value": str_value[:120], "source": "json"})
+                    extracted_field_count += 1
 
             if isinstance(loaded, dict):
                 for root_key in ("results", "items", "hits"):
@@ -2351,7 +2649,9 @@ def build_field_matrix(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib
                                     "sample_keys": sorted(list(sample.keys()))[:20],
                                 }
                             )
+                            extracted_field_count += 1
         except Exception:
+            extraction_kind = "html"
             title = html_extract_title(body)
             if title:
                 field_hits["title"].append(
@@ -2362,6 +2662,7 @@ def build_field_matrix(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib
                         "source": "html",
                     }
                 )
+                extracted_field_count += 1
             og_image = html_extract_og_image(body)
             if og_image:
                 field_hits["image/poster"].append(
@@ -2372,6 +2673,20 @@ def build_field_matrix(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib
                         "source": "html",
                     }
                 )
+                extracted_field_count += 1
+
+        extraction_events.append(
+            {
+                "source_ref": source_ref,
+                "phase_id": phase_id,
+                "host_class": host_class,
+                "extraction_kind": extraction_kind,
+                "success": extracted_field_count > 0,
+                "extracted_field_count": extracted_field_count,
+                "confidence_summary": confidence_summary_for_attempt(extracted_field_count),
+                "event_id": event_id,
+            }
+        )
 
     required_fields = [
         "title",
@@ -2425,6 +2740,9 @@ def build_field_matrix(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib
         "parsed_response_events": parsed_events,
         "total_response_events": len(response_events),
         "skipped_non_target_events": skipped_non_target,
+        "extraction_event_count": len(extraction_events),
+        "extraction_success_count": len([item for item in extraction_events if bool(item.get("success"))]),
+        "extraction_events": extraction_events,
         "fields": field_matrix_rows,
         "keys": [{"field": key, "count": count} for key, count in key_counter.most_common(500)],
     }
@@ -2632,6 +2950,7 @@ def build_response_store_index(
                 "status": event_status(row),
                 "status_code": safe_int(event_payload(row).get("status_code") or event_status(row), default=0),
                 "content_length_header": event_content_length_header(row),
+                "original_content_length": event_original_content_length(row),
                 "stored_size_bytes": event_stored_size_bytes(row),
                 "capture_truncated": event_capture_truncated(row),
                 "capture_limit_bytes": event_capture_limit_bytes(row),
@@ -2735,8 +3054,8 @@ def build_body_store(rows: List[Dict[str, Any]], runtime_dir: pathlib.Path) -> D
         capture_limit_bytes = event_capture_limit_bytes(row)
         stored_size_bytes = event_stored_size_bytes(row)
         content_length_header = event_content_length_header(row)
-        content_length_int = safe_int(content_length_header, default=0)
-        if not capture_truncated and content_length_int > 0 and stored_size_bytes > 0 and stored_size_bytes < content_length_int:
+        original_content_length = event_original_content_length(row)
+        if not capture_truncated and original_content_length > 0 and stored_size_bytes > 0 and stored_size_bytes < original_content_length:
             capture_truncated = True
             if capture_limit_bytes <= 0:
                 capture_limit_bytes = stored_size_bytes
@@ -2772,6 +3091,7 @@ def build_body_store(rows: List[Dict[str, Any]], runtime_dir: pathlib.Path) -> D
                 "size_bytes": len(payload_bytes),
                 "stored_size_bytes": stored_size_bytes,
                 "content_length_header": content_length_header,
+                "original_content_length": original_content_length,
                 "compression": compression,
                 "body_ref": rel,
                 "phase_id": event_phase_id(row),
@@ -3280,6 +3600,63 @@ def compact_requests_canonical(rows: List[Dict[str, Any]]) -> List[Dict[str, Any
     return canonical_rows
 
 
+def build_extraction_event_rows(rows: List[Dict[str, Any]], field_matrix: Dict[str, Any]) -> List[Dict[str, Any]]:
+    request_id_by_response_event: Dict[str, str] = {}
+    for row in rows:
+        if row.get("event_type") != "network_response_event":
+            continue
+        request_id_by_response_event[str(row.get("event_id") or "")] = event_request_id(row)
+
+    response_by_event_id = {
+        str(row.get("event_id") or ""): row
+        for row in rows
+        if row.get("event_type") == "network_response_event"
+    }
+
+    out: List[Dict[str, Any]] = []
+    for idx, item in enumerate(list(field_matrix.get("extraction_events") or [])):
+        if not isinstance(item, dict):
+            continue
+        source_event_id = str(item.get("event_id") or "")
+        source_row = response_by_event_id.get(source_event_id, {})
+        run_id = str(source_row.get("run_id") or "derived_run")
+        trace_id = str(source_row.get("trace_id") or "")
+        span_id = str(source_row.get("span_id") or "")
+        action_id = str(source_row.get("action_id") or "")
+        ts_utc = str(source_row.get("ts_utc") or utc_now())
+        request_id = request_id_by_response_event.get(source_event_id, "")
+        payload = {
+            "operation": "field_matrix_extraction_attempt",
+            "source_ref": str(item.get("source_ref") or source_event_id),
+            "phase_id": str(item.get("phase_id") or event_phase_id(source_row)),
+            "host_class": str(item.get("host_class") or event_host_class(source_row)),
+            "extraction_kind": str(item.get("extraction_kind") or "unknown"),
+            "success": bool(item.get("success")),
+            "extracted_field_count": int(item.get("extracted_field_count") or 0),
+            "confidence_summary": str(item.get("confidence_summary") or "none"),
+            "source_event_id": source_event_id,
+            "request_id": request_id,
+            "target_site_id": event_target_site_id(source_row),
+        }
+        out.append(
+            {
+                "schema_version": 1,
+                "run_id": run_id,
+                "event_id": f"derived_extraction_{idx}_{stable_hash([source_event_id, payload])[:12]}",
+                "event_type": "extraction_event",
+                "ts_utc": ts_utc,
+                "ts_mono_ns": int(source_row.get("ts_mono_ns") or 0),
+                "trace_id": trace_id,
+                "span_id": span_id,
+                "action_id": action_id,
+                "device": source_row.get("device") if isinstance(source_row.get("device"), dict) else {},
+                "app": source_row.get("app") if isinstance(source_row.get("app"), dict) else {},
+                "payload": payload,
+            }
+        )
+    return out
+
+
 def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dict[str, pathlib.Path]:
     rows = normalize_runtime_rows(rows, runtime_dir=runtime_dir)
     correlation = build_correlation(rows)
@@ -3303,6 +3680,7 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
     )
     endpoint_candidates = build_endpoint_candidates(rows)
     field_matrix = build_field_matrix(rows, runtime_dir=runtime_dir)
+    extraction_event_rows = build_extraction_event_rows(rows, field_matrix)
     profile_draft = build_profile_draft(rows, endpoint_candidates, required_headers)
     replay_seed = build_replay_seed(rows)
     body_store = build_body_store(rows, runtime_dir=runtime_dir)
@@ -3316,7 +3694,7 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
     events_ssot = {
         "schema_version": 1,
         "generated_at_utc": utc_now(),
-        "event_count": len(rows),
+        "event_count": len(rows) + len(extraction_event_rows),
         "raw_event_store_ssot": str(events_path(runtime_dir)),
     }
     profile_candidate = dict(profile_draft)
@@ -3327,6 +3705,7 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
 
     paths = {
         "events_ssot": runtime_dir / "events.jsonl",
+        "extraction_events": runtime_dir / "extraction_events.jsonl",
         "events_ssot_meta": runtime_dir / "events.meta.json",
         "requests_normalized": runtime_dir / "requests.normalized.jsonl",
         "responses_normalized": runtime_dir / "responses.normalized.jsonl",
@@ -3346,7 +3725,8 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
         "provenance_registry": runtime_dir / "provenance_registry.json",
     }
 
-    write_jsonl(paths["events_ssot"], rows)
+    write_jsonl(paths["events_ssot"], list(rows) + extraction_event_rows)
+    write_jsonl(paths["extraction_events"], extraction_event_rows)
     write_json(paths["events_ssot_meta"], events_ssot)
     write_jsonl(paths["requests_normalized"], request_rows)
     write_jsonl(paths["responses_normalized"], response_rows)
@@ -3494,6 +3874,7 @@ def pipeline_quality_report(
 
     latest_targets = [
         runtime_dir / "events.jsonl",
+        runtime_dir / "extraction_events.jsonl",
         runtime_dir / "requests.normalized.jsonl",
         runtime_dir / "responses.normalized.jsonl",
         runtime_dir / "correlation_index.jsonl",
@@ -4894,6 +5275,7 @@ def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Name
         for rel in [
             "events/runtime_events.jsonl",
             "events.jsonl",
+            "extraction_events.jsonl",
             "events.meta.json",
             "requests.normalized.jsonl",
             "responses.normalized.jsonl",

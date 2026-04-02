@@ -65,6 +65,7 @@
   "required_outputs": [
     "runtime_events.jsonl",
     "events.jsonl",
+    "extraction_events.jsonl",
     "requests.normalized.jsonl",
     "responses.normalized.jsonl",
     "correlation_index.jsonl",

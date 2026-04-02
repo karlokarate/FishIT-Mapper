@@ -70,7 +70,23 @@
               "request_operation",
               "request_flags",
               "correlation_refs"
-            ]
+            ],
+            "properties": {
+              "host_class": {
+                "type": "string",
+                "enum": [
+                  "target_document",
+                  "target_api",
+                  "target_playback",
+                  "target_asset",
+                  "browser_bootstrap",
+                  "google_noise",
+                  "analytics_noise",
+                  "background_noise",
+                  "ignored"
+                ]
+              }
+            }
           }
         }
       }
@@ -96,11 +112,28 @@
               "status_code",
               "mime_type",
               "content_length_header",
+              "original_content_length",
               "stored_size_bytes",
               "capture_truncated",
               "source_channel",
               "headers"
-            ]
+            ],
+            "properties": {
+              "host_class": {
+                "type": "string",
+                "enum": [
+                  "target_document",
+                  "target_api",
+                  "target_playback",
+                  "target_asset",
+                  "browser_bootstrap",
+                  "google_noise",
+                  "analytics_noise",
+                  "background_noise",
+                  "ignored"
+                ]
+              }
+            }
           }
         }
       }
@@ -123,6 +156,34 @@
           "payload": {
             "type": "object",
             "required": ["operation", "phase_id"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "extraction_event" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "anyOf": [
+              {
+                "required": [
+                  "operation"
+                ]
+              },
+              {
+                "required": [
+                  "source_ref",
+                  "phase_id",
+                  "host_class",
+                  "extraction_kind",
+                  "success",
+                  "extracted_field_count",
+                  "confidence_summary"
+                ]
+              }
+            ]
           }
         }
       }

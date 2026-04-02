@@ -383,7 +383,7 @@ class RuntimeToolkitOkHttpInterceptor(
     }
 
     companion object {
-        private const val MAX_PEEK_BYTES_FULL = 4L * 1024L * 1024L
+        private const val MAX_PEEK_BYTES_FULL = 16L * 1024L * 1024L
         private const val MAX_PEEK_BYTES_SNIPPET = 32L * 1024L
         private const val MAX_BODY_PREVIEW_BYTES = 16 * 1024
     }

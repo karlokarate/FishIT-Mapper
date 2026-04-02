@@ -735,7 +735,7 @@ class EBWebViewClient(
                           bodyPromise = response.clone().text()
                             .then(function(text) {
                               var safeText = (text == null) ? '' : String(text);
-                              var preview = truncate(safeText, 4194304);
+                              var preview = truncate(safeText, 16777216);
                               return {
                                 bodyPreview: preview,
                                 bodyPreviewTruncated: preview.length < safeText.length,
@@ -850,7 +850,7 @@ class EBWebViewClient(
                           (xhr.responseType === '' || xhr.responseType === 'text')) {
                           var responseText = (xhr.responseText == null) ? '' : String(xhr.responseText);
                           bodyOriginalLength = responseText.length;
-                          bodyPreview = truncate(responseText, 4194304);
+                          bodyPreview = truncate(responseText, 16777216);
                           bodyPreviewTruncated = bodyPreview.length < responseText.length;
                         }
                       } catch (_ignored3) {}
@@ -880,7 +880,7 @@ class EBWebViewClient(
 
     companion object {
         private const val TAG = "ebWebViewClient"
-        private const val MAX_MAIN_FRAME_HTML_CAPTURE_BYTES = 4 * 1024 * 1024
+        private const val MAX_MAIN_FRAME_HTML_CAPTURE_BYTES = 16 * 1024 * 1024
     }
 
     override fun onFormResubmission(view: WebView, doNotResend: Message, resend: Message) {

@@ -443,7 +443,7 @@ class JsWebInterface(private val webView: EBWebView) :
     }
 
     companion object {
-        private const val MAX_BRIDGE_BODY_PREVIEW_CHARS = 4 * 1024 * 1024
+        private const val MAX_BRIDGE_BODY_PREVIEW_CHARS = 16 * 1024 * 1024
     }
 }
 

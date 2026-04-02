@@ -19,17 +19,29 @@
 ## Host Classification Model
 - Host classification is target-family aware and deterministic.
 - Canonical host classes:
-  - `target`
-  - `provider_bootstrap`
+  - `target_document`
+  - `target_api`
+  - `target_playback`
+  - `target_asset`
   - `browser_bootstrap`
   - `google_noise`
   - `analytics_noise`
-  - `ad_noise`
-  - `external_noise`
   - `background_noise`
   - `ignored`
-  - `unknown`
-- `target` and `provider_bootstrap` are signal-eligible.
+- Deterministic precedence:
+  - invalid/missing host -> `ignored`
+  - target + playback hints -> `target_playback`
+  - target + api/json/graphql hints -> `target_api`
+  - target + static asset hints -> `target_asset`
+  - target fallback -> `target_document`
+  - non-target browser bootstrap -> `browser_bootstrap`
+  - non-target google -> `google_noise`
+  - non-target analytics -> `analytics_noise`
+  - final fallback -> `background_noise`
+- Signal-eligible classes:
+  - `target_document`
+  - `target_api`
+  - `target_playback`
 - Noise classes are excluded from endpoint/auth scoring.
 
 ## Candidate-Only Body Capture
@@ -40,7 +52,10 @@
   - `capture_truncated`
   - `capture_limit_bytes`
   - `content_length_header`
+  - `original_content_length`
+  - `stored_size_bytes`
 - Body blobs are content-addressed by SHA-256 and compressed when available.
+- Candidate bodies use an explicit 16 MB cap; any cap hit must set truncation metadata and must never be silent.
 
 ## Provenance Model
 - Dynamic runtime inputs are persisted in `provenance_registry.json`.
@@ -61,6 +76,17 @@
 - `latest/` artifacts are published only after successful validation.
 - Publishing is atomic via stage directory swap (`latest.stage.*` -> `latest`).
 - Failed validation must keep previous `latest/` artifacts unchanged.
+
+## Extraction Event Contract
+- Every extraction attempt (success or failure) emits an `extraction_event` in derived exports.
+- Required extraction payload fields:
+  - `source_ref`
+  - `phase_id`
+  - `host_class`
+  - `extraction_kind`
+  - `success`
+  - `extracted_field_count`
+  - `confidence_summary`
 
 ## WebKit Boundary
 - `mapper-webkit-compat` is limited to WebView capability checks, runtime safety hooks, and deterministic site-data reset helpers.

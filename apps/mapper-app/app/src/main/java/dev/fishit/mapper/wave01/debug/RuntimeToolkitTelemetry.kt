@@ -458,6 +458,10 @@ object RuntimeToolkitTelemetry {
             .orEmpty()
         val storedSizeBytes = rawBody?.size ?: 0
         val contentLengthInt = contentLengthHeader.toLongOrNull() ?: -1L
+        val originalContentLength = when {
+            contentLengthInt > 0L -> contentLengthInt
+            else -> null
+        }
         val explicitCaptureTruncated = (payload["capture_truncated"] as? Boolean) ?: false
         val explicitCaptureLimit = (payload["capture_limit_bytes"] as? Number)?.toInt() ?: 0
         val inferredCaptureTruncated = contentLengthInt > 0 && storedSizeBytes > 0 && storedSizeBytes.toLong() < contentLengthInt
@@ -523,6 +527,7 @@ object RuntimeToolkitTelemetry {
                 "mime_source" to resolvedMime.source,
                 "headers" to headers,
                 "content_length_header" to contentLengthHeader,
+                "original_content_length" to originalContentLength,
                 "stored_size_bytes" to storedSizeBytes,
                 "capture_truncated" to captureTruncated,
                 "capture_limit_bytes" to captureLimitBytes,
@@ -624,13 +629,20 @@ object RuntimeToolkitTelemetry {
     ) {
         setActivePhaseId(context, phaseId)
         val correlation = currentCorrelationContext(context)
+        val normalizedTransition = transition.trim().lowercase(Locale.ROOT).ifBlank { "mark" }
+        val markerOperation = when (normalizedTransition) {
+            "start", "resume", "enter" -> "${phaseId}_start"
+            "stop", "exit", "pause" -> "probe_end"
+            else -> "probe_mark"
+        }
         logEvent(
             context = context,
             eventType = "probe_phase_event",
             correlation = correlation,
             payload = payload + mapOf(
                 "phase_id" to phaseId,
-                "transition" to transition,
+                "transition" to normalizedTransition,
+                "operation" to markerOperation,
             ),
         )
     }
@@ -1179,20 +1191,37 @@ object RuntimeToolkitTelemetry {
             host == configured || host.endsWith(".$configured")
         }
         if (isTarget) {
-            return if (looksLikeBrowserBootstrap(url = lowerUrl, path = path, source = lowerSource)) {
-                "provider_bootstrap"
-            } else {
-                "target"
+            if (
+                lowerUrl.contains("playback") ||
+                lowerUrl.contains("resolver") ||
+                lowerUrl.contains("manifest") ||
+                lowerUrl.contains(".m3u8") ||
+                lowerUrl.contains(".mpd")
+            ) {
+                return "target_playback"
             }
+            if (
+                lowerUrl.contains("/api/") ||
+                lowerUrl.contains("/v1/") ||
+                lowerUrl.contains("/v2/") ||
+                lowerUrl.contains("graphql") ||
+                lowerUrl.contains("operationname=") ||
+                lowerUrl.contains("search") ||
+                lowerUrl.contains("detail")
+            ) {
+                return "target_api"
+            }
+            if (looksLikeBrowserBootstrap(url = lowerUrl, path = path, source = lowerSource)) {
+                return "target_asset"
+            }
+            return "target_document"
         }
 
-        if (looksLikeGoogleNoise(host, lowerUrl)) return "google_noise"
-        if (looksLikeAdNoise(host, lowerUrl)) return "ad_noise"
-        if (looksLikeAnalyticsNoise(host, lowerUrl)) return "analytics_noise"
         if (looksLikeBrowserBootstrap(url = lowerUrl, path = path, source = lowerSource)) return "browser_bootstrap"
-        if (phaseId == PHASE_BACKGROUND) return "background_noise"
-        if (scopeMode == "full_raw_all") return "target"
-        return "external_noise"
+        if (looksLikeGoogleNoise(host, lowerUrl)) return "google_noise"
+        if (looksLikeAdNoise(host, lowerUrl) || looksLikeAnalyticsNoise(host, lowerUrl)) return "analytics_noise"
+        if (scopeMode == "full_raw_all" && phaseId != PHASE_BACKGROUND) return "target_document"
+        return "background_noise"
     }
 
     private fun looksLikeGoogleNoise(host: String, url: String): Boolean {

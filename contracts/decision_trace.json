@@ -158,8 +158,24 @@
       "status": "accepted",
       "date": "2026-04-01",
       "supersedes": [],
-      "superseded_by": null,
+      "superseded_by": "DEC-0013",
       "summary": "Provider-draft-ready exports require deterministic phase resolution, target-host-aware classification, canonical request/response linkage, explicit truncation semantics, provenance registry, replay-minimized requirements, and latest artifact publication only after successful finalization."
+    },
+    {
+      "id": "DEC-0013",
+      "aliases": [
+        "ADR-0013",
+        "MAPPER-RUNTIME-REGRESSION-CUTOVER",
+        "HOSTCLASS-PHASE-SEPARATION-V2"
+      ],
+      "title": "Regression cutover hardens runtime export with canonical host taxonomy, phase-window resolution, and explicit extraction/truncation contracts",
+      "status": "accepted",
+      "date": "2026-04-02",
+      "supersedes": [
+        "DEC-0012"
+      ],
+      "superseded_by": null,
+      "summary": "Runtime exports now use canonical target_* host classes, independent phase resolution from explicit marker windows, explicit truncation/original length semantics, candidate-only extraction attempt events, and fixture-based regression checks for ZDF-scoped provider-draft runs."
     }
   ]
 }

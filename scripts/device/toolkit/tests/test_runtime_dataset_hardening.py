@@ -97,7 +97,7 @@ class RuntimeDatasetHardeningTests(unittest.TestCase):
         ]
         normalized = normalize_runtime_rows(rows)
         by_event_id = {str(row.get("event_id")): row for row in normalized}
-        self.assertEqual(by_event_id["req_target"]["payload"].get("host_class"), "target")
+        self.assertEqual(by_event_id["req_target"]["payload"].get("host_class"), "target_api")
         self.assertEqual(by_event_id["req_google"]["payload"].get("host_class"), "google_noise")
 
     def test_host_classification_keeps_explicit_target_when_target_family_is_capped(self) -> None:
@@ -141,7 +141,7 @@ class RuntimeDatasetHardeningTests(unittest.TestCase):
         ]
         self.assertTrue(rare_rows)
         for row in rare_rows:
-            self.assertEqual(row.get("payload", {}).get("host_class"), "target")
+            self.assertEqual(row.get("payload", {}).get("host_class"), "target_api")
 
     def test_host_classification_family_fallback_keeps_rare_same_site_target(self) -> None:
         rows = []
@@ -193,7 +193,73 @@ class RuntimeDatasetHardeningTests(unittest.TestCase):
 
         normalized = normalize_runtime_rows(rows)
         rare = next(row for row in normalized if str(row.get("event_id")) == "req_rare_same_site")
-        self.assertEqual(rare.get("payload", {}).get("host_class"), "target")
+        self.assertEqual(rare.get("payload", {}).get("host_class"), "target_api")
+
+    def test_host_classification_keeps_zdf_hosts_out_of_background_noise(self) -> None:
+        rows = [
+            {
+                "schema_version": 1,
+                "run_id": "run_zdf",
+                "event_id": "req_www_zdf",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-01T12:20:00Z",
+                "trace_id": "trace_zdf",
+                "span_id": "",
+                "action_id": "action_zdf",
+                "payload": {
+                    "request_id": "req_www_zdf",
+                    "phase_id": "home_probe",
+                    "host_class": "target",
+                    "url": "https://www.zdf.de/",
+                    "method": "GET",
+                    "headers": {},
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_zdf",
+                "event_id": "req_api_zdf",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-01T12:20:01Z",
+                "trace_id": "trace_zdf",
+                "span_id": "",
+                "action_id": "action_zdf",
+                "payload": {
+                    "request_id": "req_api_zdf",
+                    "phase_id": "search_probe",
+                    "host_class": "target",
+                    "url": "https://api.zdf.de/v1/search?q=abc",
+                    "method": "GET",
+                    "headers": {},
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_zdf",
+                "event_id": "req_playback_zdf",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-01T12:20:02Z",
+                "trace_id": "trace_zdf",
+                "span_id": "",
+                "action_id": "action_zdf",
+                "payload": {
+                    "request_id": "req_playback_zdf",
+                    "phase_id": "playback_probe",
+                    "host_class": "target",
+                    "request_operation": "playback_manifest_fetch",
+                    "url": "https://nrodlzdf-a.akamaihd.net/path/master.m3u8",
+                    "method": "GET",
+                    "headers": {},
+                },
+            },
+        ]
+        normalized = normalize_runtime_rows(rows)
+        by_event_id = {str(row.get("event_id")): row for row in normalized}
+        self.assertEqual(by_event_id["req_www_zdf"]["payload"].get("host_class"), "target_document")
+        self.assertEqual(by_event_id["req_api_zdf"]["payload"].get("host_class"), "target_api")
+        self.assertEqual(by_event_id["req_playback_zdf"]["payload"].get("host_class"), "target_playback")
+        for event_id in ["req_www_zdf", "req_api_zdf", "req_playback_zdf"]:
+            self.assertNotEqual(by_event_id[event_id]["payload"].get("host_class"), "background_noise")
 
     def test_phase_assignment_resolves_unscoped(self) -> None:
         rows = [

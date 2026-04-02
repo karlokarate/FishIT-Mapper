@@ -134,6 +134,7 @@ class RuntimeDatasetIntegrationSmokeTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             required = [
                 "events.jsonl",
+                "extraction_events.jsonl",
                 "requests.normalized.jsonl",
                 "responses.normalized.jsonl",
                 "endpoint_candidates.json",
@@ -250,4 +251,3 @@ class RuntimeDatasetIntegrationSmokeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
