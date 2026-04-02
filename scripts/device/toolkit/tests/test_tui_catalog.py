@@ -69,6 +69,12 @@ class MapperToolkitTuiCatalogTests(unittest.TestCase):
         destructive_ids = sorted(cmd.id for cmd in self.catalog.commands if cmd.safety == "destructive")
         self.assertIn("housekeeping.purge", destructive_ids)
 
+    def test_wizard_finish_supports_finalize_controls(self) -> None:
+        cmd = command_by_id(self.catalog, "settings.wizard_finish")
+        param_keys = {param.key for param in cmd.params}
+        self.assertIn("mission_id", param_keys)
+        self.assertIn("broadcast_only", param_keys)
+
     def test_matrix_mode_switches_by_terminal_width(self) -> None:
         self.assertTrue(use_side_matrix(width=180, matrix_visible=True, min_width=145))
         self.assertFalse(use_side_matrix(width=120, matrix_visible=True, min_width=145))
@@ -100,6 +106,23 @@ class MapperToolkitTuiCatalogTests(unittest.TestCase):
             "trace.provenance_export",
             "settings.provenance_mark",
             "headers.infer_required_active",
+        }
+        self.assertTrue(expected.issubset(command_ids))
+
+    def test_wizard_and_anchor_commands_present(self) -> None:
+        command_ids = {cmd.id for cmd in self.catalog.commands}
+        expected = {
+            "settings.wizard_start",
+            "settings.wizard_status",
+            "settings.wizard_set_target_url",
+            "settings.wizard_next_step",
+            "settings.wizard_retry_step",
+            "settings.wizard_skip_optional_step",
+            "settings.wizard_finish",
+            "housekeeping.mission_summary",
+            "ui.anchor_create",
+            "ui.anchor_label",
+            "ui.anchor_remove",
         }
         self.assertTrue(expected.issubset(command_ids))
 

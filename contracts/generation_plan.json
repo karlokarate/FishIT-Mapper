@@ -14,6 +14,25 @@
       ]
     },
     {
+      "id": "mapper-target-doc-interface",
+      "type": "copy_with_header",
+      "source": "contracts/mapper_target.yaml",
+      "target": "docs/mapper_target.yaml",
+      "header": [
+        "# GENERATED FILE - DO NOT EDIT DIRECTLY.",
+        "# source: contracts/mapper_target.yaml",
+        "# regenerate via: ./scripts/generate.sh",
+        ""
+      ]
+    },
+    {
+      "id": "mapper-mission-registry-asset",
+      "type": "mission_registry_json",
+      "source": "contracts/mapper_target.yaml",
+      "target": "apps/mapper-app/app/src/main/assets/mapper_mission_registry.json",
+      "header": []
+    },
+    {
       "id": "roadmap-doc-interface",
       "type": "roadmap_markdown",
       "source": "contracts/roadmap.json",
@@ -81,6 +100,18 @@
       "header": [
         "// GENERATED FILE - DO NOT EDIT DIRECTLY.",
         "// source: contracts/runtime_event.schema.json",
+        "// regenerate via: ./scripts/generate.sh",
+        ""
+      ]
+    },
+    {
+      "id": "provider-draft-export-schema-archive",
+      "type": "copy_with_header",
+      "source": "contracts/provider_draft_export.schema.json",
+      "target": "docs/archive/provider_draft_export.schema.json",
+      "header": [
+        "// GENERATED FILE - DO NOT EDIT DIRECTLY.",
+        "// source: contracts/provider_draft_export.schema.json",
         "// regenerate via: ./scripts/generate.sh",
         ""
       ]

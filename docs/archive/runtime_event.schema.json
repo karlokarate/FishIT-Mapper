@@ -39,7 +39,10 @@
         "triage_alert_event",
         "probe_phase_event",
         "provenance_event",
-        "storage_event"
+        "storage_event",
+        "mission_event",
+        "wizard_event",
+        "overlay_anchor_event"
       ]
     },
     "ts_utc": { "type": "string", "format": "date-time" },
@@ -286,6 +289,99 @@
           "payload": {
             "type": "object",
             "required": ["storage_type", "key", "operation", "phase_id"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "mission_event" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": [
+              "operation",
+              "mission_id",
+              "wizard_step_id",
+              "saturation_state",
+              "phase_id",
+              "target_site_id",
+              "export_readiness",
+              "reason"
+            ],
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "mission_selected",
+                  "mission_config_applied",
+                  "capture_started",
+                  "capture_finished",
+                  "export_requested",
+                  "export_finalized"
+                ]
+              },
+              "saturation_state": {
+                "type": "string",
+                "enum": ["INCOMPLETE", "NEEDS_MORE_EVIDENCE", "SATURATED", "BLOCKED"]
+              },
+              "export_readiness": {
+                "type": "string",
+                "enum": ["NOT_READY", "PARTIAL", "READY", "BLOCKED"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "wizard_event" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["operation", "mission_id", "wizard_step_id", "saturation_state", "phase_id", "target_site_id"],
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "wizard_started",
+                  "wizard_step_started",
+                  "wizard_step_saturation_updated",
+                  "wizard_step_completed",
+                  "wizard_step_blocked",
+                  "wizard_finished"
+                ]
+              },
+              "saturation_state": {
+                "type": "string",
+                "enum": ["INCOMPLETE", "NEEDS_MORE_EVIDENCE", "SATURATED", "BLOCKED"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "overlay_anchor_event" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["operation", "anchor_id", "name", "anchor_type", "phase_id", "target_site_id"],
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "overlay_anchor_created",
+                  "overlay_anchor_labeled",
+                  "overlay_anchor_removed"
+                ]
+              },
+              "anchor_id": { "type": "string", "minLength": 1 },
+              "name": { "type": "string", "minLength": 1 },
+              "anchor_type": { "type": "string", "minLength": 1 }
+            }
           }
         }
       }

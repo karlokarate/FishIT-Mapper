@@ -105,7 +105,17 @@
       "open_detail",
       "set_setting",
       "inspect_work",
-      "query_entities"
+      "query_entities",
+      "wizard_start",
+      "wizard_status",
+      "wizard_set_target_url",
+      "wizard_next_step",
+      "wizard_retry_step",
+      "wizard_skip_optional_step",
+      "wizard_finish",
+      "anchor_create",
+      "anchor_label",
+      "anchor_remove"
     ]
   }
 }

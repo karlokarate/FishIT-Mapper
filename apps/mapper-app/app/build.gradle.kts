@@ -149,6 +149,8 @@ dependencies {
     implementation("io.insert-koin:koin-core:$koinVersion")
     // Koin test features
     testImplementation("io.insert-koin:koin-test:$koinVersion")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     // Android
     implementation("io.insert-koin:koin-android-compat:$koinVersion")
 

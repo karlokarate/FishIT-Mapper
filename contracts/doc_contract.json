@@ -21,6 +21,20 @@
       ]
     },
     {
+      "id": "mission.target",
+      "path": "contracts/mapper_target.yaml",
+      "generated_outputs": [
+        "docs/mapper_target.yaml"
+      ]
+    },
+    {
+      "id": "mission.registry.asset",
+      "path": "contracts/mapper_target.yaml",
+      "generated_outputs": [
+        "apps/mapper-app/app/src/main/assets/mapper_mission_registry.json"
+      ]
+    },
+    {
       "id": "decision.trace",
       "path": "contracts/decision_trace.json",
       "generated_outputs": []
@@ -75,6 +89,13 @@
       ]
     },
     {
+      "id": "provider.draft.export.schema",
+      "path": "contracts/provider_draft_export.schema.json",
+      "generated_outputs": [
+        "docs/archive/provider_draft_export.schema.json"
+      ]
+    },
+    {
       "id": "runtime.correlation.schema",
       "path": "contracts/correlation.schema.json",
       "generated_outputs": [
@@ -120,6 +141,7 @@
   "allowed_docs_paths": [
     "docs/README.md",
     "docs/V2_ssot.yaml",
+    "docs/mapper_target.yaml",
     "docs/ROADMAP.md",
     "docs/AGENT_RULESET.md",
     "docs/DELIVERY_GATES.md",

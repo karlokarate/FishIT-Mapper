@@ -1,0 +1,228 @@
+// GENERATED FILE - DO NOT EDIT DIRECTLY.
+// source: contracts/provider_draft_export.schema.json
+// regenerate via: ./scripts/generate.sh
+
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://fishit.dev/schemas/provider_draft_export.schema.json",
+  "title": "FishIT Mapper Provider Draft Export",
+  "type": "object",
+  "required": [
+    "export_id",
+    "export_schema_version",
+    "target_site_id",
+    "generated_at",
+    "source_runtime_export_id",
+    "confidence_summary",
+    "capability_class",
+    "endpoint_templates",
+    "replay_requirements",
+    "field_matrix",
+    "auth_draft",
+    "playback_draft",
+    "warnings",
+    "known_limitations",
+    "fishit_player_contract"
+  ],
+  "properties": {
+    "export_id": { "type": "string", "minLength": 1 },
+    "export_schema_version": { "type": "string", "minLength": 1 },
+    "target_site_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "source_runtime_export_id": { "type": "string", "minLength": 1 },
+    "confidence_summary": { "type": "object" },
+    "capability_class": {
+      "type": "string",
+      "enum": ["BROWSER_NEAR", "HYBRID", "NATIVE_READY", "BLOCKED"]
+    },
+    "endpoint_templates": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/providerEndpointTemplate" }
+    },
+    "replay_requirements": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/providerReplayRequirement" }
+    },
+    "field_matrix": { "$ref": "#/definitions/providerFieldMatrix" },
+    "auth_draft": { "$ref": "#/definitions/providerAuthDraft" },
+    "playback_draft": { "$ref": "#/definitions/providerPlaybackDraft" },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "known_limitations": { "type": "array", "items": { "type": "string" } },
+    "fishit_player_contract": { "$ref": "#/definitions/fishitPlayerContract" }
+  },
+  "definitions": {
+    "fishitPlayerContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "external_provider_descriptor",
+        "search_template_ref",
+        "detail_template_ref",
+        "playback_template_ref",
+        "auth_session_descriptor"
+      ],
+      "properties": {
+        "external_provider_descriptor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider_id", "target_site_id", "capability_flags"],
+          "properties": {
+            "provider_id": { "type": "string", "minLength": 1 },
+            "target_site_id": { "type": "string", "minLength": 1 },
+            "capability_flags": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "home_template",
+                "search_template",
+                "detail_template",
+                "playback_template",
+                "auth_template",
+                "browser_context_required"
+              ],
+              "properties": {
+                "home_template": { "type": "boolean" },
+                "search_template": { "type": "boolean" },
+                "detail_template": { "type": "boolean" },
+                "playback_template": { "type": "boolean" },
+                "auth_template": { "type": "boolean" },
+                "browser_context_required": { "type": "boolean" }
+              }
+            }
+          }
+        },
+        "search_template_ref": { "type": "string" },
+        "detail_template_ref": { "type": "string" },
+        "playback_template_ref": { "type": "string" },
+        "auth_session_descriptor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["template_ref", "auth_mode", "browser_session_required"],
+          "properties": {
+            "template_ref": { "type": "string" },
+            "auth_mode": { "type": "string" },
+            "browser_session_required": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "providerEndpointTemplate": {
+      "type": "object",
+      "required": [
+        "template_id",
+        "endpoint_role",
+        "normalized_host",
+        "normalized_path",
+        "method",
+        "required_phase_relevance",
+        "required_provenance_inputs",
+        "confidence"
+      ],
+      "properties": {
+        "template_id": { "type": "string" },
+        "endpoint_role": {
+          "type": "string",
+          "enum": ["home", "search", "detail", "playback_resolver", "auth_or_refresh"]
+        },
+        "normalized_host": { "type": "string" },
+        "normalized_path": { "type": "string" },
+        "method": { "type": "string" },
+        "request_operation": { "type": "string" },
+        "graphql_operation_name": { "type": "string" },
+        "stable_query_template": { "type": "object" },
+        "stable_body_template": { "type": "object" },
+        "variable_placeholders": { "type": "array", "items": { "type": "string" } },
+        "required_phase_relevance": { "type": "string" },
+        "required_provenance_inputs": { "type": "array", "items": { "type": "string" } },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "source_evidence_refs": { "type": "object" }
+      }
+    },
+    "providerReplayRequirement": {
+      "type": "object",
+      "required": [
+        "template_ref",
+        "endpoint_role",
+        "required_headers",
+        "required_cookies",
+        "required_query_params",
+        "required_body_fields",
+        "required_provenance_inputs",
+        "auth_mode",
+        "replay_confidence"
+      ],
+      "properties": {
+        "template_ref": { "type": "string" },
+        "endpoint_role": { "type": "string" },
+        "required_headers": { "type": "array", "items": { "type": "string" } },
+        "optional_headers": { "type": "array", "items": { "type": "string" } },
+        "observed_only_headers": { "type": "array", "items": { "type": "string" } },
+        "forbidden_noise_headers": { "type": "array", "items": { "type": "string" } },
+        "required_cookies": { "type": "array", "items": { "type": "string" } },
+        "optional_cookies": { "type": "array", "items": { "type": "string" } },
+        "required_query_params": { "type": "array", "items": { "type": "string" } },
+        "required_body_fields": { "type": "array", "items": { "type": "string" } },
+        "required_provenance_inputs": { "type": "array", "items": { "type": "string" } },
+        "required_referer": { "type": "string" },
+        "required_origin": { "type": "string" },
+        "auth_mode": { "type": "string" },
+        "replay_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "minimization_evidence": { "type": "object" }
+      }
+    },
+    "providerFieldMatrix": {
+      "type": "object",
+      "required": ["fields"],
+      "properties": {
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["field", "confidence", "status"],
+            "properties": {
+              "field": { "type": "string" },
+              "value_or_template": { "type": "string" },
+              "source_kind": { "type": "string" },
+              "source_ref": { "type": "string" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "observed_in_roles": { "type": "array", "items": { "type": "string" } },
+              "status": { "type": "string", "enum": ["directly_observed", "derived", "missing"] }
+            }
+          }
+        }
+      }
+    },
+    "providerPlaybackDraft": {
+      "type": "object",
+      "required": ["resolver_mode", "playback_confidence"],
+      "properties": {
+        "resolver_mode": { "type": "string" },
+        "playback_endpoint_template_ref": { "type": "string" },
+        "manifest_kind_detected": { "type": "string" },
+        "manifest_required_headers": { "type": "array", "items": { "type": "string" } },
+        "manifest_required_cookies": { "type": "array", "items": { "type": "string" } },
+        "token_dependencies": { "type": "array", "items": { "type": "string" } },
+        "browser_context_required": { "type": "boolean" },
+        "stream_container_hints": { "type": "array", "items": { "type": "string" } },
+        "stream_mime_hints": { "type": "array", "items": { "type": "string" } },
+        "drm_suspected": { "type": "boolean" },
+        "playback_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "providerAuthDraft": {
+      "type": "object",
+      "required": ["auth_mode", "provenance_backed_token_inputs", "auth_confidence"],
+      "properties": {
+        "auth_mode": { "type": "string" },
+        "session_artifacts": { "type": "array", "items": { "type": "object" } },
+        "provenance_backed_token_inputs": { "type": "array", "items": { "type": "string" } },
+        "validation_endpoint_ref": { "type": "string" },
+        "refresh_endpoint_ref": { "type": "string" },
+        "browser_session_required": { "type": "boolean" },
+        "auth_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

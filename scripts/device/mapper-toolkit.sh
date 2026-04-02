@@ -45,9 +45,10 @@ Usage:
   scripts/device/mapper-toolkit.sh doctor
 
   scripts/device/mapper-toolkit.sh session <start|stop|status|doctor|resume> [args...]
+  scripts/device/mapper-toolkit.sh wizard <start|status|set-target-url|next-step|retry-step|skip-optional-step|finish> [args...]
   scripts/device/mapper-toolkit.sh scope <set|show> [args...]
   scripts/device/mapper-toolkit.sh probe <start-phase|stop-phase|status> [args...]
-  scripts/device/mapper-toolkit.sh ui <open-screen|open-detail|tap|flow-run|anchor-scan|open-url|reset-site-state> [args...]
+  scripts/device/mapper-toolkit.sh ui <open-screen|open-detail|tap|flow-run|anchor-scan|anchor-create|anchor-label|anchor-remove|open-url|reset-site-state> [args...]
   scripts/device/mapper-toolkit.sh capture <start|stop|snapshot|lanes|mitm> [args...]
   scripts/device/mapper-toolkit.sh trace <query|tail|export|correlate|diff> [filters...]
   scripts/device/mapper-toolkit.sh triage <start|tail|focus|anomalies|bookmark|incident-pack|stop> [filters...]
@@ -56,8 +57,8 @@ Usage:
   scripts/device/mapper-toolkit.sh cookies <timeline|set-events|refresh-events|domain-view> [filters...]
   scripts/device/mapper-toolkit.sh headers <infer-required|infer-required-active|token-deps|auth-chain> [filters...]
   scripts/device/mapper-toolkit.sh responses <raw|filter|grep|sample> [filters...]
-  scripts/device/mapper-toolkit.sh mapping <candidate-endpoints|field-matrix|profile-draft|replay-seed>
-  scripts/device/mapper-toolkit.sh housekeeping <pack|compress|purge|reindex|validate>
+  scripts/device/mapper-toolkit.sh mapping <candidate-endpoints|field-matrix|profile-draft|provider-draft-export|replay-seed>
+  scripts/device/mapper-toolkit.sh housekeeping <pack|compress|purge|reindex|validate|mission-summary>
 USAGE
 }
 
@@ -235,7 +236,8 @@ write_state_file() {
       },
       runtime: {
         scopeMode: $scope_mode,
-        targetHostFamily: $target_host_family
+        targetHostFamily: $target_host_family,
+        missionId: ""
       }
     }' >"$STATE_FILE"
 }
@@ -509,6 +511,10 @@ finalize_snapshot_artifacts() {
     "$CURRENT_DIR/response_index.json" \
     "$stage_dir/response_index_latest.json" \
     '.item_count >= 0'
+  update_latest_json_if_valid \
+    "$CURRENT_DIR/mission_export_summary.json" \
+    "$stage_dir/mission_export_summary_latest.json" \
+    '.export_readiness | type == "string"'
 
   local backup_dir="$CURRENT_DIR/latest.backup.$$"
   if [[ -d "$final_dir" ]]; then
@@ -708,6 +714,265 @@ session_cmd() {
     resume) session_resume "$@" ;;
     *)
       echo "ERROR: unknown session subcommand '$sub'" >&2
+      exit 1
+      ;;
+  esac
+}
+
+wizard_cmd() {
+  local sub="${1:-}"
+  shift || true
+
+  local serial
+  serial="$(resolve_device_serial "")"
+
+  case "$sub" in
+    start)
+      local mission_id="FISHIT_PIPELINE"
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --mission-id)
+            mission_id="$2"
+            shift 2
+            ;;
+          --device)
+            serial="$(resolve_device_serial "$2")"
+            shift 2
+            ;;
+          *)
+            echo "ERROR: unknown arg for wizard start: $1" >&2
+            exit 1
+            ;;
+        esac
+      done
+      runtime_broadcast "$serial" wizard_start missionId "$mission_id"
+      if [[ -f "$STATE_FILE" ]]; then
+        local tmp="${STATE_FILE}.tmp.$$"
+        jq --arg mission_id "$mission_id" '.runtime.missionId = $mission_id' "$STATE_FILE" >"$tmp" && mv "$tmp" "$STATE_FILE"
+      fi
+      ;;
+    status)
+      runtime_broadcast "$serial" wizard_status
+      ;;
+    set-target-url)
+      local url="${1:-}"
+      if [[ -z "$url" ]]; then
+        echo "ERROR: wizard set-target-url requires <url>" >&2
+        exit 1
+      fi
+      runtime_broadcast "$serial" wizard_set_target_url url "$url"
+      ;;
+    next-step)
+      runtime_broadcast "$serial" wizard_next_step
+      ;;
+    retry-step)
+      runtime_broadcast "$serial" wizard_retry_step
+      ;;
+    skip-optional-step)
+      runtime_broadcast "$serial" wizard_skip_optional_step
+      ;;
+    finish)
+      local saturation_state="SATURATED"
+      local mission_id
+      mission_id="$(read_state_field '.runtime.missionId' || true)"
+      mission_id="${mission_id:-FISHIT_PIPELINE}"
+      local broadcast_only=0
+      local pipeline_status="IN_PROGRESS"
+      local pipeline_reason=""
+      local stage_records='[]'
+      local pipeline_started_at
+      pipeline_started_at="$(timestamp_utc)"
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --saturation-state)
+            saturation_state="$2"
+            shift 2
+            ;;
+          --mission-id)
+            mission_id="$2"
+            shift 2
+            ;;
+          --broadcast-only)
+            broadcast_only=1
+            shift 1
+            ;;
+          --device)
+            serial="$(resolve_device_serial "$2")"
+            shift 2
+            ;;
+          *)
+            echo "ERROR: unknown arg for wizard finish: $1" >&2
+            exit 1
+            ;;
+        esac
+      done
+      ensure_layout
+      local pipeline_status_file="$CURRENT_DIR/rollups/wizard_finish_pipeline.json"
+      local quality_report="$CURRENT_DIR/rollups/pipeline_ready_report.json"
+      local reindex_report="$CURRENT_DIR/rollups/reindex.log.json"
+      local mission_summary_report="$CURRENT_DIR/rollups/mission_export_summary.log.json"
+      local had_failures=0
+      local validate_rc=0
+
+      _wizard_finish_write_status() {
+        local finished_at
+        finished_at="$(timestamp_utc)"
+        local run_id
+        run_id="$(read_state_field '.runId' || true)"
+        jq -n \
+          --arg schema_version "1" \
+          --arg run_id "${run_id:-unknown_run}" \
+          --arg mission_id "$mission_id" \
+          --arg started_at "$pipeline_started_at" \
+          --arg finished_at "$finished_at" \
+          --arg status "$pipeline_status" \
+          --arg reason "$pipeline_reason" \
+          --arg quality_report "$quality_report" \
+          --arg reindex_report "$reindex_report" \
+          --arg mission_summary_report "$mission_summary_report" \
+          --argjson stages "$stage_records" \
+          '{
+            schema_version: ($schema_version | tonumber),
+            run_id: $run_id,
+            mission_id: $mission_id,
+            started_at_utc: $started_at,
+            updated_at_utc: $finished_at,
+            pipeline_status: $status,
+            pipeline_reason: $reason,
+            stages: $stages,
+            reports: {
+              reindex: $reindex_report,
+              validate: $quality_report,
+              mission_summary: $mission_summary_report
+            }
+          }' >"$pipeline_status_file"
+      }
+
+      _wizard_finish_add_stage() {
+        local stage_name="$1"
+        local stage_status="$2"
+        local stage_rc="$3"
+        local stage_reason="${4:-}"
+        stage_records="$(jq -c \
+          --arg stage "$stage_name" \
+          --arg status "$stage_status" \
+          --argjson rc "$stage_rc" \
+          --arg reason "$stage_reason" \
+          --arg ts "$(timestamp_utc)" \
+          '. + [{stage:$stage,status:$status,rc:$rc,reason:$reason,ts_utc:$ts}]' <<<"$stage_records")"
+        _wizard_finish_write_status
+      }
+
+      _wizard_finish_run_stage() {
+        local stage_name="$1"
+        local fail_reason="$2"
+        shift 2
+        set +e
+        "$@"
+        local rc=$?
+        set -e
+        if [[ "$rc" -eq 0 ]]; then
+          _wizard_finish_add_stage "$stage_name" "SUCCESS" "$rc" ""
+          return 0
+        fi
+        had_failures=1
+        if [[ -z "$pipeline_reason" ]]; then
+          pipeline_reason="$fail_reason"
+        fi
+        _wizard_finish_add_stage "$stage_name" "FAILED" "$rc" "$fail_reason"
+        return "$rc"
+      }
+
+      _wizard_finish_write_status
+
+      set +e
+      _wizard_finish_run_stage \
+        "broadcast_wizard_finish" \
+        "broadcast_failed" \
+        runtime_broadcast "$serial" wizard_finish saturationState "$saturation_state" missionId "$mission_id"
+      local broadcast_rc=$?
+      set -e
+      if [[ "$broadcast_rc" -ne 0 ]]; then
+        pipeline_status="BLOCKED"
+        _wizard_finish_write_status
+        echo "WARN: wizard finish blocked at broadcast stage." >&2
+        return "$broadcast_rc"
+      fi
+      if [[ -f "$STATE_FILE" ]]; then
+        local tmp="${STATE_FILE}.tmp.$$"
+        jq --arg mission_id "$mission_id" '.runtime.missionId = $mission_id' "$STATE_FILE" >"$tmp" && mv "$tmp" "$STATE_FILE"
+      fi
+      if [[ "$broadcast_only" -eq 1 ]]; then
+        pipeline_status="SUCCESS"
+        pipeline_reason="broadcast_only"
+        _wizard_finish_write_status
+        return 0
+      fi
+
+      _wizard_finish_run_stage \
+        "pull_runtime_events" \
+        "pull_runtime_events_failed" \
+        pull_runtime_events "$serial" || true
+
+      _wizard_finish_run_stage \
+        "pull_response_store" \
+        "pull_response_store_failed" \
+        pull_response_store "$serial" || true
+
+      _wizard_finish_run_stage \
+        "housekeeping_reindex" \
+        "reindex_failed" \
+        run_dataset_cli housekeeping reindex --mission-id "$mission_id" >"$reindex_report" || true
+
+      set +e
+      run_dataset_cli housekeeping validate --mission-id "$mission_id" >"$quality_report"
+      validate_rc=$?
+      set -e
+      if [[ "$validate_rc" -eq 0 ]]; then
+        _wizard_finish_add_stage "housekeeping_validate" "SUCCESS" "$validate_rc" ""
+      else
+        had_failures=1
+        if [[ "$validate_rc" -eq 2 ]]; then
+          pipeline_reason="pipeline_not_ready"
+          _wizard_finish_add_stage "housekeeping_validate" "BLOCKED" "$validate_rc" "pipeline_not_ready"
+        else
+          if [[ -z "$pipeline_reason" ]]; then
+            pipeline_reason="validate_failed"
+          fi
+          _wizard_finish_add_stage "housekeeping_validate" "FAILED" "$validate_rc" "validate_failed"
+        fi
+      fi
+
+      _wizard_finish_run_stage \
+        "housekeeping_mission_summary" \
+        "mission_summary_failed" \
+        run_dataset_cli housekeeping mission-summary --mission-id "$mission_id" >"$mission_summary_report" || true
+
+      finalize_snapshot_artifacts
+
+      if [[ "$had_failures" -eq 0 ]]; then
+        pipeline_status="SUCCESS"
+        pipeline_reason=""
+      else
+        pipeline_status="BLOCKED"
+        if [[ -z "$pipeline_reason" ]]; then
+          pipeline_reason="wizard_finish_stage_failure"
+        fi
+      fi
+      _wizard_finish_write_status
+
+      if [[ "$pipeline_status" != "SUCCESS" ]]; then
+        echo "WARN: wizard finish blocked (${pipeline_reason}). See $pipeline_status_file" >&2
+        if [[ "$validate_rc" -ne 0 ]]; then
+          return "$validate_rc"
+        fi
+        return 1
+      fi
+      echo "wizard finish finalized: $CURRENT_DIR"
+      echo "wizard finish pipeline status: $pipeline_status_file"
+      ;;
+    *)
+      echo "ERROR: unknown wizard subcommand '$sub'" >&2
       exit 1
       ;;
   esac
@@ -1005,6 +1270,82 @@ ui_cmd() {
       require_file "$UI_SCRIPT"
       "$UI_SCRIPT" clickables "$@"
       ;;
+    anchor-create)
+      local name=""
+      local anchor_type="custom"
+      local url=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --name)
+            name="$2"
+            shift 2
+            ;;
+          --type)
+            anchor_type="$2"
+            shift 2
+            ;;
+          --url)
+            url="$2"
+            shift 2
+            ;;
+          *)
+            echo "ERROR: unknown arg for ui anchor-create: $1" >&2
+            exit 1
+            ;;
+        esac
+      done
+      runtime_broadcast "$serial" anchor_create anchorName "$name" anchorType "$anchor_type" url "$url"
+      ;;
+    anchor-label)
+      local anchor_id=""
+      local name=""
+      local anchor_type=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --anchor-id)
+            anchor_id="$2"
+            shift 2
+            ;;
+          --name)
+            name="$2"
+            shift 2
+            ;;
+          --type)
+            anchor_type="$2"
+            shift 2
+            ;;
+          *)
+            echo "ERROR: unknown arg for ui anchor-label: $1" >&2
+            exit 1
+            ;;
+        esac
+      done
+      if [[ -z "$anchor_id" ]]; then
+        echo "ERROR: ui anchor-label requires --anchor-id" >&2
+        exit 1
+      fi
+      runtime_broadcast "$serial" anchor_label anchorId "$anchor_id" anchorName "$name" anchorType "$anchor_type"
+      ;;
+    anchor-remove)
+      local anchor_id=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --anchor-id)
+            anchor_id="$2"
+            shift 2
+            ;;
+          *)
+            echo "ERROR: unknown arg for ui anchor-remove: $1" >&2
+            exit 1
+            ;;
+        esac
+      done
+      if [[ -z "$anchor_id" ]]; then
+        echo "ERROR: ui anchor-remove requires --anchor-id" >&2
+        exit 1
+      fi
+      runtime_broadcast "$serial" anchor_remove anchorId "$anchor_id"
+      ;;
     *)
       echo "ERROR: unknown ui subcommand '$sub'" >&2
       exit 1
@@ -1206,6 +1547,9 @@ main() {
 
     session)
       session_cmd "$@"
+      ;;
+    wizard)
+      wizard_cmd "$@"
       ;;
     scope)
       scope_cmd "$@"

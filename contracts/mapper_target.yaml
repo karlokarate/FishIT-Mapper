@@ -1,0 +1,1098 @@
+ssot:
+  id: mapper-mission-system
+  version: 1
+  status: draft-binding
+  date: 2026-04-02
+  owner: Chris
+  purpose: >-
+    Define the mission-driven operating model for FishIT-Mapper.
+    The Mapper must start from an explicit mission selection layer instead of
+    dropping directly into the browser. Each mission configures capture,
+    probes, extraction, replay minimization, adapter derivation, and export
+    bundle composition. The browser remains the main working tool, but it is
+    no longer the product entrypoint.
+
+design_principles:
+  - mission_first_browser_second
+  - site_runtime_model_is_always_primary_truth
+  - same_core_collector_different_policies
+  - capture_and_export_are_separate_stages
+  - consumer_specific_outputs_are_derived_adapters
+  - explicit_probe_markers_over_implicit_guessing
+  - deterministic_export_finalization
+  - multifunctional_mapper_single_runtime_core
+  - capability_first_not_consumer_first
+  - no_fishit_lock_in_at_core_layer
+
+product_goal:
+  summary: >-
+    FishIT-Mapper must support multiple user goals from one APK:
+    building FishIT-compatible provider drafts, generating selective
+    website-to-app runtime bundles, mapping APIs/endpoints/auth flows,
+    and producing replay/debug fixtures. The mission system must ensure
+    that the same browser-near runtime engine is reused while output is
+    purpose-fitted to the selected goal.
+  explicit_non_goal: >-
+    The app must not open directly into a generic browser-only mode as the sole primary UX.
+    Browser capture remains central, but mission selection must define the run.
+
+runtime_flow:
+  canonical_pipeline:
+    - mission_selection
+    - mission_profile_activation
+    - wizard_setup
+    - browser_lab_execution
+    - wizard_step_execution
+    - probe_marker_capture
+    - runtime_capture
+    - wizard_saturation_evaluation
+    - normalized_runtime_export
+    - site_runtime_model_generation
+    - adapter_derivation
+    - export_bundle_finalization
+  rules:
+    - mission_selection_must_complete_before_browser_open
+    - wizard_steps_must_drive_required_probe_execution
+    - site_runtime_model_must_exist_for_every_completed_mission
+    - adapters_must_only_be_derived_after_core_model_generation
+    - no_consumer_specific_export_may_bypass_core_model
+    - export_bundle_must_be_finalized_atomically
+
+mission_system:
+  required_components:
+    - MissionProfile
+    - MissionPresetRegistry
+    - MissionExecutionState
+    - MissionEntryScreen
+    - MissionWizardController
+    - WizardStepDefinition
+    - WizardSaturationEngine
+    - BrowserOverlayAnchorModel
+    - ProbeChecklist
+    - CapturePolicy
+    - BodyCapturePolicy
+    - ExtractionPolicy
+    - ReplayPolicy
+    - AdapterDerivationPolicy
+    - ExportPolicy
+    - ExportBundleBuilder
+
+mission_profile:
+  required_fields:
+    - missionId
+    - missionKind
+    - displayName
+    - description
+    - outputTargets
+    - requiredProbeSet
+    - optionalProbeSet
+    - capturePolicyRef
+    - bodyCapturePolicyRef
+    - extractionPolicyRef
+    - replayPolicyRef
+    - adapterDerivationPolicyRef
+    - exportPolicyRef
+    - checklistPolicy
+    - wizardFlowRef
+    - stepSaturationPolicy
+    - requiredEvidenceMatrix
+    - browserEntryUrlPolicy
+    - successCriteria
+    - warningPolicy
+  missionKind:
+    allowed:
+      - FISHIT_PIPELINE
+      - STANDALONE_APP
+      - API_MAPPING
+      - REPLAY_BUNDLE
+      - CUSTOM
+  outputTargets_allowed:
+    - site_runtime_model
+    - fishit_provider_draft
+    - webapp_runtime_draft
+    - replay_bundle
+    - endpoint_templates
+    - field_matrix
+    - auth_draft
+    - playback_draft
+    - confidence_report
+    - warnings
+    - fixture_bundle
+  semantics:
+    - mission_profile_must_be_fully_resolved_before_browser_lab_opens
+    - mission_profile_must_define_guided_wizard_step_sequence
+    - mission_profile_must_define_minimum_probe_expectations
+    - mission_profile_must_drive_export_composition
+    - mission_profile_must_not_change_core_capture_shape_only_policies
+
+mission_preset_registry:
+  required_fields:
+    - registryVersion
+    - presets
+  preset_required_fields:
+    - missionId
+    - isBuiltIn
+    - displayOrder
+    - enabledByDefault
+    - profile
+  semantics:
+    - built_in_presets_must_be_shipped_in_app
+    - custom_presets_may_extend_but_not_break_contracts
+    - preset_registry_must_be_versioned
+
+mission_execution_state:
+  required_fields:
+    - activeMissionId
+    - state
+    - startedAt
+    - activeWizardStep
+    - wizardStepStates
+    - saturationState
+    - activeProbe
+    - completedProbes
+    - pendingRequiredProbes
+    - exportReadiness
+    - warnings
+  state:
+    allowed:
+      - IDLE
+      - MISSION_SELECTED
+      - BROWSER_LAB_ACTIVE
+      - CAPTURE_RUNNING
+      - CAPTURE_PAUSED
+      - CAPTURE_FINISHED
+      - MODEL_BUILDING
+      - EXPORT_READY
+      - EXPORTING
+      - FAILED
+  exportReadiness:
+    allowed:
+      - NOT_READY
+      - PARTIAL
+      - READY
+      - BLOCKED
+  saturationState:
+    allowed:
+      - INCOMPLETE
+      - NEEDS_MORE_EVIDENCE
+      - SATURATED
+      - BLOCKED
+  semantics:
+    - execution_state_must_be_persistable_for_recovery
+    - active_wizard_step_must_reflect_current_guided_task
+    - export_readiness_must_reflect_probe_checklist_and_core_model_status
+
+wizard_step_model:
+  step_required_fields:
+    - stepId
+    - missionScope
+    - stepType
+    - optionality
+    - requiredEvidence
+    - saturationPolicy
+    - completionRules
+    - browserInstruction
+  stepType_allowed:
+    - target_url_input
+    - home_probe_step
+    - search_probe_step
+    - detail_probe_step
+    - playback_probe_step
+    - auth_probe_step_optional
+    - final_validation_export
+  optionality_allowed:
+    - required
+    - optional
+  saturation_state_allowed:
+    - INCOMPLETE
+    - NEEDS_MORE_EVIDENCE
+    - SATURATED
+    - BLOCKED
+  semantics:
+    - wizard_is_guided_manual_user_executes_actions_in_einkbro_context
+    - wizard_must_emit_step_state_changes_as_machine_readable_events
+    - saturation_evaluation_must_use_runtime_evidence_not_user_guess
+
+wizard_flow_templates:
+  shared_entry_sequence:
+    - mission_selection
+    - target_url_input
+    - home_probe_step
+  by_mission:
+    FISHIT_PIPELINE:
+      required_steps:
+        - target_url_input
+        - home_probe_step
+        - search_probe_step
+        - detail_probe_step
+        - playback_probe_step
+        - final_validation_export
+      optional_steps:
+        - auth_probe_step_optional
+    STANDALONE_APP:
+      required_steps:
+        - target_url_input
+        - home_probe_step
+        - detail_probe_step
+        - final_validation_export
+      optional_steps:
+        - search_probe_step
+        - playback_probe_step
+        - auth_probe_step_optional
+    API_MAPPING:
+      required_steps:
+        - target_url_input
+        - home_probe_step
+        - search_probe_step
+        - detail_probe_step
+        - final_validation_export
+      optional_steps:
+        - playback_probe_step
+        - auth_probe_step_optional
+    REPLAY_BUNDLE:
+      required_steps:
+        - target_url_input
+        - home_probe_step
+        - final_validation_export
+      optional_steps:
+        - search_probe_step
+        - detail_probe_step
+        - playback_probe_step
+        - auth_probe_step_optional
+
+browser_overlay_anchor_model:
+  required_fields:
+    - anchorId
+    - name
+    - type
+    - createdAt
+    - browserContextRef
+    - correlationRefs
+  semantics:
+    - overlay_anchors_must_be_creatable_during_wizard_steps
+    - anchors_must_link_to_runtime_events_for_traceability
+    - anchor_names_must_be_user_defined_and_editable
+
+probe_model:
+  probe_types:
+    - home_probe
+    - search_probe
+    - detail_probe
+    - playback_probe
+    - auth_probe
+    - replay_probe
+    - background_noise
+  rules:
+    - every_runtime_event_must_resolve_to_exactly_one_final_phase
+    - mission_profiles_define_required_and_optional_probe_sets
+    - probe_markers_must_be_explicit_where_possible
+    - implicit_resolution_is_allowed_only_as_fallback
+
+probe_checklist:
+  required_fields:
+    - missionId
+    - requiredProbes
+    - optionalProbes
+    - completedProbes
+    - missingRequiredProbes
+    - readinessScore
+    - recommendations
+  semantics:
+    - checklist_must_be_visible_in_ui_during_run
+    - checklist_must_update_live_as_probe_evidence_arrives
+    - export_should_warn_when_required_probes_are_missing
+
+capture_policy:
+  required_fields:
+    - collectRequestMetadata
+    - collectResponseMetadata
+    - collectCookies
+    - collectStorageArtifacts
+    - collectProvenance
+    - collectNavigationSignals
+    - collectUiMarkers
+    - collectPlaybackSignals
+    - collectAuthSignals
+    - noiseHandlingMode
+  noiseHandlingMode:
+    allowed:
+      - exclude_from_scoring
+      - collect_but_flag
+      - minimal_capture_only
+  semantics:
+    - capture_policy_controls_scope_not_core_format
+    - raw_events_must_remain_machine_readable_and_append_only
+
+body_capture_policy:
+  required_fields:
+    - fullRequiredKinds
+    - truncatableKinds
+    - metadataOnlyKinds
+    - skipKinds
+    - maxBodyBytesByKind
+    - dedupeLargeBodies
+    - explicitTruncationRequired
+  fullRequiredKinds_examples:
+    - graphql_json
+    - rest_json_candidate
+    - manifest
+    - resolver_payload
+    - candidate_html_document
+  truncatableKinds_examples:
+    - non_candidate_large_html
+    - binary_asset
+  metadataOnlyKinds_examples:
+    - playback_media_segment
+    - generic_media_chunk
+    - browser_noise_binary
+  skipKinds_examples:
+    - ad_noise
+    - irrelevant_noise
+  semantics:
+    - mission_profile_may_tighten_body_capture_policy
+    - candidate_bodies_must_not_be_silently_truncated
+    - truncation_must_be_explicit_and_machine_readable
+
+extraction_policy:
+  required_fields:
+    - requiredFields
+    - optionalFields
+    - extractionDepth
+    - generateFieldMatrix
+    - requireConfidence
+    - extractionEventsRequired
+  extractionDepth:
+    allowed:
+      - minimal
+      - standard
+      - deep
+  requiredFields_examples:
+    - title
+    - image
+    - canonicalId
+    - playbackHint
+  semantics:
+    - mission_profile_must_define_field_expectations
+    - extraction_output_must_be_visible_not_implicit
+
+replay_policy:
+  required_fields:
+    - enabled
+    - minimizationMode
+    - validateHome
+    - validateSearch
+    - validateDetail
+    - validatePlayback
+    - validateAuth
+    - browserAssistedAllowed
+    - nativeReplayPreferred
+  minimizationMode:
+    allowed:
+      - none
+      - standard
+      - aggressive
+  semantics:
+    - replay_policy_controls_requirement_minimization_and_validation
+    - fishit_pipeline_and_api_mapping_should_enable_replay_minimization
+    - replay_bundle_mission_must_preserve_fixture_replay_outputs
+
+adapter_derivation_policy:
+  required_fields:
+    - deriveFishitProvider
+    - deriveWebappRuntime
+    - deriveReplayBundle
+    - deriveEndpointTemplates
+    - deriveFieldMatrix
+    - deriveAuthDraft
+    - derivePlaybackDraft
+    - requireCoreModelConfidenceThreshold
+  semantics:
+    - adapters_must_be_derived_only_from_site_runtime_model
+    - mission_profile_selects_which_adapters_are_emitted
+    - unsupported_adapters_must_not_be_emitted_as_empty_shells
+
+export_policy:
+  required_fields:
+    - bundleFormat
+    - includeRawEvents
+    - includeResponseStoreIndex
+    - includeFixtureArtifacts
+    - deterministicSerialization
+    - includeWarnings
+    - includeConfidenceReport
+    - exportOnlyMissionRelevantAdapters
+  bundleFormat:
+    allowed:
+      - directory
+      - zip
+      - signed_bundle
+  semantics:
+    - export_policy_controls_bundle_contents_not_core_model_shape
+    - mission_irrelevant_outputs_should_be_excluded_by_default
+    - deterministic_serialization_is_mandatory
+
+built_in_mission_presets:
+  FISHIT_PIPELINE:
+    displayName: FishIT Pipeline
+    description: >-
+      Build a FishIT-compatible provider draft with replay-minimized endpoint
+      requirements for home, search, detail, playback, and auth when present.
+    outputTargets:
+      - site_runtime_model
+      - fishit_provider_draft
+      - endpoint_templates
+      - field_matrix
+      - auth_draft
+      - playback_draft
+      - confidence_report
+      - warnings
+    requiredProbeSet:
+      - home_probe
+      - search_probe
+      - detail_probe
+      - playback_probe
+    optionalProbeSet:
+      - auth_probe
+      - replay_probe
+    wizardFlowRef: flow_fishit_pipeline_guided_manual
+    stepSaturationPolicy:
+      mode: guided_manual
+      allowRepeatUntilSaturated: true
+      blockOnMissingRequiredEvidence: true
+    requiredEvidenceMatrix:
+      target_url_input:
+        requiredSignals:
+          - target_site_id_correlated
+      home_probe_step:
+        requiredSignals:
+          - home_candidate_count_min
+      search_probe_step:
+        requiredSignals:
+          - search_candidate_count_min
+          - field_matrix_search_mapping_present
+      detail_probe_step:
+        requiredSignals:
+          - detail_candidate_count_min
+          - field_matrix_detail_mapping_present
+      playback_probe_step:
+        requiredSignals:
+          - playback_resolver_or_manifest_present
+      final_validation_export:
+        requiredSignals:
+          - mission_relevant_export_artifacts_ready
+    capturePolicy:
+      collectRequestMetadata: true
+      collectResponseMetadata: true
+      collectCookies: true
+      collectStorageArtifacts: true
+      collectProvenance: true
+      collectNavigationSignals: true
+      collectUiMarkers: true
+      collectPlaybackSignals: true
+      collectAuthSignals: true
+      noiseHandlingMode: exclude_from_scoring
+    bodyCapturePolicy:
+      fullRequiredKinds:
+        - graphql_json
+        - rest_json_candidate
+        - manifest
+        - resolver_payload
+        - candidate_html_document
+      truncatableKinds:
+        - non_candidate_large_html
+      metadataOnlyKinds:
+        - playback_media_segment
+        - generic_media_chunk
+      skipKinds:
+        - ad_noise
+      dedupeLargeBodies: true
+      explicitTruncationRequired: true
+    extractionPolicy:
+      requiredFields:
+        - title
+        - image
+        - canonicalId
+        - playbackHint
+        - sectionName
+      optionalFields:
+        - subtitle
+        - description
+        - collectionId
+      extractionDepth: standard
+      generateFieldMatrix: true
+      requireConfidence: true
+      extractionEventsRequired: true
+    replayPolicy:
+      enabled: true
+      minimizationMode: standard
+      validateHome: true
+      validateSearch: true
+      validateDetail: true
+      validatePlayback: true
+      validateAuth: true
+      browserAssistedAllowed: true
+      nativeReplayPreferred: true
+    adapterDerivationPolicy:
+      deriveFishitProvider: true
+      deriveWebappRuntime: false
+      deriveReplayBundle: false
+      deriveEndpointTemplates: true
+      deriveFieldMatrix: true
+      deriveAuthDraft: true
+      derivePlaybackDraft: true
+      requireCoreModelConfidenceThreshold: 0.70
+    exportPolicy:
+      bundleFormat: zip
+      includeRawEvents: false
+      includeResponseStoreIndex: true
+      includeFixtureArtifacts: false
+      deterministicSerialization: true
+      includeWarnings: true
+      includeConfidenceReport: true
+      exportOnlyMissionRelevantAdapters: true
+
+  STANDALONE_APP:
+    displayName: Selective App Builder
+    description: >-
+      Build a selective website-to-app runtime bundle with navigation,
+      session bootstrap, playback policy, and optional selective native data endpoints.
+    outputTargets:
+      - site_runtime_model
+      - webapp_runtime_draft
+      - endpoint_templates
+      - field_matrix
+      - playback_draft
+      - confidence_report
+      - warnings
+    requiredProbeSet:
+      - home_probe
+      - detail_probe
+    optionalProbeSet:
+      - search_probe
+      - playback_probe
+      - auth_probe
+    wizardFlowRef: flow_standalone_app_guided_manual
+    stepSaturationPolicy:
+      mode: guided_manual
+      allowRepeatUntilSaturated: true
+      blockOnMissingRequiredEvidence: true
+    requiredEvidenceMatrix:
+      target_url_input:
+        requiredSignals:
+          - target_site_id_correlated
+      home_probe_step:
+        requiredSignals:
+          - home_candidate_count_min
+      detail_probe_step:
+        requiredSignals:
+          - detail_candidate_count_min
+      final_validation_export:
+        requiredSignals:
+          - mission_relevant_export_artifacts_ready
+    capturePolicy:
+      collectRequestMetadata: true
+      collectResponseMetadata: true
+      collectCookies: true
+      collectStorageArtifacts: true
+      collectProvenance: true
+      collectNavigationSignals: true
+      collectUiMarkers: true
+      collectPlaybackSignals: true
+      collectAuthSignals: true
+      noiseHandlingMode: collect_but_flag
+    bodyCapturePolicy:
+      fullRequiredKinds:
+        - graphql_json
+        - rest_json_candidate
+        - manifest
+        - candidate_html_document
+        - resolver_payload
+      truncatableKinds:
+        - non_candidate_large_html
+      metadataOnlyKinds:
+        - playback_media_segment
+      skipKinds:
+        - ad_noise
+      dedupeLargeBodies: true
+      explicitTruncationRequired: true
+    extractionPolicy:
+      requiredFields:
+        - title
+        - image
+        - canonicalId
+        - detailMapping
+        - searchMapping
+      optionalFields:
+        - description
+        - sectionName
+        - playbackHint
+      extractionDepth: deep
+      generateFieldMatrix: true
+      requireConfidence: true
+      extractionEventsRequired: true
+    replayPolicy:
+      enabled: true
+      minimizationMode: standard
+      validateHome: true
+      validateSearch: true
+      validateDetail: true
+      validatePlayback: true
+      validateAuth: true
+      browserAssistedAllowed: true
+      nativeReplayPreferred: false
+    adapterDerivationPolicy:
+      deriveFishitProvider: false
+      deriveWebappRuntime: true
+      deriveReplayBundle: false
+      deriveEndpointTemplates: true
+      deriveFieldMatrix: true
+      deriveAuthDraft: false
+      derivePlaybackDraft: true
+      requireCoreModelConfidenceThreshold: 0.65
+    exportPolicy:
+      bundleFormat: zip
+      includeRawEvents: false
+      includeResponseStoreIndex: true
+      includeFixtureArtifacts: false
+      deterministicSerialization: true
+      includeWarnings: true
+      includeConfidenceReport: true
+      exportOnlyMissionRelevantAdapters: true
+
+  API_MAPPING:
+    displayName: API / Endpoint Mapping
+    description: >-
+      Build a technical endpoint/auth/provenance/replay export with minimal consumer UI assumptions.
+    outputTargets:
+      - site_runtime_model
+      - endpoint_templates
+      - replay_bundle
+      - confidence_report
+      - warnings
+    requiredProbeSet:
+      - home_probe
+      - search_probe
+      - detail_probe
+    optionalProbeSet:
+      - playback_probe
+      - auth_probe
+      - replay_probe
+    wizardFlowRef: flow_api_mapping_guided_manual
+    stepSaturationPolicy:
+      mode: guided_manual
+      allowRepeatUntilSaturated: true
+      blockOnMissingRequiredEvidence: true
+    requiredEvidenceMatrix:
+      target_url_input:
+        requiredSignals:
+          - target_site_id_correlated
+      search_probe_step:
+        requiredSignals:
+          - search_candidate_count_min
+      detail_probe_step:
+        requiredSignals:
+          - detail_candidate_count_min
+      final_validation_export:
+        requiredSignals:
+          - mission_relevant_export_artifacts_ready
+    capturePolicy:
+      collectRequestMetadata: true
+      collectResponseMetadata: true
+      collectCookies: true
+      collectStorageArtifacts: true
+      collectProvenance: true
+      collectNavigationSignals: false
+      collectUiMarkers: true
+      collectPlaybackSignals: true
+      collectAuthSignals: true
+      noiseHandlingMode: exclude_from_scoring
+    bodyCapturePolicy:
+      fullRequiredKinds:
+        - graphql_json
+        - rest_json_candidate
+        - resolver_payload
+        - manifest
+      truncatableKinds:
+        - candidate_html_document
+        - non_candidate_large_html
+      metadataOnlyKinds:
+        - playback_media_segment
+      skipKinds:
+        - ad_noise
+      dedupeLargeBodies: true
+      explicitTruncationRequired: true
+    extractionPolicy:
+      requiredFields:
+        - canonicalId
+        - playbackHint
+      optionalFields:
+        - title
+        - image
+      extractionDepth: minimal
+      generateFieldMatrix: true
+      requireConfidence: true
+      extractionEventsRequired: true
+    replayPolicy:
+      enabled: true
+      minimizationMode: aggressive
+      validateHome: true
+      validateSearch: true
+      validateDetail: true
+      validatePlayback: true
+      validateAuth: true
+      browserAssistedAllowed: true
+      nativeReplayPreferred: true
+    adapterDerivationPolicy:
+      deriveFishitProvider: false
+      deriveWebappRuntime: false
+      deriveReplayBundle: true
+      deriveEndpointTemplates: true
+      deriveFieldMatrix: true
+      deriveAuthDraft: true
+      derivePlaybackDraft: true
+      requireCoreModelConfidenceThreshold: 0.60
+    exportPolicy:
+      bundleFormat: zip
+      includeRawEvents: true
+      includeResponseStoreIndex: true
+      includeFixtureArtifacts: true
+      deterministicSerialization: true
+      includeWarnings: true
+      includeConfidenceReport: true
+      exportOnlyMissionRelevantAdapters: true
+
+  REPLAY_BUNDLE:
+    displayName: Replay / Debug Bundle
+    description: >-
+      Produce a fixture-ready replay bundle with raw events, response indexes,
+      provenance, and expected outcomes for deterministic offline replay.
+    outputTargets:
+      - site_runtime_model
+      - replay_bundle
+      - confidence_report
+      - warnings
+      - fixture_bundle
+    requiredProbeSet:
+      - home_probe
+    optionalProbeSet:
+      - search_probe
+      - detail_probe
+      - playback_probe
+      - auth_probe
+      - replay_probe
+    wizardFlowRef: flow_replay_bundle_guided_manual
+    stepSaturationPolicy:
+      mode: guided_manual
+      allowRepeatUntilSaturated: true
+      blockOnMissingRequiredEvidence: true
+    requiredEvidenceMatrix:
+      target_url_input:
+        requiredSignals:
+          - target_site_id_correlated
+      home_probe_step:
+        requiredSignals:
+          - home_candidate_count_min
+      final_validation_export:
+        requiredSignals:
+          - mission_relevant_export_artifacts_ready
+    capturePolicy:
+      collectRequestMetadata: true
+      collectResponseMetadata: true
+      collectCookies: true
+      collectStorageArtifacts: true
+      collectProvenance: true
+      collectNavigationSignals: true
+      collectUiMarkers: true
+      collectPlaybackSignals: true
+      collectAuthSignals: true
+      noiseHandlingMode: collect_but_flag
+    bodyCapturePolicy:
+      fullRequiredKinds:
+        - graphql_json
+        - rest_json_candidate
+        - manifest
+        - resolver_payload
+        - candidate_html_document
+      truncatableKinds:
+        - non_candidate_large_html
+      metadataOnlyKinds:
+        - playback_media_segment
+      skipKinds: []
+      dedupeLargeBodies: true
+      explicitTruncationRequired: true
+    extractionPolicy:
+      requiredFields:
+        - title
+        - canonicalId
+      optionalFields:
+        - image
+        - playbackHint
+      extractionDepth: standard
+      generateFieldMatrix: true
+      requireConfidence: true
+      extractionEventsRequired: true
+    replayPolicy:
+      enabled: true
+      minimizationMode: none
+      validateHome: false
+      validateSearch: false
+      validateDetail: false
+      validatePlayback: false
+      validateAuth: false
+      browserAssistedAllowed: true
+      nativeReplayPreferred: false
+    adapterDerivationPolicy:
+      deriveFishitProvider: false
+      deriveWebappRuntime: false
+      deriveReplayBundle: true
+      deriveEndpointTemplates: true
+      deriveFieldMatrix: true
+      deriveAuthDraft: false
+      derivePlaybackDraft: false
+      requireCoreModelConfidenceThreshold: 0.0
+    exportPolicy:
+      bundleFormat: zip
+      includeRawEvents: true
+      includeResponseStoreIndex: true
+      includeFixtureArtifacts: true
+      deterministicSerialization: true
+      includeWarnings: true
+      includeConfidenceReport: true
+      exportOnlyMissionRelevantAdapters: true
+
+mission_runtime_availability:
+  FISHIT_PIPELINE:
+    implemented: true
+    notes: primary production mission in current cut
+  API_MAPPING:
+    implemented: true
+    notes: enabled in this slice with mission-aware finalization
+  STANDALONE_APP:
+    implemented: true
+    notes: enabled in this slice with mission-aware finalization
+  REPLAY_BUNDLE:
+    implemented: true
+    notes: enabled in this slice with mission-aware finalization
+
+ui_flow:
+  required_screens:
+    - MissionLauncherScreen
+    - MissionWizardSetupScreen
+    - BrowserLabScreen
+    - WizardStepPanel
+    - ProbeChecklistPanel
+    - ExportSummaryScreen
+    - ExportHistoryScreen
+    - FixtureReplayScreen
+  MissionLauncherScreen:
+    purpose: first_entrypoint
+    requirements:
+      - show_built_in_mission_cards
+      - show_recent_exports
+      - show_fixture_replay_entry
+      - show_advanced_settings_entry
+      - must_not_open_browser_automatically_without_mission_selection
+  MissionWizardSetupScreen:
+    purpose: wizard_bootstrap_and_target_configuration
+    requirements:
+      - show_selected_mission_summary
+      - allow_safe_profile_overrides
+      - require_target_url_input_before_browser_launch
+      - show_wizard_step_preview_for_selected_mission
+      - show_required_probes
+      - show_expected_outputs
+  BrowserLabScreen:
+    purpose: main_capture_workspace
+    requirements:
+      - use_existing_einkbro_foundation
+      - open_einkbro_with_selected_target_url
+      - show_mission_context
+      - show_capture_state
+      - show_wizard_panel_with_current_step_instruction
+      - show_overlay_anchor_controls
+      - show_probe_controls
+      - show_checklist_status
+      - show_finish_run_action
+      - show_export_when_ready
+  WizardStepPanel:
+    purpose: guided_manual_step_execution_and_saturation_feedback
+    requirements:
+      - show_current_step_instruction
+      - show_current_step_required_evidence
+      - show_step_saturation_state
+      - allow_mark_step_retry_when_needs_more_evidence
+      - allow_skip_optional_step_with_reason
+      - show_blocking_reason_for_blocked_steps
+  ProbeChecklistPanel:
+    purpose: live_readiness_feedback
+    requirements:
+      - show_step_level_completion_not_only_global_probe_completion
+      - show_completed_required_probes
+      - show_missing_required_probes
+      - show_recommendations
+      - show_confidence_and_warnings_live_when_possible
+  ExportSummaryScreen:
+    purpose: pre_export_review
+    requirements:
+      - show_detected_capabilities
+      - show_wizard_step_coverage
+      - show_which_adapters_will_be_emitted
+      - show_missing_or_degraded_sections
+      - show_warnings_and_confidence
+      - allow_export_confirmation
+  ExportHistoryScreen:
+    purpose: review_previous_exports
+    requirements:
+      - list_previous_bundles
+      - show_mission_kind
+      - show_export_targets
+      - show_status
+  FixtureReplayScreen:
+    purpose: debug_and_regression
+    requirements:
+      - allow_loading_fixture_bundle
+      - run_offline_replay
+      - show_comparison_results
+
+browser_lab_controls:
+  required_actions:
+    - mission_wizard_start
+    - mission_wizard_next_step
+    - mission_wizard_retry_step
+    - mission_wizard_skip_optional_step
+    - start_capture
+    - pause_capture
+    - finish_run
+    - export_bundle
+    - overlay_anchor_create
+    - overlay_anchor_label
+    - overlay_anchor_remove
+    - home_probe_start
+    - search_probe_start
+    - detail_probe_start
+    - playback_probe_start
+    - auth_probe_start
+    - probe_end
+  rules:
+    - browser_must_not_auto_open_before_target_url_input
+    - controls_must_emit_machine_readable_semantic_events
+    - probe_controls_must_be_mission_aware
+    - wizard_controls_must_be_step_and_mission_aware
+    - export_bundle_must_not_be_primary_shown_before_finish_run_or_readiness
+
+event_requirements:
+  mandatory_semantic_events:
+    - mission_selected
+    - mission_config_applied
+    - wizard_started
+    - wizard_step_started
+    - wizard_step_saturation_updated
+    - wizard_step_completed
+    - wizard_step_blocked
+    - wizard_finished
+    - capture_started
+    - capture_paused
+    - capture_finished
+    - overlay_anchor_created
+    - overlay_anchor_labeled
+    - overlay_anchor_removed
+    - home_probe_start
+    - search_probe_start
+    - detail_probe_start
+    - playback_probe_start
+    - auth_probe_start
+    - probe_end
+    - export_requested
+    - export_finalized
+  semantics:
+    - semantic_events_must_drive_phase_resolution
+    - wizard_and_anchor_events_must_carry_mission_and_step_context
+    - semantic_events_must_be_persisted_in_raw_event_store
+
+site_runtime_model_generation:
+  mandatory_rule: >-
+    Every mission must generate site_runtime_model.json before any adapter is emitted.
+  derivation_requirements:
+    - core_model_must_be_noise_filtered
+    - confidence_and_warning_models_must_be_populated
+    - capability_model_must_reflect_selected_mission_and_observed_site
+    - field_model_and_endpoint_model_must_be_present_even_if_partial
+  partial_generation_rules:
+    - partial_models_are_allowed_but_must_emit_warnings
+    - missing_required_probes_must_lower_confidence_and_export_readiness
+
+mission_specific_export_bundles:
+  FISHIT_PIPELINE:
+    required_files:
+      - site_runtime_model.json
+      - fishit_provider_draft.json
+      - endpoint_templates.json
+      - field_matrix.json
+      - auth_draft.json
+      - playback_draft.json
+      - confidence_report.json
+      - warnings.json
+  STANDALONE_APP:
+    required_files:
+      - site_runtime_model.json
+      - webapp_runtime_draft.json
+      - endpoint_templates.json
+      - field_matrix.json
+      - playback_draft.json
+      - confidence_report.json
+      - warnings.json
+  API_MAPPING:
+    required_files:
+      - site_runtime_model.json
+      - endpoint_templates.json
+      - replay_bundle.json
+      - confidence_report.json
+      - warnings.json
+      - runtime_events.jsonl
+  REPLAY_BUNDLE:
+    required_files:
+      - site_runtime_model.json
+      - replay_bundle.json
+      - confidence_report.json
+      - warnings.json
+      - runtime_events.jsonl
+      - response_index.json
+      - fixture_manifest.json
+
+advanced_settings:
+  allowed_overrides:
+    - include_raw_events
+    - body_capture_debug_override
+    - aggressive_replay_minimization
+    - fixture_export_enable
+    - confidence_threshold_override
+  restrictions:
+    - built_in_contract_fields_must_not_be_removed
+    - site_runtime_model_generation_cannot_be_disabled
+    - deterministic_serialization_cannot_be_disabled
+
+quality_gates:
+  must_pass:
+    - mission_launcher_is_default_entrypoint
+    - browser_does_not_open_without_mission_selection_except_restore_case
+    - target_url_step_must_set_correlated_target_site_context
+    - wizard_step_saturation_must_be_visible_and_machine_readable
+    - semantic_probe_markers_are_emitted
+    - site_runtime_model_is_generated_for_every_successful_run
+    - only_mission_relevant_adapters_are_exported_by_default
+    - export_summary_reflects_missing_required_probes
+    - deterministic_serialization_is_preserved
+  should_pass:
+    - mission_checklist_improves_probe_completion_rate
+    - export_bundle_size_is_reduced_vs_generic_dump_mode
+    - users_can_recover_and_resume_incomplete_runs
+
+implementation_notes:
+  - Keep EinkBro as the browser foundation.
+  - Keep wizard execution guided-manual; users perform actions inside browser while mapper validates evidence.
+  - Add the mission layer above the browser, not instead of the browser.
+  - Use the same collector core with policy-based behavior changes.
+  - Keep mapper logic outside borrowed donor browser core whenever possible.
+  - Keep FishIT-specific output as one derived adapter, not as the primary artifact.
+  - Preserve replay/debug capability as first-class output.
+  - Mission UX must help users perform the right probes for the chosen goal.

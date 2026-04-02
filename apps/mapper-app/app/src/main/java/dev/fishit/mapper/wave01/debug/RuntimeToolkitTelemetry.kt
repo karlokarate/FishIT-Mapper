@@ -7,6 +7,9 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import android.webkit.CookieManager
+import dev.fishit.mapper.network.MapperHttpMethod
+import dev.fishit.mapper.network.MapperNativeHttpRequest
+import dev.fishit.mapper.wave01.debug.replay.MapperNativeReplayRuntime
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -18,6 +21,7 @@ import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.UUID
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 object RuntimeToolkitTelemetry {
@@ -36,6 +40,16 @@ object RuntimeToolkitTelemetry {
     private const val SETTING_TARGET_HOST_FAMILY = "scope.target_host_family"
     private const val SETTING_ACTIVE_PHASE_ID = "probe.active_phase"
     private const val SETTING_CAPTURE_ENABLED = "capture.enabled"
+    private const val SETTING_MISSION_ID = "mission.id"
+    private const val SETTING_WIZARD_STEP_ID = "wizard.step_id"
+    private const val SETTING_WIZARD_SATURATION_STATE = "wizard.saturation_state"
+    private const val SETTING_MISSION_TARGET_URL = "mission.target_url"
+    private const val SETTING_MISSION_TARGET_SITE_ID = "mission.target_site_id"
+    private const val SETTING_MISSION_TARGET_HOST_FAMILY = "mission.target_host_family"
+    private const val SETTING_MISSION_STARTED_AT = "mission.started_at"
+    private const val SETTING_MISSION_FINISHED_AT = "mission.finished_at"
+    private const val SETTING_WIZARD_STEP_STATES_JSON = "wizard.step_states_json"
+    private const val SETTING_OVERLAY_ANCHORS_JSON = "wizard.overlay_anchors_json"
 
     private const val PREF_COOKIE_SNAPSHOT = "mapper_toolkit_cookie_snapshot"
     private const val MAX_RECENT_REQUEST_IDS = 4096
@@ -45,6 +59,10 @@ object RuntimeToolkitTelemetry {
     private const val DEFAULT_SCOPE_MODE = "strict_target"
     private const val PHASE_BACKGROUND = "background_noise"
     private const val LEGACY_CAP_4MB = 4 * 1024 * 1024
+    private const val EXPORT_READINESS_NOT_READY = "NOT_READY"
+    private const val EXPORT_READINESS_PARTIAL = "PARTIAL"
+    private const val EXPORT_READINESS_READY = "READY"
+    private const val EXPORT_READINESS_BLOCKED = "BLOCKED"
 
     private val ioLock = Any()
     private val requestLock = Any()
@@ -68,6 +86,106 @@ object RuntimeToolkitTelemetry {
         val dedupCount: Int,
         val canonical: Boolean,
         val responseObservable: Boolean,
+    )
+
+    data class MissionSessionState(
+        val missionId: String,
+        val wizardStepId: String,
+        val saturationState: String,
+        val targetUrl: String,
+        val targetSiteId: String,
+        val targetHostFamily: String,
+        val startedAt: String,
+        val finishedAt: String,
+        val stepStates: Map<String, String>,
+    )
+
+    data class MissionExportSummary(
+        val missionId: String,
+        val targetSiteId: String,
+        val targetUrl: String,
+        val generatedAt: String,
+        val exportReadiness: String,
+        val reason: String,
+        val requiredSteps: List<String>,
+        val missingRequiredSteps: List<String>,
+        val requiredArtifacts: List<String>,
+        val missingRequiredArtifacts: List<String>,
+        val availableArtifacts: Map<String, Boolean>,
+        val hasFinalizedExport: Boolean,
+        val warnings: List<String>,
+    )
+
+    data class OverlayAnchor(
+        val anchorId: String,
+        val name: String,
+        val anchorType: String,
+        val url: String,
+        val phaseId: String,
+        val targetSiteId: String,
+        val createdAt: String,
+        val updatedAt: String,
+    )
+
+    data class ExportBundleInfo(
+        val fileName: String,
+        val absolutePath: String,
+        val sizeBytes: Long,
+        val modifiedAtUtc: String,
+    )
+
+    data class FixtureReplayStatus(
+        val replayBundlePresent: Boolean,
+        val fixtureManifestPresent: Boolean,
+        val responseIndexPresent: Boolean,
+        val runtimeEventsPresent: Boolean,
+        val latestExportPresent: Boolean,
+        val replayBundlePath: String,
+        val fixtureManifestPath: String,
+        val responseIndexPath: String,
+        val runtimeEventsPath: String,
+        val latestExportPath: String,
+    ) {
+        val ready: Boolean
+            get() = replayBundlePresent && fixtureManifestPresent && responseIndexPresent && runtimeEventsPresent
+    }
+
+    data class ExportBundleReplayReadiness(
+        val bundlePath: String,
+        val bundleFileName: String,
+        val ready: Boolean,
+        val missingRequiredEntries: List<String>,
+        val replayStepCount: Int,
+        val runnableStepCount: Int,
+        val warnings: List<String>,
+    )
+
+    data class FixtureReplayRequestResult(
+        val requestId: String,
+        val url: String,
+        val method: String,
+        val attempted: Boolean,
+        val succeeded: Boolean,
+        val statusCode: Int?,
+        val durationMillis: Long?,
+        val error: String?,
+        val skipReason: String?,
+    )
+
+    data class FixtureReplayExecutionResult(
+        val bundlePath: String,
+        val bundleFileName: String,
+        val startedAtUtc: String,
+        val finishedAtUtc: String,
+        val readiness: ExportBundleReplayReadiness,
+        val attemptedCount: Int,
+        val successCount: Int,
+        val failedCount: Int,
+        val skippedCount: Int,
+        val transport: String,
+        val reportPath: String,
+        val warnings: List<String>,
+        val requests: List<FixtureReplayRequestResult>,
     )
 
     private data class NormalizedUrlParts(
@@ -852,7 +970,528 @@ object RuntimeToolkitTelemetry {
             "target_host_family" to (prefs.getString(SETTING_TARGET_HOST_FAMILY, "") ?: ""),
             "active_phase_id" to (prefs.getString(SETTING_ACTIVE_PHASE_ID, PHASE_BACKGROUND) ?: PHASE_BACKGROUND),
             "capture_enabled" to prefs.getBoolean(SETTING_CAPTURE_ENABLED, true),
+            "mission_id" to (prefs.getString(SETTING_MISSION_ID, "") ?: ""),
+            "wizard_step_id" to (prefs.getString(SETTING_WIZARD_STEP_ID, "") ?: ""),
+            "wizard_saturation_state" to (
+                prefs.getString(SETTING_WIZARD_SATURATION_STATE, RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE)
+                    ?: RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE
+            ),
+            "mission_target_url" to (prefs.getString(SETTING_MISSION_TARGET_URL, "") ?: ""),
+            "mission_target_site_id" to (prefs.getString(SETTING_MISSION_TARGET_SITE_ID, "") ?: ""),
+            "mission_target_host_family" to (prefs.getString(SETTING_MISSION_TARGET_HOST_FAMILY, "") ?: ""),
         )
+    }
+
+    private fun normalizeExportReadiness(value: String?): String {
+        return when (value?.trim()?.uppercase(Locale.ROOT)) {
+            EXPORT_READINESS_NOT_READY -> EXPORT_READINESS_NOT_READY
+            EXPORT_READINESS_PARTIAL -> EXPORT_READINESS_PARTIAL
+            EXPORT_READINESS_READY -> EXPORT_READINESS_READY
+            EXPORT_READINESS_BLOCKED -> EXPORT_READINESS_BLOCKED
+            else -> EXPORT_READINESS_NOT_READY
+        }
+    }
+
+    fun logMissionEvent(
+        context: Context,
+        operation: String,
+        missionId: String? = null,
+        wizardStepId: String? = null,
+        saturationState: String? = null,
+        exportReadiness: String? = null,
+        reason: String? = null,
+        payload: Map<String, Any?> = emptyMap(),
+    ) {
+        val state = missionSessionState(context)
+        val safeMission = (missionId ?: state.missionId).orEmpty()
+            .ifBlank { RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE }
+        val safeStep = (wizardStepId ?: state.wizardStepId).orEmpty()
+            .ifBlank { RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT }
+        val safeSaturation = (saturationState ?: state.saturationState).orEmpty()
+            .ifBlank { RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE }
+        val safeTargetSite = state.targetSiteId.ifBlank { "unknown_target" }
+        val safeExportReadiness = normalizeExportReadiness(exportReadiness)
+        val safeReason = reason.orEmpty()
+        val correlation = currentCorrelationContext(context)
+        logEvent(
+            context = context,
+            eventType = "mission_event",
+            correlation = correlation,
+            payload = payload + mapOf(
+                "operation" to operation.trim().ifBlank { "mission_config_applied" },
+                "mission_id" to safeMission,
+                "wizard_step_id" to safeStep,
+                "saturation_state" to safeSaturation,
+                "phase_id" to activePhaseId(context),
+                "target_site_id" to safeTargetSite,
+                "export_readiness" to safeExportReadiness,
+                "reason" to safeReason,
+            ),
+        )
+    }
+
+    fun logWizardEvent(
+        context: Context,
+        operation: String,
+        missionId: String,
+        wizardStepId: String,
+        saturationState: String,
+        phaseId: String? = null,
+        targetSiteId: String? = null,
+        payload: Map<String, Any?> = emptyMap(),
+    ) {
+        val safeMission = missionId.trim().ifBlank { RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE }
+        val safeStep = wizardStepId.trim().ifBlank { RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT }
+        val safeSaturation = saturationState.trim()
+            .ifBlank { RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE }
+        val safePhase = normalizePhaseId(phaseId ?: activePhaseId(context))
+        val safeTargetSite = (targetSiteId ?: missionSessionState(context).targetSiteId).trim()
+            .ifBlank { "unknown_target" }
+        val correlation = currentCorrelationContext(context)
+        logEvent(
+            context = context,
+            eventType = "wizard_event",
+            correlation = correlation,
+            payload = payload + mapOf(
+                "operation" to operation,
+                "mission_id" to safeMission,
+                "wizard_step_id" to safeStep,
+                "saturation_state" to safeSaturation,
+                "phase_id" to safePhase,
+                "target_site_id" to safeTargetSite,
+            ),
+        )
+    }
+
+    fun logOverlayAnchorEvent(
+        context: Context,
+        operation: String,
+        anchorId: String,
+        name: String,
+        anchorType: String,
+        phaseId: String? = null,
+        targetSiteId: String? = null,
+        payload: Map<String, Any?> = emptyMap(),
+    ) {
+        val safeAnchorId = anchorId.trim().ifBlank { "anchor_${UUID.randomUUID()}" }
+        val safeName = name.trim().ifBlank { "anchor" }
+        val safeType = anchorType.trim().ifBlank { "custom" }
+        val safePhase = normalizePhaseId(phaseId ?: activePhaseId(context))
+        val safeTargetSite = (targetSiteId ?: missionSessionState(context).targetSiteId).trim()
+            .ifBlank { "unknown_target" }
+        val correlation = currentCorrelationContext(context)
+        logEvent(
+            context = context,
+            eventType = "overlay_anchor_event",
+            correlation = correlation,
+            payload = payload + mapOf(
+                "operation" to operation,
+                "anchor_id" to safeAnchorId,
+                "name" to safeName,
+                "anchor_type" to safeType,
+                "phase_id" to safePhase,
+                "target_site_id" to safeTargetSite,
+            ),
+        )
+    }
+
+    fun missionSessionState(context: Context): MissionSessionState {
+        val prefs = runtimeSettings(context)
+        val missionId = prefs.getString(SETTING_MISSION_ID, "").orEmpty()
+        val stepId = prefs.getString(SETTING_WIZARD_STEP_ID, "").orEmpty()
+            .ifBlank { RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT }
+        val saturation = prefs.getString(
+            SETTING_WIZARD_SATURATION_STATE,
+            RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        ).orEmpty().ifBlank { RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE }
+        val targetUrl = prefs.getString(SETTING_MISSION_TARGET_URL, "").orEmpty()
+        val targetSiteId = prefs.getString(SETTING_MISSION_TARGET_SITE_ID, "").orEmpty()
+        val targetHostFamily = prefs.getString(SETTING_MISSION_TARGET_HOST_FAMILY, "").orEmpty()
+        val startedAt = prefs.getString(SETTING_MISSION_STARTED_AT, "").orEmpty()
+        val finishedAt = prefs.getString(SETTING_MISSION_FINISHED_AT, "").orEmpty()
+        val stepStates = parseStepStates(prefs.getString(SETTING_WIZARD_STEP_STATES_JSON, "{}").orEmpty())
+        return MissionSessionState(
+            missionId = missionId,
+            wizardStepId = stepId,
+            saturationState = saturation,
+            targetUrl = targetUrl,
+            targetSiteId = targetSiteId,
+            targetHostFamily = targetHostFamily,
+            startedAt = startedAt,
+            finishedAt = finishedAt,
+            stepStates = stepStates,
+        )
+    }
+
+    fun missionSessionSnapshot(context: Context): Map<String, Any?> {
+        val state = missionSessionState(context)
+        val summary = buildMissionExportSummary(context, state.missionId)
+        return mapOf(
+            "mission_id" to state.missionId,
+            "wizard_step_id" to state.wizardStepId,
+            "saturation_state" to state.saturationState,
+            "target_url" to state.targetUrl,
+            "target_site_id" to state.targetSiteId,
+            "target_host_family" to state.targetHostFamily,
+            "started_at" to state.startedAt,
+            "finished_at" to state.finishedAt,
+            "step_states" to state.stepStates,
+            "anchors" to listOverlayAnchors(context).map { anchor ->
+                mapOf(
+                    "anchor_id" to anchor.anchorId,
+                    "name" to anchor.name,
+                    "anchor_type" to anchor.anchorType,
+                    "phase_id" to anchor.phaseId,
+                    "target_site_id" to anchor.targetSiteId,
+                    "url" to anchor.url,
+                )
+            },
+            "mission_export_summary" to mapOf(
+                "export_readiness" to summary.exportReadiness,
+                "reason" to summary.reason,
+                "missing_required_steps" to summary.missingRequiredSteps,
+                "missing_required_artifacts" to summary.missingRequiredArtifacts,
+                "has_finalized_export" to summary.hasFinalizedExport,
+            ),
+        )
+    }
+
+    fun buildMissionExportSummary(
+        context: Context,
+        missionId: String = missionSessionState(context).missionId,
+    ): MissionExportSummary {
+        RuntimeToolkitMissionWizard.ensureRegistryLoaded(context)
+        val state = missionSessionState(context)
+        val safeMissionId = missionId.trim().ifBlank { state.missionId }.ifBlank {
+            RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE
+        }
+        val requiredSteps = RuntimeToolkitMissionWizard.requiredStepIds(safeMissionId, context)
+        val missingRequiredSteps = requiredSteps.filter {
+            state.stepStates[it] != RuntimeToolkitMissionWizard.SATURATION_SATURATED
+        }
+
+        val root = runtimeRoot(context)
+        val requiredArtifacts = RuntimeToolkitMissionWizard.requiredArtifactsForMission(safeMissionId, context)
+        val availableArtifacts = linkedMapOf<String, Boolean>()
+        requiredArtifacts.forEach { artifact ->
+            val exists = artifact.paths.any { relativePath ->
+                val artifactPath = File(root, relativePath)
+                artifactPath.exists() && artifactPath.length() > 0L
+            }
+            availableArtifacts[artifact.id] = exists
+        }
+        val missingRequiredArtifacts = requiredArtifacts
+            .filter { artifact -> !availableArtifacts.getOrDefault(artifact.id, false) }
+            .map { it.id }
+
+        val hasFinalizedExport = File(root, "exports")
+            .listFiles()
+            ?.any { it.isFile && it.name.endsWith(".zip") && it.length() > 0L }
+            ?: false
+
+        val exportReadiness: String
+        val reason: String
+        if (missingRequiredSteps.isNotEmpty()) {
+            exportReadiness = EXPORT_READINESS_BLOCKED
+            reason = "missing_required_steps"
+        } else if (missingRequiredArtifacts.isEmpty() && hasFinalizedExport) {
+            exportReadiness = EXPORT_READINESS_READY
+            reason = "required_steps_and_artifacts_complete"
+        } else if (missingRequiredArtifacts.size < requiredArtifacts.size) {
+            exportReadiness = EXPORT_READINESS_PARTIAL
+            reason = "required_artifacts_partial"
+        } else {
+            exportReadiness = EXPORT_READINESS_NOT_READY
+            reason = "required_artifacts_missing"
+        }
+
+        val warnings = mutableListOf<String>()
+        if (missingRequiredSteps.isNotEmpty()) {
+            warnings += "missing_required_steps:${missingRequiredSteps.joinToString(",")}"
+        }
+        if (missingRequiredArtifacts.isNotEmpty()) {
+            warnings += "missing_required_artifacts:${missingRequiredArtifacts.joinToString(",")}"
+        }
+        if (!hasFinalizedExport) {
+            warnings += "finalized_export_missing"
+        }
+
+        return MissionExportSummary(
+            missionId = safeMissionId,
+            targetSiteId = state.targetSiteId.ifBlank { "unknown_target" },
+            targetUrl = state.targetUrl,
+            generatedAt = Instant.now().toString(),
+            exportReadiness = exportReadiness,
+            reason = reason,
+            requiredSteps = requiredSteps,
+            missingRequiredSteps = missingRequiredSteps,
+            requiredArtifacts = requiredArtifacts.map { it.id },
+            missingRequiredArtifacts = missingRequiredArtifacts,
+            availableArtifacts = availableArtifacts,
+            hasFinalizedExport = hasFinalizedExport,
+            warnings = warnings,
+        )
+    }
+
+    fun writeMissionExportSummary(
+        context: Context,
+        missionId: String = missionSessionState(context).missionId,
+    ): File {
+        val summary = buildMissionExportSummary(context, missionId)
+        val root = runtimeRoot(context)
+        if (!root.exists()) root.mkdirs()
+        val summaryFile = File(root, "mission_export_summary.json")
+        val json = JSONObject().apply {
+            put("schema_version", 1)
+            put("mission_id", summary.missionId)
+            put("target_site_id", summary.targetSiteId)
+            put("target_url", summary.targetUrl)
+            put("generated_at_utc", summary.generatedAt)
+            put("export_readiness", summary.exportReadiness)
+            put("reason", summary.reason)
+            put("required_steps", JSONArray(summary.requiredSteps))
+            put("missing_required_steps", JSONArray(summary.missingRequiredSteps))
+            put("required_artifacts", JSONArray(summary.requiredArtifacts))
+            put("missing_required_artifacts", JSONArray(summary.missingRequiredArtifacts))
+            put("available_artifacts", toJson(summary.availableArtifacts))
+            put("has_finalized_export", summary.hasFinalizedExport)
+            put("warnings", JSONArray(summary.warnings))
+        }
+        synchronized(ioLock) {
+            summaryFile.writeText(json.toString(), Charsets.UTF_8)
+        }
+        return summaryFile
+    }
+
+    fun startMissionSession(
+        context: Context,
+        missionId: String,
+    ): MissionSessionState {
+        RuntimeToolkitMissionWizard.ensureRegistryLoaded(context)
+        val safeMission = missionId.trim().ifBlank { RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE }
+        val firstStep = RuntimeToolkitMissionWizard.firstStepId(safeMission, context)
+        val stepStates = linkedMapOf(firstStep to RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE)
+        val updated = MissionSessionState(
+            missionId = safeMission,
+            wizardStepId = firstStep,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+            targetUrl = "",
+            targetSiteId = "",
+            targetHostFamily = "",
+            startedAt = Instant.now().toString(),
+            finishedAt = "",
+            stepStates = stepStates,
+        )
+        writeMissionSession(context, updated)
+        return updated
+    }
+
+    fun setMissionTarget(
+        context: Context,
+        targetUrl: String,
+    ): MissionSessionState {
+        val state = missionSessionState(context)
+        val normalizedParts = normalizedUrlParts(targetUrl)
+        val host = normalizedParts.host
+        val targetSiteId = canonicalTargetSiteIdFromHost(host)
+        val currentHosts = targetHostFamily(context).toMutableList()
+        if (host.isNotBlank() && !currentHosts.contains(host)) {
+            currentHosts.add(host)
+        }
+        val hostCsv = currentHosts.joinToString(",")
+        if (hostCsv.isNotBlank()) {
+            setScopeMode(context, "strict_target")
+            setTargetHostFamily(context, hostCsv)
+        }
+        val updated = state.copy(
+            targetUrl = targetUrl.trim(),
+            targetSiteId = targetSiteId,
+            targetHostFamily = hostCsv,
+        )
+        writeMissionSession(context, updated)
+        return updated
+    }
+
+    fun setMissionWizardStepState(
+        context: Context,
+        stepId: String,
+        saturationState: String,
+    ): MissionSessionState {
+        val state = missionSessionState(context)
+        val stepStates = LinkedHashMap(state.stepStates)
+        stepStates[stepId] = saturationState
+        val updated = state.copy(
+            wizardStepId = stepId,
+            saturationState = saturationState,
+            stepStates = stepStates,
+        )
+        writeMissionSession(context, updated)
+        return updated
+    }
+
+    fun retryMissionWizardStep(context: Context): MissionSessionState {
+        val state = missionSessionState(context)
+        return setMissionWizardStepState(
+            context = context,
+            stepId = state.wizardStepId,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        )
+    }
+
+    fun advanceMissionWizardStep(context: Context): MissionSessionState {
+        val state = missionSessionState(context)
+        val nextStep = RuntimeToolkitMissionWizard.nextStepId(state.missionId, state.wizardStepId, context) ?: state.wizardStepId
+        return setMissionWizardStepState(
+            context = context,
+            stepId = nextStep,
+            saturationState = state.stepStates[nextStep] ?: RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        )
+    }
+
+    fun skipOptionalMissionWizardStep(context: Context): MissionSessionState {
+        val state = missionSessionState(context)
+        if (!RuntimeToolkitMissionWizard.isOptionalStep(state.missionId, state.wizardStepId, context)) {
+            return state
+        }
+        setMissionWizardStepState(
+            context = context,
+            stepId = state.wizardStepId,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+        )
+        return advanceMissionWizardStep(context = context)
+    }
+
+    fun finishMissionSession(
+        context: Context,
+        finalSaturationState: String,
+    ): MissionSessionState {
+        val state = missionSessionState(context)
+        val stepStates = LinkedHashMap(state.stepStates)
+        stepStates[state.wizardStepId] = finalSaturationState
+        val updated = state.copy(
+            saturationState = finalSaturationState,
+            finishedAt = Instant.now().toString(),
+            stepStates = stepStates,
+        )
+        writeMissionSession(context, updated)
+        return updated
+    }
+
+    fun evaluateMissionStepSaturation(
+        context: Context,
+        stepId: String,
+    ): RuntimeToolkitMissionWizard.SaturationResult {
+        val state = missionSessionState(context)
+        return when (state.missionId) {
+            RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE,
+            RuntimeToolkitMissionWizard.MISSION_API_MAPPING,
+            RuntimeToolkitMissionWizard.MISSION_STANDALONE_APP,
+            RuntimeToolkitMissionWizard.MISSION_REPLAY_BUNDLE,
+            -> evaluateFishitStepSaturation(context, stepId)
+            else -> RuntimeToolkitMissionWizard.SaturationResult(
+                state = RuntimeToolkitMissionWizard.SATURATION_BLOCKED,
+                reason = "unsupported_mission",
+            )
+        }
+    }
+
+    fun listOverlayAnchors(context: Context): List<OverlayAnchor> {
+        val prefs = runtimeSettings(context)
+        val raw = prefs.getString(SETTING_OVERLAY_ANCHORS_JSON, "[]").orEmpty()
+        return parseOverlayAnchors(raw)
+    }
+
+    fun createOverlayAnchor(
+        context: Context,
+        name: String,
+        anchorType: String,
+        url: String,
+    ): OverlayAnchor {
+        val now = Instant.now().toString()
+        val state = missionSessionState(context)
+        val anchor = OverlayAnchor(
+            anchorId = "anchor_${UUID.randomUUID()}",
+            name = name.trim().ifBlank { "anchor" },
+            anchorType = anchorType.trim().ifBlank { "custom" },
+            url = url.trim(),
+            phaseId = activePhaseId(context),
+            targetSiteId = state.targetSiteId.ifBlank { "unknown_target" },
+            createdAt = now,
+            updatedAt = now,
+        )
+        val anchors = listOverlayAnchors(context).toMutableList()
+        anchors.add(anchor)
+        runtimeSettings(context).edit()
+            .putString(SETTING_OVERLAY_ANCHORS_JSON, encodeOverlayAnchors(anchors))
+            .apply()
+        logOverlayAnchorEvent(
+            context = context,
+            operation = "overlay_anchor_created",
+            anchorId = anchor.anchorId,
+            name = anchor.name,
+            anchorType = anchor.anchorType,
+            phaseId = anchor.phaseId,
+            targetSiteId = anchor.targetSiteId,
+            payload = mapOf("url" to anchor.url),
+        )
+        return anchor
+    }
+
+    fun labelOverlayAnchor(
+        context: Context,
+        anchorId: String,
+        name: String,
+        anchorType: String,
+    ): OverlayAnchor? {
+        val anchors = listOverlayAnchors(context).toMutableList()
+        val idx = anchors.indexOfFirst { it.anchorId == anchorId }
+        if (idx < 0) return null
+        val current = anchors[idx]
+        val updated = current.copy(
+            name = name.trim().ifBlank { current.name },
+            anchorType = anchorType.trim().ifBlank { current.anchorType },
+            updatedAt = Instant.now().toString(),
+            phaseId = activePhaseId(context),
+        )
+        anchors[idx] = updated
+        runtimeSettings(context).edit()
+            .putString(SETTING_OVERLAY_ANCHORS_JSON, encodeOverlayAnchors(anchors))
+            .apply()
+        logOverlayAnchorEvent(
+            context = context,
+            operation = "overlay_anchor_labeled",
+            anchorId = updated.anchorId,
+            name = updated.name,
+            anchorType = updated.anchorType,
+            phaseId = updated.phaseId,
+            targetSiteId = updated.targetSiteId,
+            payload = mapOf("url" to updated.url),
+        )
+        return updated
+    }
+
+    fun removeOverlayAnchor(
+        context: Context,
+        anchorId: String,
+    ): Boolean {
+        val anchors = listOverlayAnchors(context).toMutableList()
+        val idx = anchors.indexOfFirst { it.anchorId == anchorId }
+        if (idx < 0) return false
+        val removed = anchors.removeAt(idx)
+        runtimeSettings(context).edit()
+            .putString(SETTING_OVERLAY_ANCHORS_JSON, encodeOverlayAnchors(anchors))
+            .apply()
+        logOverlayAnchorEvent(
+            context = context,
+            operation = "overlay_anchor_removed",
+            anchorId = removed.anchorId,
+            name = removed.name,
+            anchorType = removed.anchorType,
+            phaseId = activePhaseId(context),
+            targetSiteId = removed.targetSiteId,
+            payload = mapOf("url" to removed.url),
+        )
+        return true
     }
 
     fun isCaptureEnabled(context: Context): Boolean {
@@ -865,9 +1504,9 @@ object RuntimeToolkitTelemetry {
 
     fun startCaptureSession(context: Context, source: String = "in_app_overlay") {
         setCaptureEnabled(context, true)
-        logExtractionEvent(
+        logMissionEvent(
             context = context,
-            operation = "session_start",
+            operation = "capture_started",
             payload = mapOf(
                 "source" to source,
                 "capture_enabled" to true,
@@ -876,9 +1515,9 @@ object RuntimeToolkitTelemetry {
     }
 
     fun stopCaptureSession(context: Context, source: String = "in_app_overlay") {
-        logExtractionEvent(
+        logMissionEvent(
             context = context,
-            operation = "session_stop",
+            operation = "capture_finished",
             payload = mapOf(
                 "source" to source,
                 "capture_enabled" to false,
@@ -985,10 +1624,437 @@ object RuntimeToolkitTelemetry {
 
     fun runtimeRoot(context: Context): File = File(context.filesDir, "runtime-toolkit")
 
+    fun listExportBundles(context: Context): List<ExportBundleInfo> {
+        val exportDir = File(runtimeRoot(context), "exports")
+        if (!exportDir.exists()) return emptyList()
+        return exportDir.listFiles()
+            ?.asSequence()
+            ?.filter { it.isFile && it.name.endsWith(".zip") && it.length() > 0L }
+            ?.sortedByDescending { it.lastModified() }
+            ?.map {
+                ExportBundleInfo(
+                    fileName = it.name,
+                    absolutePath = it.absolutePath,
+                    sizeBytes = it.length(),
+                    modifiedAtUtc = Instant.ofEpochMilli(it.lastModified()).toString(),
+                )
+            }
+            ?.toList()
+            .orEmpty()
+    }
+
+    fun fixtureReplayStatus(context: Context): FixtureReplayStatus {
+        val root = runtimeRoot(context)
+        val replayBundle = File(root, "replay_bundle.json")
+        val fixtureManifest = File(root, "fixture_manifest.json")
+        val responseIndex = File(root, "response_index.json")
+        val runtimeEvents = File(root, "events/runtime_events.jsonl")
+        val latestExport = listExportBundles(context).firstOrNull()
+        return FixtureReplayStatus(
+            replayBundlePresent = replayBundle.exists() && replayBundle.length() > 0L,
+            fixtureManifestPresent = fixtureManifest.exists() && fixtureManifest.length() > 0L,
+            responseIndexPresent = responseIndex.exists() && responseIndex.length() > 0L,
+            runtimeEventsPresent = runtimeEvents.exists() && runtimeEvents.length() > 0L,
+            latestExportPresent = latestExport != null,
+            replayBundlePath = replayBundle.absolutePath,
+            fixtureManifestPath = fixtureManifest.absolutePath,
+            responseIndexPath = responseIndex.absolutePath,
+            runtimeEventsPath = runtimeEvents.absolutePath,
+            latestExportPath = latestExport?.absolutePath.orEmpty(),
+        )
+    }
+
+    internal fun evaluateExportBundleReplayReadiness(bundlePath: String): ExportBundleReplayReadiness {
+        val requiredEntries = listOf(
+            "replay_bundle.json",
+            "fixture_manifest.json",
+            "response_index.json",
+            "events/runtime_events.jsonl",
+        )
+        val file = File(bundlePath)
+        if (!file.exists() || !file.isFile || file.length() <= 0L) {
+            return ExportBundleReplayReadiness(
+                bundlePath = bundlePath,
+                bundleFileName = file.name.ifBlank { "unknown_export.zip" },
+                ready = false,
+                missingRequiredEntries = requiredEntries,
+                replayStepCount = 0,
+                runnableStepCount = 0,
+                warnings = listOf("bundle_not_found_or_empty"),
+            )
+        }
+
+        return runCatching {
+            ZipFile(file).use { zip ->
+                val missing = requiredEntries.filter { findZipEntry(zip, it) == null }
+                val steps = replayStepsFromBundle(zip)
+                val runnable = steps.count { it.method == MapperHttpMethod.GET && it.url.startsWith("http") }
+                val warnings = mutableListOf<String>()
+                if (steps.isEmpty()) warnings += "replay_seed_steps_missing"
+                if (runnable == 0) warnings += "no_runnable_get_steps"
+                if (missing.isNotEmpty()) warnings += "missing_required_bundle_entries"
+                ExportBundleReplayReadiness(
+                    bundlePath = file.absolutePath,
+                    bundleFileName = file.name,
+                    ready = missing.isEmpty() && steps.isNotEmpty() && runnable > 0,
+                    missingRequiredEntries = missing,
+                    replayStepCount = steps.size,
+                    runnableStepCount = runnable,
+                    warnings = warnings,
+                )
+            }
+        }.getOrElse { throwable ->
+            ExportBundleReplayReadiness(
+                bundlePath = file.absolutePath,
+                bundleFileName = file.name.ifBlank { "unknown_export.zip" },
+                ready = false,
+                missingRequiredEntries = requiredEntries,
+                replayStepCount = 0,
+                runnableStepCount = 0,
+                warnings = listOf("bundle_read_failed:${throwable.message ?: "unknown"}"),
+            )
+        }
+    }
+
+    fun executeFixtureReplayFromExport(
+        context: Context,
+        bundlePath: String,
+        maxRequests: Int = 3,
+    ): FixtureReplayExecutionResult {
+        val startedAt = Instant.now().toString()
+        val readiness = evaluateExportBundleReplayReadiness(bundlePath)
+        if (!readiness.ready) {
+            val blocked = FixtureReplayExecutionResult(
+                bundlePath = readiness.bundlePath,
+                bundleFileName = readiness.bundleFileName,
+                startedAtUtc = startedAt,
+                finishedAtUtc = Instant.now().toString(),
+                readiness = readiness,
+                attemptedCount = 0,
+                successCount = 0,
+                failedCount = 0,
+                skippedCount = 0,
+                transport = MapperNativeReplayRuntime.transportLabel(context),
+                reportPath = "",
+                warnings = readiness.warnings + listOf("fixture_replay_blocked_by_readiness"),
+                requests = emptyList(),
+            )
+            writeFixtureReplayReport(context, blocked)
+            return blocked
+        }
+
+        val requests = mutableListOf<FixtureReplayRequestResult>()
+        val warnings = mutableListOf<String>()
+        val uniqueKeys = linkedSetOf<String>()
+        val maxAllowed = maxRequests.coerceIn(1, 20)
+        val exportFile = File(bundlePath)
+
+        runCatching {
+            ZipFile(exportFile).use { zip ->
+                replayStepsFromBundle(zip).forEach { step ->
+                    val key = "${step.method}:${step.url}"
+                    if (!uniqueKeys.add(key)) {
+                        requests += FixtureReplayRequestResult(
+                            requestId = step.requestId,
+                            url = step.url,
+                            method = step.method.name,
+                            attempted = false,
+                            succeeded = false,
+                            statusCode = null,
+                            durationMillis = null,
+                            error = null,
+                            skipReason = "duplicate_endpoint_in_seed",
+                        )
+                        return@forEach
+                    }
+                    if (requests.count { it.attempted } >= maxAllowed) {
+                        requests += FixtureReplayRequestResult(
+                            requestId = step.requestId,
+                            url = step.url,
+                            method = step.method.name,
+                            attempted = false,
+                            succeeded = false,
+                            statusCode = null,
+                            durationMillis = null,
+                            error = null,
+                            skipReason = "max_request_limit_reached",
+                        )
+                        return@forEach
+                    }
+                    if (step.method != MapperHttpMethod.GET) {
+                        requests += FixtureReplayRequestResult(
+                            requestId = step.requestId,
+                            url = step.url,
+                            method = step.method.name,
+                            attempted = false,
+                            succeeded = false,
+                            statusCode = null,
+                            durationMillis = null,
+                            error = null,
+                            skipReason = "non_get_method_skipped_for_safety",
+                        )
+                        return@forEach
+                    }
+                    if (!step.url.startsWith("http")) {
+                        requests += FixtureReplayRequestResult(
+                            requestId = step.requestId,
+                            url = step.url,
+                            method = step.method.name,
+                            attempted = false,
+                            succeeded = false,
+                            statusCode = null,
+                            durationMillis = null,
+                            error = null,
+                            skipReason = "invalid_or_non_http_url",
+                        )
+                        return@forEach
+                    }
+
+                    val response = runCatching {
+                        MapperNativeReplayRuntime.execute(
+                            context = context,
+                            request = MapperNativeHttpRequest(
+                                url = step.url,
+                                method = step.method,
+                                headers = step.headers,
+                                queryParams = step.queryParams,
+                                timeoutMillis = 20_000,
+                                operationTag = "fixture_replay_from_export",
+                            ),
+                        )
+                    }
+                    response.onSuccess { native ->
+                        requests += FixtureReplayRequestResult(
+                            requestId = step.requestId,
+                            url = step.url,
+                            method = step.method.name,
+                            attempted = true,
+                            succeeded = native.succeeded && native.statusCode in 200..499,
+                            statusCode = native.statusCode,
+                            durationMillis = native.durationMillis,
+                            error = native.failureMessage,
+                            skipReason = null,
+                        )
+                    }.onFailure { throwable ->
+                        requests += FixtureReplayRequestResult(
+                            requestId = step.requestId,
+                            url = step.url,
+                            method = step.method.name,
+                            attempted = true,
+                            succeeded = false,
+                            statusCode = null,
+                            durationMillis = null,
+                            error = throwable.message ?: "native_replay_failed",
+                            skipReason = null,
+                        )
+                    }
+                }
+            }
+        }.onFailure { throwable ->
+            warnings += "replay_execution_failed:${throwable.message ?: "unknown"}"
+        }
+
+        val attempted = requests.count { it.attempted }
+        val success = requests.count { it.attempted && it.succeeded }
+        val failed = requests.count { it.attempted && !it.succeeded }
+        val skipped = requests.count { !it.attempted }
+        if (attempted == 0) warnings += "no_requests_attempted"
+        if (failed > 0) warnings += "fixture_replay_has_failures"
+        if (success == 0) warnings += "fixture_replay_zero_success"
+
+        val result = FixtureReplayExecutionResult(
+            bundlePath = readiness.bundlePath,
+            bundleFileName = readiness.bundleFileName,
+            startedAtUtc = startedAt,
+            finishedAtUtc = Instant.now().toString(),
+            readiness = readiness,
+            attemptedCount = attempted,
+            successCount = success,
+            failedCount = failed,
+            skippedCount = skipped,
+            transport = MapperNativeReplayRuntime.transportLabel(context),
+            reportPath = "",
+            warnings = (readiness.warnings + warnings).distinct().sorted(),
+            requests = requests,
+        )
+        val reportPath = writeFixtureReplayReport(context, result).absolutePath
+        return result.copy(reportPath = reportPath)
+    }
+
+    private data class ReplaySeedStep(
+        val requestId: String,
+        val url: String,
+        val method: MapperHttpMethod,
+        val headers: Map<String, String>,
+        val queryParams: List<Pair<String, String>>,
+    )
+
+    private fun replayStepsFromBundle(zip: ZipFile): List<ReplaySeedStep> {
+        val replayBundleText = readZipEntryText(zip, "replay_bundle.json")
+        val replaySeedText = readZipEntryText(zip, "replay_seed.json")
+        val replaySeedNode = when {
+            !replayBundleText.isNullOrBlank() -> {
+                val bundle = runCatching { JSONObject(replayBundleText) }.getOrNull()
+                bundle?.optJSONObject("replay_seed")
+            }
+            !replaySeedText.isNullOrBlank() -> runCatching { JSONObject(replaySeedText) }.getOrNull()
+            else -> null
+        } ?: return emptyList()
+
+        val steps = replaySeedNode.optJSONArray("steps") ?: JSONArray()
+        val parsed = mutableListOf<ReplaySeedStep>()
+        for (idx in 0 until steps.length()) {
+            val step = steps.optJSONObject(idx) ?: continue
+            val url = step.optString("url").trim()
+            if (url.isBlank()) continue
+            val method = when (step.optString("method").trim().uppercase(Locale.ROOT)) {
+                "POST" -> MapperHttpMethod.POST
+                else -> MapperHttpMethod.GET
+            }
+            parsed += ReplaySeedStep(
+                requestId = step.optString("request_id").trim().ifBlank { "step_$idx" },
+                url = url,
+                method = method,
+                headers = parseReplayHeaders(step),
+                queryParams = parseReplayQueryParams(step),
+            )
+        }
+        return parsed
+    }
+
+    private fun parseReplayHeaders(step: JSONObject): Map<String, String> {
+        val result = linkedMapOf<String, String>()
+        val source = step.optJSONObject("headers") ?: step.optJSONObject("headers_reduced") ?: JSONObject()
+        source.keys().forEach { key ->
+            val headerName = key.trim()
+            if (headerName.isBlank()) return@forEach
+            val lower = headerName.lowercase(Locale.ROOT)
+            if (lower in setOf("host", "connection", "content-length")) return@forEach
+            val value = source.opt(key)
+            val rendered = when (value) {
+                null, JSONObject.NULL -> ""
+                is JSONArray -> (0 until value.length())
+                    .mapNotNull { i -> value.opt(i)?.toString()?.trim() }
+                    .filter { it.isNotBlank() }
+                    .joinToString(", ")
+                else -> value.toString().trim()
+            }
+            if (rendered.isNotBlank()) {
+                result[headerName] = rendered
+            }
+        }
+        return result
+    }
+
+    private fun parseReplayQueryParams(step: JSONObject): List<Pair<String, String>> {
+        val value = step.opt("query_params") ?: return emptyList()
+        val pairs = mutableListOf<Pair<String, String>>()
+        when (value) {
+            is JSONObject -> {
+                value.keys().forEach { key ->
+                    val paramName = key.trim()
+                    if (paramName.isBlank()) return@forEach
+                    val raw = value.opt(key)
+                    when (raw) {
+                        is JSONArray -> {
+                            for (i in 0 until raw.length()) {
+                                val item = raw.opt(i)?.toString()?.trim().orEmpty()
+                                pairs += paramName to item
+                            }
+                        }
+                        null, JSONObject.NULL -> pairs += paramName to ""
+                        else -> pairs += paramName to raw.toString()
+                    }
+                }
+            }
+            is JSONArray -> {
+                for (i in 0 until value.length()) {
+                    val item = value.opt(i)
+                    if (item is JSONObject) {
+                        val name = item.optString("name").trim()
+                        val rawValue = item.optString("value")
+                        if (name.isNotBlank()) {
+                            pairs += name to rawValue
+                        }
+                    }
+                }
+            }
+        }
+        return pairs
+    }
+
+    private fun findZipEntry(zip: ZipFile, suffix: String): ZipEntry? {
+        val normalized = suffix.trimStart('/')
+        return zip.entries().asSequence().firstOrNull { entry ->
+            !entry.isDirectory && (entry.name == normalized || entry.name.endsWith("/$normalized"))
+        }
+    }
+
+    private fun readZipEntryText(zip: ZipFile, suffix: String): String? {
+        val entry = findZipEntry(zip, suffix) ?: return null
+        return runCatching {
+            zip.getInputStream(entry).bufferedReader(Charsets.UTF_8).use { it.readText() }
+        }.getOrNull()
+    }
+
+    private fun writeFixtureReplayReport(
+        context: Context,
+        result: FixtureReplayExecutionResult,
+    ): File {
+        val replayDir = File(runtimeRoot(context), "replay")
+        if (!replayDir.exists()) replayDir.mkdirs()
+        val timestamp = result.finishedAtUtc.replace(':', '-').replace('.', '-')
+        val target = File(replayDir, "fixture_replay_$timestamp.json")
+        val latest = File(replayDir, "fixture_replay_latest.json")
+
+        val payload = JSONObject().apply {
+            put("schema_version", 1)
+            put("bundle_path", result.bundlePath)
+            put("bundle_file_name", result.bundleFileName)
+            put("started_at_utc", result.startedAtUtc)
+            put("finished_at_utc", result.finishedAtUtc)
+            put("transport", result.transport)
+            put("attempted_count", result.attemptedCount)
+            put("success_count", result.successCount)
+            put("failed_count", result.failedCount)
+            put("skipped_count", result.skippedCount)
+            put(
+                "readiness",
+                JSONObject().apply {
+                    put("ready", result.readiness.ready)
+                    put("missing_required_entries", JSONArray(result.readiness.missingRequiredEntries))
+                    put("replay_step_count", result.readiness.replayStepCount)
+                    put("runnable_step_count", result.readiness.runnableStepCount)
+                    put("warnings", JSONArray(result.readiness.warnings))
+                },
+            )
+            put("warnings", JSONArray(result.warnings))
+            put("requests", toJson(result.requests.map { request ->
+                mapOf(
+                    "request_id" to request.requestId,
+                    "url" to request.url,
+                    "method" to request.method,
+                    "attempted" to request.attempted,
+                    "succeeded" to request.succeeded,
+                    "status_code" to request.statusCode,
+                    "duration_millis" to request.durationMillis,
+                    "error" to request.error,
+                    "skip_reason" to request.skipReason,
+                )
+            }))
+        }
+        synchronized(ioLock) {
+            target.writeText(payload.toString(), Charsets.UTF_8)
+            latest.writeText(payload.toString(), Charsets.UTF_8)
+        }
+        return latest
+    }
+
     fun exportRuntimeArtifacts(context: Context): File {
         val root = runtimeRoot(context)
         val exportDir = File(root, "exports")
         if (!exportDir.exists()) exportDir.mkdirs()
+        writeMissionExportSummary(context)
 
         val exportCandidates = if (root.exists()) {
             root.walkTopDown()
@@ -1045,7 +2111,14 @@ object RuntimeToolkitTelemetry {
         payload: Map<String, Any?>,
         explicitEventId: String? = null,
     ) {
-        if (!isCaptureEnabled(context) && eventType != "extraction_event") return
+        val captureBypassEventTypes = setOf(
+            "extraction_event",
+            "wizard_event",
+            "overlay_anchor_event",
+            "probe_phase_event",
+            "mission_event",
+        )
+        if (!isCaptureEnabled(context) && !captureBypassEventTypes.contains(eventType)) return
         val runId = ensureRunId(context)
         val event = JSONObject().apply {
             put("schema_version", 1)
@@ -1083,6 +2156,320 @@ object RuntimeToolkitTelemetry {
         }
     }
 
+    private fun writeMissionSession(
+        context: Context,
+        state: MissionSessionState,
+    ) {
+        runtimeSettings(context).edit()
+            .putString(SETTING_MISSION_ID, state.missionId)
+            .putString(SETTING_WIZARD_STEP_ID, state.wizardStepId)
+            .putString(SETTING_WIZARD_SATURATION_STATE, state.saturationState)
+            .putString(SETTING_MISSION_TARGET_URL, state.targetUrl)
+            .putString(SETTING_MISSION_TARGET_SITE_ID, state.targetSiteId)
+            .putString(SETTING_MISSION_TARGET_HOST_FAMILY, state.targetHostFamily)
+            .putString(SETTING_MISSION_STARTED_AT, state.startedAt)
+            .putString(SETTING_MISSION_FINISHED_AT, state.finishedAt)
+            .putString(SETTING_WIZARD_STEP_STATES_JSON, encodeStepStates(state.stepStates))
+            .apply()
+        runCatching { writeMissionExportSummary(context) }
+    }
+
+    private fun parseStepStates(raw: String): Map<String, String> {
+        if (raw.isBlank()) return emptyMap()
+        val json = runCatching { JSONObject(raw) }.getOrNull() ?: return emptyMap()
+        val result = LinkedHashMap<String, String>()
+        json.keys().forEach { key ->
+            val value = json.optString(key).trim()
+            if (key.isNotBlank() && value.isNotBlank()) {
+                result[key] = value
+            }
+        }
+        return result
+    }
+
+    private fun encodeStepStates(stepStates: Map<String, String>): String {
+        val obj = JSONObject()
+        stepStates.toSortedMap().forEach { (stepId, state) ->
+            obj.put(stepId, state)
+        }
+        return obj.toString()
+    }
+
+    private fun parseOverlayAnchors(raw: String): List<OverlayAnchor> {
+        if (raw.isBlank()) return emptyList()
+        val json = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+        val anchors = mutableListOf<OverlayAnchor>()
+        for (i in 0 until json.length()) {
+            val item = json.optJSONObject(i) ?: continue
+            val anchorId = item.optString("anchor_id").trim()
+            if (anchorId.isBlank()) continue
+            anchors += OverlayAnchor(
+                anchorId = anchorId,
+                name = item.optString("name").trim().ifBlank { "anchor" },
+                anchorType = item.optString("anchor_type").trim().ifBlank { "custom" },
+                url = item.optString("url").trim(),
+                phaseId = normalizePhaseId(item.optString("phase_id")) ?: PHASE_BACKGROUND,
+                targetSiteId = item.optString("target_site_id").trim().ifBlank { "unknown_target" },
+                createdAt = item.optString("created_at").trim(),
+                updatedAt = item.optString("updated_at").trim(),
+            )
+        }
+        return anchors
+    }
+
+    private fun encodeOverlayAnchors(anchors: List<OverlayAnchor>): String {
+        val arr = JSONArray()
+        anchors.sortedBy { it.anchorId }.forEach { anchor ->
+            arr.put(
+                JSONObject()
+                    .put("anchor_id", anchor.anchorId)
+                    .put("name", anchor.name)
+                    .put("anchor_type", anchor.anchorType)
+                    .put("url", anchor.url)
+                    .put("phase_id", anchor.phaseId)
+                    .put("target_site_id", anchor.targetSiteId)
+                    .put("created_at", anchor.createdAt)
+                    .put("updated_at", anchor.updatedAt),
+            )
+        }
+        return arr.toString()
+    }
+
+    private data class ResponseObservation(
+        val phaseId: String,
+        val hostClass: String,
+        val statusCode: Int,
+        val operation: String,
+        val fingerprint: String,
+        val mimeType: String,
+        val path: String,
+    ) {
+        val succeeded: Boolean
+            get() = statusCode in 200..399
+        val targetEvidence: Boolean
+            get() = hostClass.startsWith("target_")
+    }
+
+    private fun collectResponseObservations(context: Context): List<ResponseObservation> {
+        val file = eventFile(context)
+        if (!file.exists()) return emptyList()
+        val observations = mutableListOf<ResponseObservation>()
+        runCatching {
+            file.forEachLine { line ->
+                if (line.isBlank()) return@forEachLine
+                val root = runCatching { JSONObject(line) }.getOrNull() ?: return@forEachLine
+                if (root.optString("event_type") != "network_response_event") return@forEachLine
+                val payload = root.optJSONObject("payload") ?: JSONObject()
+                val phaseId = normalizePhaseId(payload.optString("phase_id")) ?: PHASE_BACKGROUND
+                val hostClass = payload.optString("host_class").ifBlank { "ignored" }
+                val statusCode = when {
+                    payload.has("status_code") -> payload.optInt("status_code", 0)
+                    payload.has("status") -> payload.optInt("status", 0)
+                    else -> 0
+                }
+                val operation = payload.optString("request_operation")
+                    .ifBlank { payload.optString("response_operation") }
+                    .ifBlank { payload.optString("operation") }
+                val fingerprint = payload.optString("request_fingerprint")
+                    .ifBlank { payload.optString("request_id") }
+                    .ifBlank { root.optString("event_id") }
+                val mimeType = payload.optString("mime_type")
+                    .ifBlank { payload.optString("mime") }
+                val path = payload.optString("normalized_path")
+                observations += ResponseObservation(
+                    phaseId = phaseId,
+                    hostClass = hostClass,
+                    statusCode = statusCode,
+                    operation = operation.lowercase(Locale.ROOT),
+                    fingerprint = fingerprint,
+                    mimeType = mimeType.lowercase(Locale.ROOT),
+                    path = path.lowercase(Locale.ROOT),
+                )
+            }
+        }
+        return observations
+    }
+
+    private fun collectAuthEvidence(context: Context): Int {
+        val file = eventFile(context)
+        if (!file.exists()) return 0
+        var count = 0
+        runCatching {
+            file.forEachLine { line ->
+                if (line.isBlank()) return@forEachLine
+                val root = runCatching { JSONObject(line) }.getOrNull() ?: return@forEachLine
+                if (root.optString("event_type") != "auth_event") return@forEachLine
+                val payload = root.optJSONObject("payload") ?: JSONObject()
+                val phaseId = normalizePhaseId(payload.optString("phase_id")) ?: PHASE_BACKGROUND
+                if (phaseId == "auth_probe") {
+                    count += 1
+                }
+            }
+        }
+        return count
+    }
+
+    private fun evaluateFishitStepSaturation(
+        context: Context,
+        stepId: String,
+    ): RuntimeToolkitMissionWizard.SaturationResult {
+        val responses = collectResponseObservations(context)
+        val successfulTargetByPhase = responses
+            .filter { it.succeeded && it.targetEvidence }
+            .groupBy { it.phaseId }
+
+        return when (stepId) {
+            RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT -> {
+                val state = missionSessionState(context)
+                if (state.targetUrl.isNotBlank() && state.targetSiteId.isNotBlank()) {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+                        reason = "target_url_bound",
+                        metrics = mapOf("target_url" to state.targetUrl, "target_site_id" to state.targetSiteId),
+                    )
+                } else {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+                        reason = "target_url_missing",
+                    )
+                }
+            }
+            RuntimeToolkitMissionWizard.STEP_HOME_PROBE -> {
+                val count = successfulTargetByPhase["home_probe"].orEmpty().size
+                if (count >= 1) {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+                        reason = "home_probe_evidence_ok",
+                        metrics = mapOf("response_count" to count),
+                    )
+                } else {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
+                        reason = "missing_home_target_response",
+                        metrics = mapOf("response_count" to count),
+                    )
+                }
+            }
+            RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE -> {
+                val relevant = successfulTargetByPhase["search_probe"].orEmpty().filter {
+                    it.operation.contains("search") || it.path.contains("/search")
+                }
+                val unique = relevant.map { it.fingerprint }.toSet().size
+                if (unique >= 2) {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+                        reason = "search_probe_saturated",
+                        metrics = mapOf("unique_request_templates" to unique),
+                    )
+                } else {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
+                        reason = "search_probe_needs_more_variants",
+                        metrics = mapOf("unique_request_templates" to unique),
+                    )
+                }
+            }
+            RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE -> {
+                val relevant = successfulTargetByPhase["detail_probe"].orEmpty().filter {
+                    it.operation.contains("detail") || it.path.contains("/detail")
+                }
+                if (relevant.isNotEmpty()) {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+                        reason = "detail_probe_evidence_ok",
+                        metrics = mapOf("response_count" to relevant.size),
+                    )
+                } else {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
+                        reason = "missing_detail_target_response",
+                    )
+                }
+            }
+            RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE -> {
+                val relevant = successfulTargetByPhase["playback_probe"].orEmpty().filter {
+                    it.operation.contains("playback") ||
+                        it.path.endsWith(".m3u8") ||
+                        it.path.endsWith(".mpd") ||
+                        it.mimeType.contains("mpegurl") ||
+                        it.mimeType.contains("dash+xml")
+                }
+                if (relevant.isNotEmpty()) {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+                        reason = "playback_probe_evidence_ok",
+                        metrics = mapOf("response_count" to relevant.size),
+                    )
+                } else {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
+                        reason = "missing_playback_manifest_or_resolver",
+                    )
+                }
+            }
+            RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL -> {
+                val authEvents = collectAuthEvidence(context)
+                val authResponses = successfulTargetByPhase["auth_probe"].orEmpty().size
+                if (authEvents > 0 || authResponses > 0) {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+                        reason = "auth_evidence_present",
+                        metrics = mapOf("auth_events" to authEvents, "auth_responses" to authResponses),
+                    )
+                } else {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
+                        reason = "auth_optional_not_collected",
+                        metrics = mapOf("auth_events" to authEvents, "auth_responses" to authResponses),
+                    )
+                }
+            }
+            RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT -> {
+                val state = missionSessionState(context)
+                val requiredSteps = RuntimeToolkitMissionWizard.requiredStepIds(state.missionId, context)
+                val requiredComplete = requiredSteps.all {
+                    state.stepStates[it] == RuntimeToolkitMissionWizard.SATURATION_SATURATED
+                }
+                val summary = buildMissionExportSummary(context, state.missionId)
+                val exportReady = summary.exportReadiness == EXPORT_READINESS_READY
+                if (requiredComplete && exportReady) {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+                        reason = "mission_ready_for_export",
+                        metrics = mapOf(
+                            "required_steps_complete" to true,
+                            "export_readiness" to summary.exportReadiness,
+                            "summary_reason" to summary.reason,
+                            "missing_required_artifacts" to summary.missingRequiredArtifacts,
+                        ),
+                    )
+                } else {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
+                        reason = "final_validation_incomplete",
+                        metrics = mapOf(
+                            "required_steps_complete" to requiredComplete,
+                            "export_readiness" to summary.exportReadiness,
+                            "summary_reason" to summary.reason,
+                            "missing_required_artifacts" to summary.missingRequiredArtifacts,
+                            "missing_required_steps" to summary.missingRequiredSteps,
+                        ),
+                    )
+                }
+            }
+            else -> RuntimeToolkitMissionWizard.SaturationResult(
+                state = RuntimeToolkitMissionWizard.SATURATION_BLOCKED,
+                reason = "unknown_step",
+            )
+        }
+    }
+
+    private fun canonicalTargetSiteIdFromHost(host: String): String {
+        val normalizedHost = host.trim().lowercase(Locale.ROOT).removePrefix("www.")
+        if (normalizedHost.isBlank()) return "unknown_target"
+        return normalizedHost.replace(".", "_")
+    }
+
     private fun runtimeSettings(context: Context) =
         context.getSharedPreferences(PREF_RUNTIME_SETTINGS, Context.MODE_PRIVATE)
 
@@ -1114,6 +2501,22 @@ object RuntimeToolkitTelemetry {
                 else -> null
             }
             else -> null
+        }
+    }
+
+    private fun normalizePhaseId(phaseId: String?): String? {
+        val normalized = phaseId?.trim().orEmpty()
+        if (normalized.isBlank()) return null
+        return when (normalized) {
+            "unscoped" -> PHASE_BACKGROUND
+            "home_probe",
+            "search_probe",
+            "detail_probe",
+            "playback_probe",
+            "auth_probe",
+            PHASE_BACKGROUND,
+            -> normalized
+            else -> PHASE_BACKGROUND
         }
     }
 

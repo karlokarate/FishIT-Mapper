@@ -17,8 +17,8 @@ import tarfile
 import urllib.error
 import urllib.request
 from collections import Counter, defaultdict
-from typing import Any, Dict, Iterable, List, Optional, Tuple
-from urllib.parse import parse_qsl, urlparse
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 
 SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -143,6 +143,163 @@ FOUR_MB_BYTES = 4 * 1024 * 1024
 SIXTEEN_MB_BYTES = 16 * 1024 * 1024
 LARGE_HTML_DEDUPE_THRESHOLD_BYTES = 512 * 1024
 
+PROVIDER_EXPORT_SCHEMA_VERSION = "1.0.0"
+MISSION_FISHIT_PIPELINE = "FISHIT_PIPELINE"
+MISSION_API_MAPPING = "API_MAPPING"
+MISSION_STANDALONE_APP = "STANDALONE_APP"
+MISSION_REPLAY_BUNDLE = "REPLAY_BUNDLE"
+MISSION_EXPORT_READINESS_NOT_READY = "NOT_READY"
+MISSION_EXPORT_READINESS_PARTIAL = "PARTIAL"
+MISSION_EXPORT_READINESS_READY = "READY"
+MISSION_EXPORT_READINESS_BLOCKED = "BLOCKED"
+
+MISSION_REQUIRED_STEPS: Dict[str, List[str]] = {
+    MISSION_FISHIT_PIPELINE: [
+        "target_url_input",
+        "home_probe_step",
+        "search_probe_step",
+        "detail_probe_step",
+        "playback_probe_step",
+    ],
+    MISSION_API_MAPPING: [
+        "target_url_input",
+        "home_probe_step",
+        "search_probe_step",
+        "detail_probe_step",
+    ],
+    MISSION_STANDALONE_APP: [
+        "target_url_input",
+        "home_probe_step",
+        "detail_probe_step",
+    ],
+    MISSION_REPLAY_BUNDLE: [
+        "target_url_input",
+        "home_probe_step",
+    ],
+}
+
+MISSION_REQUIRED_FILES: Dict[str, List[str]] = {
+    MISSION_FISHIT_PIPELINE: [
+        "site_runtime_model",
+        "fishit_provider_draft",
+        "endpoint_templates",
+        "field_matrix",
+        "auth_draft",
+        "playback_draft",
+        "confidence_report",
+        "warnings",
+    ],
+    MISSION_API_MAPPING: [
+        "site_runtime_model",
+        "endpoint_templates",
+        "replay_bundle",
+        "confidence_report",
+        "warnings",
+        "runtime_events",
+    ],
+    MISSION_STANDALONE_APP: [
+        "site_runtime_model",
+        "webapp_runtime_draft",
+        "endpoint_templates",
+        "field_matrix",
+        "playback_draft",
+        "confidence_report",
+        "warnings",
+    ],
+    MISSION_REPLAY_BUNDLE: [
+        "site_runtime_model",
+        "replay_bundle",
+        "confidence_report",
+        "warnings",
+        "runtime_events",
+        "response_index",
+        "fixture_manifest",
+    ],
+}
+
+MISSION_ARTIFACT_ALIASES: Dict[str, List[str]] = {
+    "site_runtime_model": ["site_profile.draft.json", "site_runtime_model.json"],
+    "fishit_provider_draft": ["provider_draft_export.json", "fishit_provider_draft.json"],
+    "webapp_runtime_draft": ["webapp_runtime_draft.json", "provider_draft_export.json"],
+    "endpoint_templates": ["endpoint_candidates.json", "endpoint_templates.json"],
+    "field_matrix": ["field_matrix.json"],
+    "auth_draft": ["replay_requirements.json", "auth_draft.json"],
+    "playback_draft": ["replay_seed.json", "playback_draft.json"],
+    "confidence_report": ["pipeline_ready_report.json", "confidence_report.json"],
+    "warnings": ["mission_export_summary.json", "warnings.json"],
+    "replay_bundle": ["replay_seed.json", "replay_bundle.json"],
+    "runtime_events": ["events/runtime_events.jsonl", "runtime_events.jsonl"],
+    "response_index": ["response_index.json"],
+    "fixture_manifest": ["fixture_manifest.json"],
+}
+
+PROVIDER_ENDPOINT_ROLES = [
+    "home",
+    "search",
+    "detail",
+    "playback_resolver",
+    "auth_or_refresh",
+]
+
+ROLE_TO_CANDIDATE_TYPE = {
+    "home": "home_candidate",
+    "search": "search_candidate",
+    "detail": "detail_candidate",
+    "playback_resolver": "playback_candidate",
+    "auth_or_refresh": "auth_or_refresh_candidate",
+}
+
+ROLE_TO_REPLAY_OPERATION = {
+    "home": "home",
+    "search": "search",
+    "detail": "detail",
+    "playback_resolver": "playback_resolver",
+    "auth_or_refresh": "auth_or_refresh",
+}
+
+NOISE_HEADER_NAMES = {
+    "accept-encoding",
+    "connection",
+    "content-length",
+    "pragma",
+    "cache-control",
+    "upgrade-insecure-requests",
+    "sec-fetch-dest",
+    "sec-fetch-mode",
+    "sec-fetch-site",
+    "sec-fetch-user",
+    "sec-ch-ua",
+    "sec-ch-ua-mobile",
+    "sec-ch-ua-platform",
+    "priority",
+    "purpose",
+    "dnt",
+    "x-client-data",
+}
+
+NOISE_HEADER_PREFIXES = (
+    "sec-",
+    ":",
+    "x-chrome-",
+)
+
+NOISE_COOKIE_PREFIXES = (
+    "_ga",
+    "_gid",
+    "_gcl",
+    "_fbp",
+    "_hj",
+    "__utm",
+)
+
+NOISE_COOKIE_NAMES = {
+    "consent",
+    "socs",
+    "nid",
+    "1p_jar",
+    "dv",
+}
+
 
 def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -227,6 +384,12 @@ def read_jsonl(path: pathlib.Path) -> List[Dict[str, Any]]:
 def write_json(path: pathlib.Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, ensure_ascii=True, indent=2) + "\n"
+    atomic_write_text(path, text)
+
+
+def write_json_canonical(path: pathlib.Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
     atomic_write_text(path, text)
 
 
@@ -1241,6 +1404,38 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
             payload["confidence_summary"] = confidence_summary
             continue
 
+        if event_type == "wizard_event":
+            payload["operation"] = str(payload.get("operation") or "wizard_step_saturation_updated").strip()
+            payload["mission_id"] = str(payload.get("mission_id") or "FISHIT_PIPELINE").strip()
+            payload["wizard_step_id"] = str(payload.get("wizard_step_id") or "target_url_input").strip()
+            payload["saturation_state"] = str(payload.get("saturation_state") or "INCOMPLETE").strip()
+            payload["phase_id"] = phase_id
+            payload["target_site_id"] = target_site_id
+            payload["host_class"] = HOST_CLASS_IGNORED
+            continue
+
+        if event_type == "mission_event":
+            payload["operation"] = str(payload.get("operation") or "mission_config_applied").strip()
+            payload["mission_id"] = str(payload.get("mission_id") or "FISHIT_PIPELINE").strip()
+            payload["wizard_step_id"] = str(payload.get("wizard_step_id") or "target_url_input").strip()
+            payload["saturation_state"] = str(payload.get("saturation_state") or "INCOMPLETE").strip()
+            payload["export_readiness"] = str(payload.get("export_readiness") or "NOT_READY").strip()
+            payload["reason"] = str(payload.get("reason") or "").strip()
+            payload["phase_id"] = phase_id
+            payload["target_site_id"] = target_site_id
+            payload["host_class"] = HOST_CLASS_IGNORED
+            continue
+
+        if event_type == "overlay_anchor_event":
+            payload["operation"] = str(payload.get("operation") or "overlay_anchor_labeled").strip()
+            payload["anchor_id"] = str(payload.get("anchor_id") or payload.get("anchorId") or "").strip()
+            payload["name"] = str(payload.get("name") or "anchor").strip() or "anchor"
+            payload["anchor_type"] = str(payload.get("anchor_type") or payload.get("anchorType") or "custom").strip() or "custom"
+            payload["phase_id"] = phase_id
+            payload["target_site_id"] = target_site_id
+            payload["host_class"] = HOST_CLASS_IGNORED
+            continue
+
         if event_type == "network_request_event":
             method = event_method(row) or "GET"
             payload["method"] = method
@@ -1432,7 +1627,7 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
                 "event_id": str(row.get("event_id") or ""),
             }
 
-        if event_type in {"auth_event", "cookie_event", "storage_event", "provenance_event"}:
+        if event_type in {"auth_event", "cookie_event", "storage_event", "provenance_event", "wizard_event", "overlay_anchor_event", "mission_event"}:
             payload["target_site_id"] = target_site_id
             payload.setdefault("phase_id", phase_id)
 
@@ -2154,6 +2349,55 @@ def replay_http_execute(
         }
 
 
+def is_local_or_private_host(host: str) -> bool:
+    normalized = normalize_host(host)
+    if not normalized:
+        return False
+    if normalized in {"localhost"}:
+        return True
+    if normalized.startswith("127."):
+        return True
+    if normalized.startswith("10."):
+        return True
+    if normalized.startswith("192.168."):
+        return True
+    if normalized.startswith("172."):
+        parts = normalized.split(".")
+        if len(parts) >= 2:
+            try:
+                second = int(parts[1])
+            except Exception:
+                second = -1
+            if 16 <= second <= 31:
+                return True
+    return False
+
+
+def replay_http_execute_deterministic(
+    *,
+    url: str,
+    method: str,
+    headers: Dict[str, str],
+    body: bytes,
+    timeout_ms: int,
+) -> Dict[str, Any]:
+    parsed = urlparse(url)
+    host = normalize_host(parsed.netloc)
+    if not is_local_or_private_host(host):
+        return {
+            "success": False,
+            "status_code": 0,
+            "error": "active_http_replay_disabled_for_non_local_host",
+        }
+    return replay_http_execute(
+        url=url,
+        method=method,
+        headers=headers,
+        body=body,
+        timeout_ms=timeout_ms,
+    )
+
+
 def is_non_replayable_host(host: str) -> bool:
     normalized = str(host or "").strip().lower()
     if not normalized:
@@ -2188,6 +2432,10 @@ def replay_requirements_from_endpoint_sets(
                 "required_cookies": list(item.get("minimal_required_cookies") or []),
                 "candidate_headers": list(item.get("candidate_headers") or []),
                 "candidate_cookies": list(item.get("candidate_cookies") or []),
+                "candidate_query_params": list(item.get("candidate_query_params") or []),
+                "candidate_body_fields": list(item.get("candidate_body_fields") or []),
+                "required_query_params": list(item.get("minimal_required_query_params") or []),
+                "required_body_fields": list(item.get("minimal_required_body_fields") or []),
                 "elimination_mode": item.get("elimination_mode"),
                 "validation_mode": item.get("validation_mode"),
                 "elimination_steps": list(item.get("elimination_steps") or []),
@@ -2280,6 +2528,14 @@ def build_required_headers_active_replay(
         item = dict(endpoint)
         item["elimination_steps"] = list(item.get("elimination_steps") or [])
         item["replay_attempted"] = False
+        item["candidate_query_params"] = sorted([str(name) for name in list(item.get("candidate_query_params") or []) if name])
+        item["minimal_required_query_params"] = sorted(
+            [str(name) for name in list(item.get("minimal_required_query_params") or []) if name]
+        )
+        item["candidate_body_fields"] = sorted([str(name) for name in list(item.get("candidate_body_fields") or []) if name])
+        item["minimal_required_body_fields"] = sorted(
+            [str(name) for name in list(item.get("minimal_required_body_fields") or []) if name]
+        )
 
         seed_row = pick_seed_request(item)
         if seed_row is None:
@@ -2315,12 +2571,35 @@ def build_required_headers_active_replay(
         if candidate_cookies:
             required_cookies &= candidate_cookies
 
+        seed_query = event_payload(seed_row).get("query_params")
+        if not isinstance(seed_query, dict):
+            seed_query = parse_query_params(event_url(seed_row))
+        query_values = {str(name): listify_param_values(value) for name, value in seed_query.items()}
+        candidate_query_params = set([name for name in query_values.keys() if name])
+        required_query_params = set(candidate_query_params)
+
         body_text = str(event_payload(seed_row).get("body") or event_payload(seed_row).get("body_preview") or "")
         body_bytes = body_text.encode("utf-8", errors="replace") if body_text else b""
+        body_json_obj: Optional[Dict[str, Any]] = None
+        if body_text:
+            try:
+                loaded_body = json.loads(body_text)
+                if isinstance(loaded_body, dict):
+                    body_json_obj = loaded_body
+            except Exception:
+                body_json_obj = None
+        body_key_order = list(body_json_obj.keys()) if isinstance(body_json_obj, dict) else []
+        candidate_body_fields = set([str(name) for name in body_key_order if str(name)])
+        required_body_fields = set(candidate_body_fields)
+
         url = event_url(seed_row)
         if not url:
             item["validation_mode"] = "observed_success_chains_missing_url"
             item["elimination_mode"] = "observed_replay_elimination_conservative_fallback"
+            item["candidate_query_params"] = sorted(list(candidate_query_params))
+            item["minimal_required_query_params"] = sorted(list(required_query_params))
+            item["candidate_body_fields"] = sorted(list(candidate_body_fields))
+            item["minimal_required_body_fields"] = sorted(list(required_body_fields))
             endpoint_sets.append(item)
             continue
         parsed_seed = urlparse(url)
@@ -2328,30 +2607,79 @@ def build_required_headers_active_replay(
         if seed_scheme not in {"http", "https"}:
             item["validation_mode"] = "active_http_replay_skipped_unsupported_scheme"
             item["elimination_mode"] = "observed_replay_elimination_conservative_fallback"
+            item["candidate_query_params"] = sorted(list(candidate_query_params))
+            item["minimal_required_query_params"] = sorted(list(required_query_params))
+            item["candidate_body_fields"] = sorted(list(candidate_body_fields))
+            item["minimal_required_body_fields"] = sorted(list(required_body_fields))
             endpoint_sets.append(item)
             continue
         seed_host = normalize_host(parsed_seed.netloc)
         if is_non_replayable_host(seed_host):
             item["validation_mode"] = "active_http_replay_skipped_non_replayable_host"
             item["elimination_mode"] = "observed_replay_elimination_conservative_fallback"
+            item["candidate_query_params"] = sorted(list(candidate_query_params))
+            item["minimal_required_query_params"] = sorted(list(required_query_params))
+            item["candidate_body_fields"] = sorted(list(candidate_body_fields))
+            item["minimal_required_body_fields"] = sorted(list(required_body_fields))
             endpoint_sets.append(item)
             continue
 
-        def execute_subset(selected_headers: set, selected_cookies: set) -> Dict[str, Any]:
+        def subset_url_for_params(selected_query_params: set) -> str:
+            if not query_values:
+                return url
+            query_pairs: List[Tuple[str, str]] = []
+            for name in sorted(selected_query_params):
+                for value in query_values.get(name, []) or [""]:
+                    query_pairs.append((name, value))
+            encoded_query = urlencode(query_pairs, doseq=True)
+            return urlunparse(
+                (
+                    parsed_seed.scheme,
+                    parsed_seed.netloc,
+                    parsed_seed.path,
+                    parsed_seed.params,
+                    encoded_query,
+                    parsed_seed.fragment,
+                )
+            )
+
+        def subset_body_for_fields(selected_body_fields: set) -> bytes:
+            if not body_text:
+                return b""
+            if not isinstance(body_json_obj, dict):
+                return body_bytes
+            subset_obj: Dict[str, Any] = {}
+            for key in body_key_order:
+                name = str(key)
+                if name in selected_body_fields:
+                    subset_obj[name] = body_json_obj.get(key)
+            return json.dumps(subset_obj, separators=(",", ":"), ensure_ascii=False).encode("utf-8", errors="replace")
+
+        def execute_subset(
+            selected_headers: set,
+            selected_cookies: set,
+            selected_query_params: set,
+            selected_body_fields: set,
+        ) -> Dict[str, Any]:
             subset_headers = {name: header_values[name] for name in sorted(selected_headers) if name in header_values}
             if selected_cookies:
                 subset_headers["cookie"] = "; ".join(
                     [f"{name}={cookie_values.get(name, '')}" for name in sorted(selected_cookies) if name in cookie_values]
                 )
             return executor(
-                url=url,
+                url=subset_url_for_params(selected_query_params),
                 method=method,
                 headers=subset_headers,
-                body=body_bytes,
+                body=subset_body_for_fields(selected_body_fields),
                 timeout_ms=timeout_ms,
             )
 
-        baseline_result = execute_subset(set(required_headers), set(required_cookies))
+        baseline_result = execute_subset(
+            set(required_headers),
+            set(required_cookies),
+            set(required_query_params),
+            set(required_body_fields),
+        )
         item["replay_attempted"] = True
         item["replay_baseline"] = baseline_result
         if not bool(baseline_result.get("success")):
@@ -2366,6 +2694,10 @@ def build_required_headers_active_replay(
                     "error": baseline_result.get("error"),
                 }
             )
+            item["candidate_query_params"] = sorted(list(candidate_query_params))
+            item["minimal_required_query_params"] = sorted(list(required_query_params))
+            item["candidate_body_fields"] = sorted(list(candidate_body_fields))
+            item["minimal_required_body_fields"] = sorted(list(required_body_fields))
             endpoint_sets.append(item)
             continue
 
@@ -2383,7 +2715,12 @@ def build_required_headers_active_replay(
         for header_name in sorted(list(required_headers)):
             reduced_headers = set(required_headers)
             reduced_headers.discard(header_name)
-            result = execute_subset(reduced_headers, set(required_cookies))
+            result = execute_subset(
+                reduced_headers,
+                set(required_cookies),
+                set(required_query_params),
+                set(required_body_fields),
+            )
             removable = bool(result.get("success"))
             if removable:
                 required_headers = reduced_headers
@@ -2400,7 +2737,12 @@ def build_required_headers_active_replay(
         for cookie_name in sorted(list(required_cookies)):
             reduced_cookies = set(required_cookies)
             reduced_cookies.discard(cookie_name)
-            result = execute_subset(set(required_headers), reduced_cookies)
+            result = execute_subset(
+                set(required_headers),
+                reduced_cookies,
+                set(required_query_params),
+                set(required_body_fields),
+            )
             removable = bool(result.get("success"))
             if removable:
                 required_cookies = reduced_cookies
@@ -2414,8 +2756,68 @@ def build_required_headers_active_replay(
                 }
             )
 
+        for query_name in sorted(list(required_query_params)):
+            reduced_query_params = set(required_query_params)
+            reduced_query_params.discard(query_name)
+            result = execute_subset(
+                set(required_headers),
+                set(required_cookies),
+                reduced_query_params,
+                set(required_body_fields),
+            )
+            removable = bool(result.get("success"))
+            if removable:
+                required_query_params = reduced_query_params
+            item["elimination_steps"].append(
+                {
+                    "dimension": "query_param",
+                    "name": query_name,
+                    "result": "removed" if removable else "kept",
+                    "status_code": result.get("status_code"),
+                    "error": result.get("error"),
+                }
+            )
+
+        if not isinstance(body_json_obj, dict):
+            if body_text:
+                item["elimination_steps"].append(
+                    {
+                        "dimension": "body_field",
+                        "name": "*",
+                        "result": "skipped_non_json_body",
+                        "status_code": baseline_result.get("status_code"),
+                        "error": "",
+                    }
+                )
+        else:
+            for field_name in sorted(list(required_body_fields)):
+                reduced_body_fields = set(required_body_fields)
+                reduced_body_fields.discard(field_name)
+                result = execute_subset(
+                    set(required_headers),
+                    set(required_cookies),
+                    set(required_query_params),
+                    reduced_body_fields,
+                )
+                removable = bool(result.get("success"))
+                if removable:
+                    required_body_fields = reduced_body_fields
+                item["elimination_steps"].append(
+                    {
+                        "dimension": "body_field",
+                        "name": field_name,
+                        "result": "removed" if removable else "kept",
+                        "status_code": result.get("status_code"),
+                        "error": result.get("error"),
+                    }
+                )
+
         item["minimal_required_headers"] = sorted(list(required_headers))
         item["minimal_required_cookies"] = sorted(list(required_cookies))
+        item["candidate_query_params"] = sorted(list(candidate_query_params))
+        item["minimal_required_query_params"] = sorted(list(required_query_params))
+        item["candidate_body_fields"] = sorted(list(candidate_body_fields))
+        item["minimal_required_body_fields"] = sorted(list(required_body_fields))
         item["replay_seed_request_id"] = event_request_id(seed_row)
         endpoint_sets.append(item)
 
@@ -3019,6 +3421,801 @@ def build_profile_draft(rows: List[Dict[str, Any]], endpoint_candidates: Dict[st
     }
 
 
+def deterministic_generated_at(rows: List[Dict[str, Any]]) -> str:
+    timestamps = sorted([str(row.get("ts_utc") or "") for row in rows if str(row.get("ts_utc") or "")])
+    if timestamps:
+        return timestamps[-1]
+    return utc_now()
+
+
+def endpoint_role_rank(role: str) -> int:
+    try:
+        return PROVIDER_ENDPOINT_ROLES.index(role)
+    except ValueError:
+        return len(PROVIDER_ENDPOINT_ROLES) + 1
+
+
+def is_noise_header_name(name: str) -> bool:
+    normalized = str(name or "").strip().lower()
+    if not normalized:
+        return True
+    if normalized in NOISE_HEADER_NAMES:
+        return True
+    return any(normalized.startswith(prefix) for prefix in NOISE_HEADER_PREFIXES)
+
+
+def is_noise_cookie_name(name: str) -> bool:
+    normalized = str(name or "").strip().lower()
+    if not normalized:
+        return True
+    if normalized in NOISE_COOKIE_NAMES:
+        return True
+    return any(normalized.startswith(prefix) for prefix in NOISE_COOKIE_PREFIXES)
+
+
+def listify_param_values(value: Any) -> List[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if value is None:
+        return []
+    return [str(value)]
+
+
+def parse_json_body_keys_from_request(row: Dict[str, Any]) -> List[str]:
+    payload = event_payload(row)
+    raw_body = payload.get("body")
+    body_preview = payload.get("body_preview")
+    text = ""
+    if isinstance(raw_body, str) and raw_body.strip():
+        text = raw_body
+    elif isinstance(body_preview, str) and body_preview.strip():
+        text = body_preview
+    if not text:
+        return []
+    try:
+        loaded = json.loads(text)
+    except Exception:
+        return []
+    if isinstance(loaded, dict):
+        return sorted([str(key) for key in loaded.keys()])
+    return []
+
+
+def parse_json_response_keys(row: Dict[str, Any], runtime_dir: Optional[pathlib.Path] = None) -> List[str]:
+    body = read_response_store_payload(row, runtime_dir)
+    if not body:
+        body = event_body_preview(row)
+    if not body:
+        return []
+    try:
+        loaded = json.loads(body)
+    except Exception:
+        return []
+    if isinstance(loaded, dict):
+        return sorted([str(key) for key in loaded.keys()])
+    return []
+
+
+def placeholder_for_key(key: str) -> str:
+    sanitized = re.sub(r"[^a-zA-Z0-9_]+", "_", str(key or "").strip()) or "value"
+    return f"{{{{{sanitized}}}}}"
+
+
+def is_dynamic_parameter_name(key: str) -> bool:
+    normalized = str(key or "").strip().lower()
+    if not normalized:
+        return False
+    if provenance_key_name(normalized):
+        return True
+    dynamic_tokens = (
+        "token",
+        "auth",
+        "session",
+        "id",
+        "query",
+        "search",
+        "q",
+        "playback",
+        "manifest",
+        "resolver",
+    )
+    return any(token in normalized for token in dynamic_tokens)
+
+
+def token_header_to_provenance_name(header_name: str) -> str:
+    normalized = str(header_name or "").strip().lower()
+    if normalized in {"authorization", "api-auth", "x-api-auth"}:
+        return "api-auth"
+    if normalized in {"zdf-app-id", "x-zdf-app-id"}:
+        return "zdf-app-id"
+    if normalized in {"x-usersegment", "usersegment"}:
+        return "userSegment"
+    if normalized in {"x-ab-group", "abgroup"}:
+        return "abGroup"
+    if normalized == "referer":
+        return "referer"
+    if normalized == "origin":
+        return "origin"
+    return ""
+
+
+def classify_auth_mode(required_headers: List[str], required_cookies: List[str], required_referer: str, required_origin: str) -> str:
+    has_cookie = bool(required_cookies)
+    has_header_token = any(
+        header in {"authorization", "api-auth", "x-api-auth", "zdf-app-id", "x-zdf-app-id"}
+        for header in required_headers
+    )
+    browser_context = bool(required_referer or required_origin)
+    if has_cookie and has_header_token:
+        return "hybrid_session"
+    if has_cookie and browser_context:
+        return "browser_context_required_session"
+    if has_cookie:
+        return "cookie_backed_session"
+    if has_header_token and browser_context:
+        return "browser_context_required_session"
+    if has_header_token:
+        return "header_token_backed_session"
+    if browser_context:
+        return "browser_context_required_session"
+    return "unknown_session"
+
+
+def phase_to_role(phase_id: str) -> str:
+    if phase_id == PHASE_HOME:
+        return "home"
+    if phase_id == PHASE_SEARCH:
+        return "search"
+    if phase_id == PHASE_DETAIL:
+        return "detail"
+    if phase_id == PHASE_PLAYBACK:
+        return "playback_resolver"
+    if phase_id == PHASE_AUTH:
+        return "auth_or_refresh"
+    return "home"
+
+
+def endpoint_sets_by_role(required_headers_payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    endpoint_sets = list(required_headers_payload.get("endpoint_minimal_sets") or [])
+    by_role: Dict[str, Dict[str, Any]] = {}
+    for role in PROVIDER_ENDPOINT_ROLES:
+        operation = ROLE_TO_REPLAY_OPERATION[role]
+        candidates = [item for item in endpoint_sets if isinstance(item, dict) and str(item.get("operation") or "") == operation]
+        if not candidates:
+            continue
+        candidates.sort(
+            key=lambda item: (
+                str(item.get("validation_mode") or "") == "active_http_replay",
+                int(item.get("successful_chain_count") or 0),
+                -int(item.get("failed_chain_count") or 0),
+            ),
+            reverse=True,
+        )
+        by_role[role] = candidates[0]
+    return by_role
+
+
+def map_field_matrix_to_provider(field_matrix: Dict[str, Any], rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib.Path] = None) -> Dict[str, Any]:
+    response_by_event_id = {
+        str(row.get("event_id") or ""): row
+        for row in rows
+        if row.get("event_type") == "network_response_event"
+    }
+    field_rows_by_name = {
+        str(item.get("field") or ""): item
+        for item in list(field_matrix.get("fields") or [])
+        if isinstance(item, dict)
+    }
+
+    detail_mapping_sources: List[Dict[str, Any]] = []
+    for row in rows:
+        if row.get("event_type") != "network_response_event":
+            continue
+        if event_phase_id(row) != PHASE_DETAIL:
+            continue
+        if event_host_class(row) not in EXTRACTION_ELIGIBLE_HOST_CLASSES:
+            continue
+        for key in parse_json_response_keys(row, runtime_dir=runtime_dir)[:20]:
+            detail_mapping_sources.append(
+                {
+                    "event_id": str(row.get("event_id") or ""),
+                    "path": key,
+                    "value": key,
+                    "source": "json",
+                }
+            )
+    field_order = [
+        "title",
+        "subtitle",
+        "description",
+        "image/poster",
+        "canonical id",
+        "collection id",
+        "teaser/item type",
+        "playback hints",
+        "section/rail names",
+        "search result mapping",
+        "detail mapping",
+    ]
+    provider_fields: List[Dict[str, Any]] = []
+    for field_name in field_order:
+        if field_name == "detail mapping":
+            sources = detail_mapping_sources[:20]
+            status = "directly_observed" if sources else "missing"
+            confidence = field_confidence(len(sources), derived=False)
+            sample_values = [str(item.get("value") or "") for item in sources[:5]]
+        else:
+            row_field = field_rows_by_name.get(field_name, {})
+            sources = list(row_field.get("sources") or [])
+            status = str(row_field.get("status") or "missing")
+            confidence = float(row_field.get("confidence") or 0.0)
+            sample_values = [str(item) for item in list(row_field.get("sample_values") or [])[:5]]
+        observed_roles = sorted(
+            list(
+                {
+                    phase_to_role(event_phase_id(response_by_event_id.get(str(item.get("event_id") or ""), {})))
+                    for item in sources
+                    if isinstance(item, dict) and str(item.get("event_id") or "") in response_by_event_id
+                }
+            )
+        )
+        source_kind = ""
+        source_ref = ""
+        value_template = ""
+        if sources:
+            first = sources[0]
+            if isinstance(first, dict):
+                source_kind = str(first.get("source") or "")
+                event_id = str(first.get("event_id") or "")
+                source_path = str(first.get("path") or "")
+                source_ref = f"{event_id}:{source_path}" if event_id else source_path
+                value_template = str(first.get("value") or "")
+        if not value_template and sample_values:
+            value_template = sample_values[0]
+        provider_fields.append(
+            {
+                "field": field_name,
+                "value_or_template": value_template[:240],
+                "source_kind": source_kind,
+                "source_ref": source_ref,
+                "confidence": round(confidence, 4),
+                "observed_in_roles": observed_roles,
+                "status": status,
+            }
+        )
+    return {
+        "schema_version": 1,
+        "generated_at_utc": str(field_matrix.get("generated_at_utc") or utc_now()),
+        "fields": provider_fields,
+    }
+
+
+def build_provider_draft_export(
+    rows: List[Dict[str, Any]],
+    endpoint_candidates: Dict[str, Any],
+    replay_requirements: Dict[str, Any],
+    required_headers_payload: Dict[str, Any],
+    field_matrix: Dict[str, Any],
+    provenance_registry: Dict[str, Any],
+    runtime_dir: Optional[pathlib.Path] = None,
+) -> Dict[str, Any]:
+    request_by_id = {
+        event_request_id(row): row
+        for row in rows
+        if row.get("event_type") == "network_request_event" and event_request_id(row)
+    }
+    response_by_request_id: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        if row.get("event_type") != "network_response_event":
+            continue
+        request_id = event_request_id(row)
+        if request_id:
+            response_by_request_id[request_id].append(row)
+
+    provenance_entries = list(provenance_registry.get("entries") or [])
+    provenance_names = {str(item.get("name") or "") for item in provenance_entries if isinstance(item, dict)}
+    endpoint_sets_role_map = endpoint_sets_by_role(required_headers_payload)
+    primary_host = discover_primary_host(rows)
+    export_target_site_id = canonical_target_site_id(primary_host)
+
+    candidates = [item for item in list(endpoint_candidates.get("candidates") or []) if isinstance(item, dict)]
+    by_role_candidates: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for candidate in candidates:
+        candidate_type = str(candidate.get("candidate_type") or "")
+        for role, role_candidate_type in ROLE_TO_CANDIDATE_TYPE.items():
+            if candidate_type == role_candidate_type:
+                by_role_candidates[role].append(candidate)
+    for role in by_role_candidates:
+        by_role_candidates[role].sort(
+            key=lambda item: (float(item.get("score") or 0.0), int(item.get("count") or 0)),
+            reverse=True,
+        )
+
+    endpoint_templates: List[Dict[str, Any]] = []
+    provider_replay_requirements: List[Dict[str, Any]] = []
+    warnings: List[str] = []
+
+    for role in PROVIDER_ENDPOINT_ROLES:
+        selected_candidate = by_role_candidates.get(role, [])
+        candidate = selected_candidate[0] if selected_candidate else None
+        endpoint_set = endpoint_sets_role_map.get(role, {})
+        if candidate is None and not endpoint_set:
+            continue
+
+        method = str((candidate or {}).get("method") or endpoint_set.get("method") or "GET").upper()
+        host = str((candidate or {}).get("host") or endpoint_set.get("host") or "")
+        path = str((candidate or {}).get("path") or endpoint_set.get("path") or "/")
+        request_operation = str((candidate or {}).get("request_operation") or "")
+        graphql_operation_name = str((candidate or {}).get("graphql_operation_name") or "")
+        phase_id = str((candidate or {}).get("phase_id") or endpoint_set.get("phase_id") or PHASE_HOME)
+        role_target_site_id = str((candidate or {}).get("target_site_id") or endpoint_set.get("target_site_id") or "")
+
+        template_request_ids = [str(item) for item in list(endpoint_set.get("request_ids") or []) if str(item)]
+        seed_request_id = str(endpoint_set.get("replay_seed_request_id") or "")
+        if seed_request_id and seed_request_id not in template_request_ids:
+            template_request_ids.insert(0, seed_request_id)
+        seed_row = request_by_id.get(seed_request_id)
+        if seed_row is None and template_request_ids:
+            seed_row = request_by_id.get(template_request_ids[0])
+        if seed_row is None:
+            for request in request_by_id.values():
+                if (event_method(request) or "GET") != method:
+                    continue
+                if event_normalized_host(request) != host:
+                    continue
+                if event_normalized_path(request) != path:
+                    continue
+                seed_row = request
+                break
+
+        query_template: Dict[str, Any] = {}
+        body_template: Dict[str, Any] = {"kind": "none"}
+        variable_placeholders: List[str] = []
+        request_rows_for_endpoint = [request_by_id[rid] for rid in template_request_ids if rid in request_by_id]
+        if seed_row is not None:
+            seed_query = event_payload(seed_row).get("query_params")
+            if not isinstance(seed_query, dict):
+                seed_query = parse_query_params(event_url(seed_row))
+            for key in sorted(seed_query.keys()):
+                values = listify_param_values(seed_query.get(key))
+                if is_dynamic_parameter_name(key):
+                    query_template[key] = placeholder_for_key(key)
+                    variable_placeholders.append(placeholder_for_key(key))
+                else:
+                    query_template[key] = values[:1]
+
+            body_keys = parse_json_body_keys_from_request(seed_row)
+            if body_keys:
+                body_template = {"kind": "json", "fields": {}}
+                for key in body_keys:
+                    if is_dynamic_parameter_name(key):
+                        placeholder = placeholder_for_key(key)
+                        body_template["fields"][key] = placeholder
+                        variable_placeholders.append(placeholder)
+                    else:
+                        body_template["fields"][key] = "<observed>"
+            else:
+                summary = event_payload(seed_row).get("request_body_summary") or summarize_request_body(event_payload(seed_row))
+                body_template = {
+                    "kind": str(summary.get("kind") or "empty"),
+                    "preview": str(summary.get("preview") or ""),
+                }
+
+        candidate_headers = {str(name).lower() for name in list(endpoint_set.get("candidate_headers") or []) if name}
+        required_headers_raw = {str(name).lower() for name in list(endpoint_set.get("minimal_required_headers") or []) if name}
+        forbidden_headers = sorted([name for name in candidate_headers if is_noise_header_name(name)])
+        required_headers = sorted([name for name in required_headers_raw if name not in set(forbidden_headers)])
+        optional_headers = sorted([name for name in (candidate_headers - required_headers_raw) if name not in set(forbidden_headers)])
+        observed_only_headers = sorted(
+            [name for name in (candidate_headers - set(required_headers) - set(optional_headers) - set(forbidden_headers))]
+        )
+
+        candidate_cookies = {str(name).lower() for name in list(endpoint_set.get("candidate_cookies") or []) if name}
+        required_cookies_raw = {str(name).lower() for name in list(endpoint_set.get("minimal_required_cookies") or []) if name}
+        forbidden_cookies = sorted([name for name in candidate_cookies if is_noise_cookie_name(name)])
+        required_cookies = sorted([name for name in required_cookies_raw if name not in set(forbidden_cookies)])
+        optional_cookies = sorted([name for name in (candidate_cookies - required_cookies_raw) if name not in set(forbidden_cookies)])
+
+        required_query_params: List[str] = []
+        required_body_fields: List[str] = []
+        active_required_query_params = endpoint_set.get("minimal_required_query_params")
+        active_required_body_fields = endpoint_set.get("minimal_required_body_fields")
+        active_candidate_query_params = endpoint_set.get("candidate_query_params")
+        active_candidate_body_fields = endpoint_set.get("candidate_body_fields")
+        has_active_query_evidence = isinstance(active_required_query_params, list) and isinstance(active_candidate_query_params, list)
+        has_active_body_evidence = isinstance(active_required_body_fields, list) and isinstance(active_candidate_body_fields, list)
+        if has_active_query_evidence:
+            required_query_params = sorted([str(item) for item in list(active_required_query_params or []) if str(item)])
+        if has_active_body_evidence:
+            required_body_fields = sorted([str(item) for item in list(active_required_body_fields or []) if str(item)])
+
+        if request_rows_for_endpoint and (not has_active_query_evidence or not has_active_body_evidence):
+            query_sets = []
+            body_sets = []
+            for request in request_rows_for_endpoint:
+                query = event_payload(request).get("query_params")
+                if not isinstance(query, dict):
+                    query = parse_query_params(event_url(request))
+                query_sets.append(set([str(key) for key in query.keys()]))
+                body_sets.append(set(parse_json_body_keys_from_request(request)))
+            if query_sets and not has_active_query_evidence:
+                required_query_params = sorted(list(set.intersection(*query_sets)))
+            if body_sets and not has_active_body_evidence:
+                non_empty_body_sets = [item for item in body_sets if item]
+                if non_empty_body_sets:
+                    required_body_fields = sorted(list(set.intersection(*non_empty_body_sets)))
+
+        required_provenance_inputs: set = set()
+        for header_name in required_headers:
+            provenance_name = token_header_to_provenance_name(header_name)
+            if provenance_name:
+                required_provenance_inputs.add(provenance_name)
+        for cookie_name in required_cookies:
+            cookie_entry_name = f"cookies.{cookie_name}"
+            if cookie_entry_name in provenance_names:
+                required_provenance_inputs.add(cookie_entry_name)
+        for key in required_query_params + required_body_fields:
+            provenance_name = provenance_key_name(key)
+            if provenance_name:
+                required_provenance_inputs.add(provenance_name)
+
+        required_referer = ""
+        required_origin = ""
+        if seed_row is not None:
+            seed_headers = {str(k).lower(): str(v) for k, v in event_headers(seed_row).items()}
+            if "referer" in required_headers:
+                required_referer = str(seed_headers.get("referer") or "")
+            if "origin" in required_headers:
+                required_origin = str(seed_headers.get("origin") or "")
+
+        truncated_count = 0
+        source_response_ids: List[str] = []
+        for request_id in template_request_ids:
+            for response in response_by_request_id.get(request_id, []):
+                source_response_ids.append(event_response_id(response))
+                if event_capture_truncated(response):
+                    truncated_count += 1
+
+        validation_mode = str(endpoint_set.get("validation_mode") or "")
+        elimination_mode = str(endpoint_set.get("elimination_mode") or "")
+        replay_confidence = 0.75 if validation_mode == "active_http_replay" else 0.55
+        if truncated_count > 0:
+            replay_confidence -= 0.15
+        if not endpoint_set:
+            replay_confidence -= 0.25
+        replay_confidence = round(max(0.0, min(0.99, replay_confidence)), 4)
+
+        endpoint_confidence = float((candidate or {}).get("score") or 0.0)
+        if endpoint_confidence <= 0:
+            endpoint_confidence = replay_confidence
+        if validation_mode != "active_http_replay":
+            endpoint_confidence = max(0.0, endpoint_confidence - 0.1)
+        if truncated_count > 0:
+            endpoint_confidence = max(0.0, endpoint_confidence - 0.2)
+        endpoint_confidence = round(min(endpoint_confidence, 0.99), 4)
+
+        auth_mode = classify_auth_mode(required_headers, required_cookies, required_referer, required_origin)
+        if validation_mode != "active_http_replay":
+            warnings.append(f"{role}: minimization could not prove optionality (mode={validation_mode or 'unknown'})")
+        if truncated_count > 0:
+            warnings.append(f"{role}: truncated candidate body involved")
+        if required_referer or required_origin:
+            warnings.append(f"{role}: browser-context dependency remains (referer/origin)")
+
+        template_id = f"{role}:{method}:{host}{path}"
+        endpoint_templates.append(
+            {
+                "template_id": template_id,
+                "endpoint_role": role,
+                "normalized_host": host,
+                "normalized_path": path or "/",
+                "method": method,
+                "request_operation": request_operation,
+                "graphql_operation_name": graphql_operation_name,
+                "stable_query_template": query_template,
+                "stable_body_template": body_template,
+                "variable_placeholders": sorted(list(set(variable_placeholders))),
+                "required_phase_relevance": phase_id,
+                "required_provenance_inputs": sorted(list(required_provenance_inputs)),
+                "confidence": endpoint_confidence,
+                "source_evidence_refs": {
+                    "candidate_type": str((candidate or {}).get("candidate_type") or ""),
+                    "target_site_id": role_target_site_id,
+                    "request_ids": sorted(template_request_ids),
+                    "response_ids": sorted([rid for rid in source_response_ids if rid]),
+                    "request_fingerprint": str((candidate or {}).get("request_fingerprint") or ""),
+                },
+            }
+        )
+        provider_replay_requirements.append(
+            {
+                "template_ref": template_id,
+                "endpoint_role": role,
+                "required_headers": required_headers,
+                "optional_headers": optional_headers,
+                "observed_only_headers": observed_only_headers,
+                "forbidden_noise_headers": forbidden_headers,
+                "required_cookies": required_cookies,
+                "optional_cookies": optional_cookies,
+                "required_query_params": required_query_params,
+                "required_body_fields": required_body_fields,
+                "required_provenance_inputs": sorted(list(required_provenance_inputs)),
+                "required_referer": required_referer,
+                "required_origin": required_origin,
+                "auth_mode": auth_mode,
+                "replay_confidence": replay_confidence,
+                "minimization_evidence": {
+                    "inference_mode": str(required_headers_payload.get("inference_mode") or replay_requirements.get("inference_mode") or ""),
+                    "validation_mode": validation_mode,
+                    "elimination_mode": elimination_mode,
+                    "replay_seed_request_id": str(endpoint_set.get("replay_seed_request_id") or ""),
+                    "query_param_validation_mode": "active_http_replay" if has_active_query_evidence else "observed_intersection_fallback",
+                    "body_field_validation_mode": "active_http_replay" if has_active_body_evidence else "observed_intersection_fallback",
+                    "candidate_query_params": sorted([str(item) for item in list(active_candidate_query_params or []) if str(item)])
+                    if isinstance(active_candidate_query_params, list)
+                    else [],
+                    "candidate_body_fields": sorted([str(item) for item in list(active_candidate_body_fields or []) if str(item)])
+                    if isinstance(active_candidate_body_fields, list)
+                    else [],
+                    "elimination_steps": list(endpoint_set.get("elimination_steps") or [])[:80],
+                },
+            }
+        )
+
+    endpoint_templates.sort(key=lambda item: (endpoint_role_rank(str(item.get("endpoint_role") or "")), str(item.get("template_id") or "")))
+    provider_replay_requirements.sort(
+        key=lambda item: (endpoint_role_rank(str(item.get("endpoint_role") or "")), str(item.get("template_ref") or ""))
+    )
+    if export_target_site_id == "unknown_target":
+        for template in endpoint_templates:
+            template_host = normalize_host(str(template.get("normalized_host") or ""))
+            if not template_host:
+                continue
+            export_target_site_id = canonical_target_site_id(template_host)
+            break
+    if not export_target_site_id:
+        export_target_site_id = "unknown_target"
+
+    template_by_role = {str(item.get("endpoint_role") or ""): item for item in endpoint_templates}
+    replay_by_role = {str(item.get("endpoint_role") or ""): item for item in provider_replay_requirements}
+
+    playback_template = template_by_role.get("playback_resolver", {})
+    playback_replay = replay_by_role.get("playback_resolver", {})
+    playback_request_ids = list(playback_template.get("source_evidence_refs", {}).get("request_ids", [])) if playback_template else []
+    playback_responses: List[Dict[str, Any]] = []
+    for request_id in playback_request_ids:
+        playback_responses.extend(response_by_request_id.get(str(request_id), []))
+    non_segment_playback_responses = [
+        row
+        for row in playback_responses
+        if not is_media_segment_url(event_url(row).lower())
+    ]
+    manifest_kind_detected = "unknown"
+    for response in non_segment_playback_responses:
+        path = event_normalized_path(response).lower()
+        if path.endswith(".m3u8"):
+            manifest_kind_detected = "hls"
+            break
+        if path.endswith(".mpd"):
+            manifest_kind_detected = "dash"
+            break
+    if manifest_kind_detected == "unknown":
+        for response in non_segment_playback_responses:
+            mime = event_mime(response).lower()
+            if "mpegurl" in mime:
+                manifest_kind_detected = "hls"
+                break
+            if "dash+xml" in mime:
+                manifest_kind_detected = "dash"
+                break
+    token_dependencies = sorted(
+        list(
+            {
+                name
+                for name in list(playback_replay.get("required_provenance_inputs") or [])
+                if "api-auth" in name or "token" in name or name.startswith("cookies.")
+            }
+        )
+    )
+    stream_container_hints = sorted(
+        list(
+            {
+                pathlib.Path(event_normalized_path(response)).suffix.lower()
+                for response in non_segment_playback_responses
+                if pathlib.Path(event_normalized_path(response)).suffix
+            }
+        )
+    )
+    stream_mime_hints = sorted(list({event_mime(response).lower() for response in non_segment_playback_responses if event_mime(response)}))
+    drm_suspected = any("drm" in event_body_preview(response).lower() or "widevine" in event_body_preview(response).lower() for response in non_segment_playback_responses)
+    playback_browser_context = bool(playback_replay.get("required_referer") or playback_replay.get("required_origin"))
+    if token_dependencies:
+        warnings.append("playback: dynamic token dependency detected")
+    if playback_browser_context:
+        warnings.append("playback: browser-context dependency remains")
+    playback_confidence = float(playback_template.get("confidence") or playback_replay.get("replay_confidence") or 0.0)
+    if not non_segment_playback_responses and playback_responses:
+        warnings.append("playback: only media segment evidence observed")
+        playback_confidence = max(0.0, playback_confidence - 0.2)
+    playback_draft = {
+        "resolver_mode": "manifest_or_resolver_endpoint" if playback_template else "absent",
+        "playback_endpoint_template_ref": str(playback_template.get("template_id") or ""),
+        "manifest_kind_detected": manifest_kind_detected,
+        "manifest_required_headers": list(playback_replay.get("required_headers") or []),
+        "manifest_required_cookies": list(playback_replay.get("required_cookies") or []),
+        "token_dependencies": token_dependencies,
+        "browser_context_required": playback_browser_context,
+        "stream_container_hints": stream_container_hints,
+        "stream_mime_hints": stream_mime_hints,
+        "drm_suspected": bool(drm_suspected),
+        "playback_confidence": round(max(0.0, min(0.99, playback_confidence)), 4),
+        "warnings": sorted(
+            list(
+                {
+                    message
+                    for message in warnings
+                    if message.startswith("playback:")
+                }
+            )
+        ),
+    }
+
+    auth_template = template_by_role.get("auth_or_refresh", {})
+    auth_replay = replay_by_role.get("auth_or_refresh", {})
+    auth_required_headers = list(auth_replay.get("required_headers") or [])
+    auth_required_cookies = list(auth_replay.get("required_cookies") or [])
+    auth_required_provenance = sorted(
+        list(
+            {
+                item
+                for item in list(auth_replay.get("required_provenance_inputs") or [])
+                if item in provenance_names
+            }
+        )
+    )
+    missing_critical_provenance = [
+        name
+        for name in auth_required_headers
+        if name in {"authorization", "api-auth", "x-api-auth"}
+        and token_header_to_provenance_name(name) not in auth_required_provenance
+    ]
+    if missing_critical_provenance:
+        warnings.append("auth: critical token header has no provenance backing")
+    auth_mode = classify_auth_mode(
+        auth_required_headers,
+        auth_required_cookies,
+        str(auth_replay.get("required_referer") or ""),
+        str(auth_replay.get("required_origin") or ""),
+    )
+    auth_confidence = float(auth_template.get("confidence") or auth_replay.get("replay_confidence") or 0.0)
+    auth_draft = {
+        "auth_mode": auth_mode,
+        "session_artifacts": sorted(
+            list(
+                [{"kind": "required_header", "name": name} for name in auth_required_headers]
+                + [{"kind": "required_cookie", "name": name} for name in auth_required_cookies]
+            ),
+            key=lambda item: (str(item.get("kind") or ""), str(item.get("name") or "")),
+        ),
+        "provenance_backed_token_inputs": auth_required_provenance,
+        "validation_endpoint_ref": str(auth_template.get("template_id") or ""),
+        "refresh_endpoint_ref": str(auth_template.get("template_id") or "") if "refresh" in str(auth_template.get("request_operation") or "").lower() else "",
+        "browser_session_required": bool(auth_replay.get("required_referer") or auth_replay.get("required_origin")),
+        "auth_confidence": round(max(0.0, min(0.99, auth_confidence)), 4),
+        "warnings": sorted(
+            list(
+                {
+                    "auth: no replay requirement available" if not auth_replay else "",
+                    "auth: missing provenance for critical token headers" if missing_critical_provenance else "",
+                }
+            )
+        ),
+    }
+    auth_draft["warnings"] = [item for item in auth_draft["warnings"] if item]
+
+    provider_field_matrix = map_field_matrix_to_provider(field_matrix, rows, runtime_dir=runtime_dir)
+    missing_field_count = len([item for item in provider_field_matrix.get("fields", []) if str(item.get("status") or "") == "missing"])
+    if missing_field_count > 0:
+        warnings.append(f"field-matrix: incomplete coverage ({missing_field_count} missing fields)")
+
+    truncated_candidate_count = len(
+        [
+            row
+            for row in rows
+            if row.get("event_type") == "network_response_event"
+            and event_host_class(row) in EXTRACTION_ELIGIBLE_HOST_CLASSES
+            and event_capture_truncated(row)
+        ]
+    )
+    if truncated_candidate_count > 0:
+        warnings.append(f"truncation: {truncated_candidate_count} candidate responses truncated")
+
+    capability_flags = {
+        "home_template": "home" in template_by_role,
+        "search_template": "search" in template_by_role,
+        "detail_template": "detail" in template_by_role,
+        "playback_template": "playback_resolver" in template_by_role,
+        "auth_template": "auth_or_refresh" in template_by_role,
+        "browser_context_required": any(
+            bool(item.get("required_referer") or item.get("required_origin"))
+            for item in provider_replay_requirements
+        ),
+    }
+    capability_class = "BROWSER_NEAR"
+    if (
+        capability_flags["home_template"]
+        and capability_flags["search_template"]
+        and capability_flags["detail_template"]
+        and capability_flags["playback_template"]
+        and not capability_flags["browser_context_required"]
+    ):
+        capability_class = "NATIVE_READY"
+    elif any(capability_flags.values()):
+        capability_class = "HYBRID"
+
+    confidence_values = [float(item.get("confidence") or 0.0) for item in endpoint_templates]
+    confidence_values.append(float(playback_draft.get("playback_confidence") or 0.0))
+    confidence_values.append(float(auth_draft.get("auth_confidence") or 0.0))
+    field_conf = [float(item.get("confidence") or 0.0) for item in provider_field_matrix.get("fields", [])]
+    if field_conf:
+        confidence_values.append(sum(field_conf) / len(field_conf))
+    overall_conf = round(sum(confidence_values) / len(confidence_values), 4) if confidence_values else 0.0
+
+    run_id = ""
+    for row in rows:
+        candidate_run = str(row.get("run_id") or "")
+        if candidate_run:
+            run_id = candidate_run
+            break
+    source_runtime_export_id = f"runtime:{run_id or 'unknown'}:{stable_hash([str(row.get('event_id') or '') for row in rows])[:12]}"
+    export_payload = {
+        "export_schema_version": PROVIDER_EXPORT_SCHEMA_VERSION,
+        "target_site_id": export_target_site_id,
+        "generated_at": deterministic_generated_at(rows),
+        "source_runtime_export_id": source_runtime_export_id,
+        "confidence_summary": {
+            "overall_confidence": overall_conf,
+            "endpoint_confidence_avg": round(sum([float(item.get("confidence") or 0.0) for item in endpoint_templates]) / max(len(endpoint_templates), 1), 4),
+            "playback_confidence": float(playback_draft.get("playback_confidence") or 0.0),
+            "auth_confidence": float(auth_draft.get("auth_confidence") or 0.0),
+            "field_matrix_confidence_avg": round(sum(field_conf) / len(field_conf), 4) if field_conf else 0.0,
+        },
+        "capability_class": capability_class,
+        "endpoint_templates": endpoint_templates,
+        "replay_requirements": provider_replay_requirements,
+        "field_matrix": provider_field_matrix,
+        "auth_draft": auth_draft,
+        "playback_draft": playback_draft,
+        "warnings": sorted(list({item for item in warnings if item})),
+        "known_limitations": sorted(
+            list(
+                {
+                    "native minimization for query/body fields uses conservative observed-intersection fallback",
+                    "runtime export quality depends on scoped probe coverage",
+                }
+            )
+        ),
+        "fishit_player_contract": {
+            "external_provider_descriptor": {
+                "provider_id": (discover_primary_host(rows) or "unknown_provider").replace(".", "_"),
+                "target_site_id": export_target_site_id,
+                "capability_flags": capability_flags,
+            },
+            "search_template_ref": str(template_by_role.get("search", {}).get("template_id") or ""),
+            "detail_template_ref": str(template_by_role.get("detail", {}).get("template_id") or ""),
+            "playback_template_ref": str(template_by_role.get("playback_resolver", {}).get("template_id") or ""),
+            "auth_session_descriptor": {
+                "template_ref": str(template_by_role.get("auth_or_refresh", {}).get("template_id") or ""),
+                "auth_mode": str(auth_draft.get("auth_mode") or ""),
+                "browser_session_required": bool(auth_draft.get("browser_session_required")),
+            },
+        },
+    }
+    export_id = f"provider_export_{stable_hash(export_payload)[:16]}"
+    export_payload["export_id"] = export_id
+    return export_payload
+
+
 def build_replay_seed(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     requests = [r for r in rows if r.get("event_type") == "network_request_event"]
     selected = []
@@ -3141,12 +4338,14 @@ def build_replay_requirements(
     prefer_active_replay: bool = True,
     timeout_ms: int = ACTIVE_REPLAY_ROLLUP_TIMEOUT_MS,
     allow_unsafe_methods: bool = False,
+    replay_executor: Optional[Any] = None,
 ) -> Dict[str, Any]:
     if prefer_active_replay:
         active_payload = build_required_headers_active_replay(
             rows,
             timeout_ms=max(int(timeout_ms or 0), 500),
             allow_unsafe_methods=allow_unsafe_methods,
+            replay_executor=replay_executor,
         )
         endpoint_sets = list(active_payload.get("endpoint_minimal_sets") or [])
         replay_payload = replay_requirements_from_endpoint_sets(
@@ -4197,14 +5396,21 @@ def build_truncation_event_rows(rows: List[Dict[str, Any]], event_body_refs: Opt
     return out
 
 
-def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dict[str, pathlib.Path]:
+def ensure_derived(
+    runtime_dir: pathlib.Path,
+    rows: List[Dict[str, Any]],
+    mission_id: str = MISSION_FISHIT_PIPELINE,
+    replay_executor: Optional[Any] = None,
+) -> Dict[str, pathlib.Path]:
     rows = normalize_runtime_rows(rows, runtime_dir=runtime_dir)
+    active_replay_executor = replay_executor or replay_http_execute
     correlation = build_correlation(rows)
     cookie_timeline = build_cookie_timeline(rows)
     required_headers = build_required_headers_active_replay(
         rows,
         timeout_ms=ACTIVE_REPLAY_ROLLUP_TIMEOUT_MS,
         allow_unsafe_methods=False,
+        replay_executor=active_replay_executor,
     )
     endpoint_sets = list(required_headers.get("endpoint_minimal_sets") or [])
     required_cookies_payload = build_required_cookies_report_for_endpoint_sets(
@@ -4217,6 +5423,7 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
         prefer_active_replay=True,
         timeout_ms=ACTIVE_REPLAY_ROLLUP_TIMEOUT_MS,
         allow_unsafe_methods=False,
+        replay_executor=active_replay_executor,
     )
     endpoint_candidates = build_endpoint_candidates(rows)
     field_matrix = build_field_matrix(rows, runtime_dir=runtime_dir)
@@ -4232,6 +5439,15 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
     )
     provenance_graph = build_provenance_graph(rows)
     provenance_registry = build_provenance_registry(rows, runtime_dir=runtime_dir)
+    provider_draft_export = build_provider_draft_export(
+        rows,
+        endpoint_candidates=endpoint_candidates,
+        replay_requirements=replay_requirements,
+        required_headers_payload=required_headers,
+        field_matrix=field_matrix,
+        provenance_registry=provenance_registry,
+        runtime_dir=runtime_dir,
+    )
     events_ssot = {
         "schema_version": 1,
         "generated_at_utc": utc_now(),
@@ -4240,6 +5456,43 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
     }
     profile_candidate = dict(profile_draft)
     profile_candidate["profile_type"] = "candidate"
+    webapp_runtime_draft = {
+        "schema_version": 1,
+        "generated_at_utc": utc_now(),
+        "source": "provider_draft_export",
+        "target_site_id": str(provider_draft_export.get("target_site_id") or ""),
+        "capability_class": str(provider_draft_export.get("capability_class") or "HYBRID"),
+        "endpoint_templates": list(provider_draft_export.get("endpoint_templates") or []),
+        "field_matrix": provider_draft_export.get("field_matrix") or {},
+        "warnings": list(provider_draft_export.get("warnings") or []),
+        "known_limitations": list(provider_draft_export.get("known_limitations") or []),
+    }
+    replay_bundle = {
+        "schema_version": 1,
+        "generated_at_utc": utc_now(),
+        "source": "replay_seed",
+        "target_site_id": str(provider_draft_export.get("target_site_id") or ""),
+        "replay_seed": replay_seed,
+        "required_headers": required_headers,
+        "required_cookies": required_cookies_payload,
+        "warnings": list(provider_draft_export.get("warnings") or []),
+    }
+    fixture_manifest = {
+        "schema_version": 1,
+        "generated_at_utc": utc_now(),
+        "target_site_id": str(provider_draft_export.get("target_site_id") or ""),
+        "artifacts": {
+            "events_ssot": "events.jsonl",
+            "runtime_events": "events/runtime_events.jsonl",
+            "response_index": "response_index.json",
+            "replay_bundle": "replay_bundle.json",
+            "mission_export_summary": "mission_export_summary.json",
+        },
+        "integrity": {
+            "deterministic_serialization": True,
+            "response_store_index_present": bool(body_store.get("index")),
+        },
+    }
 
     request_rows = compact_requests_canonical(rows)
     response_rows = [compact_response(row) for row in rows if row.get("event_type") == "network_response_event"]
@@ -4259,8 +5512,13 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
         "endpoint_candidates": runtime_dir / "endpoint_candidates.json",
         "field_matrix": runtime_dir / "field_matrix.json",
         "profile_draft": runtime_dir / "site_profile.draft.json",
+        "provider_draft_export": runtime_dir / "provider_draft_export.json",
+        "webapp_runtime_draft": runtime_dir / "webapp_runtime_draft.json",
+        "replay_bundle": runtime_dir / "replay_bundle.json",
+        "fixture_manifest": runtime_dir / "fixture_manifest.json",
         "profile_candidate": runtime_dir / "profile_candidate.json",
         "replay_seed": runtime_dir / "replay_seed.json",
+        "mission_export_summary": runtime_dir / "mission_export_summary.json",
         "response_store_index": runtime_dir / "response_store" / "index.json",
         "response_index": runtime_dir / "response_index.json",
         "provenance_graph": runtime_dir / "provenance_graph.json",
@@ -4281,13 +5539,177 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
     write_json(paths["endpoint_candidates"], endpoint_candidates)
     write_json(paths["field_matrix"], field_matrix)
     write_json(paths["profile_draft"], profile_draft)
+    write_json_canonical(paths["provider_draft_export"], provider_draft_export)
+    write_json_canonical(paths["webapp_runtime_draft"], webapp_runtime_draft)
+    write_json_canonical(paths["replay_bundle"], replay_bundle)
+    write_json_canonical(paths["fixture_manifest"], fixture_manifest)
     write_json(paths["profile_candidate"], profile_candidate)
     write_json(paths["replay_seed"], replay_seed)
+    write_mission_export_summary(runtime_dir=runtime_dir, rows=rows, mission_id=mission_id)
     write_json(paths["response_store_index"], response_store_index)
     write_json(paths["response_index"], body_store.get("index", {}))
     write_json(paths["provenance_graph"], provenance_graph)
     write_json(paths["provenance_registry"], provenance_registry)
     return paths
+
+
+def mission_step_states(rows: List[Dict[str, Any]], mission_id: str) -> Dict[str, str]:
+    states: Dict[str, str] = {}
+    for row in rows:
+        event_type = str(row.get("event_type") or "")
+        if event_type not in {"wizard_event", "mission_event"}:
+            continue
+        payload = event_payload(row)
+        row_mission = str(payload.get("mission_id") or "").strip()
+        if row_mission and row_mission != mission_id:
+            continue
+        step_id = str(payload.get("wizard_step_id") or "").strip()
+        if not step_id:
+            continue
+        operation = str(payload.get("operation") or "").strip()
+        saturation = str(payload.get("saturation_state") or "").strip()
+        if operation == "wizard_step_started":
+            states[step_id] = saturation or "INCOMPLETE"
+        elif operation in {"wizard_step_saturation_updated", "wizard_step_completed"}:
+            states[step_id] = saturation or "SATURATED"
+        elif operation == "wizard_step_blocked":
+            states[step_id] = "BLOCKED"
+        elif operation == "wizard_finished":
+            states[step_id] = saturation or states.get(step_id, "INCOMPLETE")
+    return states
+
+
+def mission_target_site(rows: List[Dict[str, Any]], mission_id: str) -> str:
+    for row in reversed(rows):
+        payload = event_payload(row)
+        row_mission = str(payload.get("mission_id") or "").strip()
+        if row_mission and row_mission != mission_id:
+            continue
+        target_site_id = str(payload.get("target_site_id") or "").strip()
+        if target_site_id:
+            return target_site_id
+    host = discover_primary_host(rows)
+    return canonical_target_site_id(host)
+
+
+def mission_required_artifacts(mission_id: str) -> List[Dict[str, Any]]:
+    artifact_ids = list(MISSION_REQUIRED_FILES.get(mission_id, []))
+    refs: List[Dict[str, Any]] = []
+    for artifact_id in artifact_ids:
+        paths = list(MISSION_ARTIFACT_ALIASES.get(artifact_id, [artifact_id]))
+        deduped_paths: List[str] = []
+        seen: Set[str] = set()
+        for path in paths:
+            normalized = str(path or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped_paths.append(normalized)
+        refs.append({"id": artifact_id, "paths": deduped_paths})
+    return refs
+
+
+def build_mission_export_summary(
+    runtime_dir: pathlib.Path,
+    rows: List[Dict[str, Any]],
+    mission_id: str = MISSION_FISHIT_PIPELINE,
+    pipeline_report: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    mission_id = mission_id.strip() or MISSION_FISHIT_PIPELINE
+    step_states = mission_step_states(rows, mission_id)
+    required_steps = list(MISSION_REQUIRED_STEPS.get(mission_id, []))
+    missing_required_steps = [step for step in required_steps if step_states.get(step) != "SATURATED"]
+
+    required_artifacts = mission_required_artifacts(mission_id)
+    available_files: Dict[str, bool] = {}
+    missing_required_files: List[str] = []
+    for artifact in required_artifacts:
+        artifact_id = str(artifact.get("id") or "").strip()
+        paths = list(artifact.get("paths") or [])
+        exists = False
+        for rel in paths:
+            target = runtime_dir / rel
+            if target.exists() and target.stat().st_size > 0:
+                exists = True
+                break
+        available_files[artifact_id] = exists
+        if not exists:
+            missing_required_files.append(artifact_id)
+
+    has_finalized_export = False
+    export_dir = runtime_dir / "exports"
+    if export_dir.exists():
+        has_finalized_export = any(
+            item.is_file() and item.name.endswith(".zip") and item.stat().st_size > 0
+            for item in export_dir.iterdir()
+        )
+
+    report = pipeline_report or load_contract_json(runtime_dir / "pipeline_ready_report.json")
+    pipeline_ready = bool(report.get("pipeline_ready")) if isinstance(report, dict) and report else False
+    pipeline_report_path = str(runtime_dir / "pipeline_ready_report.json")
+
+    warnings: List[str] = []
+    if missing_required_steps:
+        warnings.append(f"missing_required_steps:{','.join(missing_required_steps)}")
+    if missing_required_files:
+        warnings.append(f"missing_required_files:{','.join(missing_required_files)}")
+    if not has_finalized_export:
+        warnings.append("finalized_export_missing")
+    if not pipeline_ready:
+        warnings.append("pipeline_quality_gate_not_ready")
+
+    if missing_required_steps:
+        export_readiness = MISSION_EXPORT_READINESS_BLOCKED
+        reason = "missing_required_steps"
+    elif not missing_required_files and has_finalized_export and pipeline_ready:
+        export_readiness = MISSION_EXPORT_READINESS_READY
+        reason = "required_steps_artifacts_and_quality_ready"
+    elif len(missing_required_files) < len(required_artifacts):
+        export_readiness = MISSION_EXPORT_READINESS_PARTIAL
+        reason = "required_artifacts_partial_or_quality_pending"
+    else:
+        export_readiness = MISSION_EXPORT_READINESS_NOT_READY
+        reason = "required_artifacts_missing"
+
+    return {
+        "schema_version": 1,
+        "generated_at_utc": utc_now(),
+        "mission_id": mission_id,
+        "target_site_id": mission_target_site(rows, mission_id),
+        "export_readiness": export_readiness,
+        "reason": reason,
+        "required_steps": required_steps,
+        "step_states": step_states,
+        "missing_required_steps": missing_required_steps,
+        "required_files": [str(item.get("id") or "") for item in required_artifacts],
+        "required_file_aliases": {
+            str(item.get("id") or ""): list(item.get("paths") or [])
+            for item in required_artifacts
+        },
+        "available_files": available_files,
+        "missing_required_files": missing_required_files,
+        "has_finalized_export": has_finalized_export,
+        "pipeline_ready": pipeline_ready,
+        "pipeline_report_path": pipeline_report_path,
+        "warnings": warnings,
+    }
+
+
+def write_mission_export_summary(
+    runtime_dir: pathlib.Path,
+    rows: List[Dict[str, Any]],
+    mission_id: str = MISSION_FISHIT_PIPELINE,
+    pipeline_report: Optional[Dict[str, Any]] = None,
+) -> pathlib.Path:
+    payload = build_mission_export_summary(
+        runtime_dir=runtime_dir,
+        rows=rows,
+        mission_id=mission_id,
+        pipeline_report=pipeline_report,
+    )
+    target = runtime_dir / "mission_export_summary.json"
+    write_json(target, payload)
+    return target
 
 
 def discover_primary_host(rows: List[Dict[str, Any]]) -> str:
@@ -4315,6 +5737,7 @@ def pipeline_quality_report(
     runtime_dir: pathlib.Path,
     rows: List[Dict[str, Any]],
     quality_host: str = "",
+    mission_id: str = MISSION_FISHIT_PIPELINE,
 ) -> Dict[str, Any]:
     run_id = ""
     for row in reversed(rows):
@@ -4327,7 +5750,7 @@ def pipeline_quality_report(
         scoped_rows = [row for row in rows if str(row.get("run_id") or "") == run_id]
 
     rows = normalize_runtime_rows(scoped_rows, runtime_dir=runtime_dir)
-    derived = ensure_derived(runtime_dir, rows)
+    derived = ensure_derived(runtime_dir, rows, mission_id=mission_id)
     host = quality_host.strip() or discover_primary_host(rows)
 
     request_rows_all = [row for row in rows if row.get("event_type") == "network_request_event"]
@@ -4428,11 +5851,13 @@ def pipeline_quality_report(
         runtime_dir / "endpoint_candidates.json",
         runtime_dir / "field_matrix.json",
         runtime_dir / "site_profile.draft.json",
+        runtime_dir / "provider_draft_export.json",
         runtime_dir / "profile_candidate.json",
         runtime_dir / "provenance_graph.json",
         runtime_dir / "provenance_registry.json",
         runtime_dir / "response_index.json",
         runtime_dir / "replay_seed.json",
+        runtime_dir / "mission_export_summary.json",
     ]
     latest_non_empty = True
     empty_targets = []
@@ -4904,6 +6329,7 @@ def incident_bundle(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]], args:
         "field_matrix",
         "endpoint_candidates",
         "profile_draft",
+        "provider_draft_export",
         "profile_candidate",
         "replay_seed",
         "provenance_graph",
@@ -5756,6 +7182,7 @@ def do_mapping(action: str, rows: List[Dict[str, Any]], _args: argparse.Namespac
         "candidate-endpoints": paths["endpoint_candidates"],
         "field-matrix": paths["field_matrix"],
         "profile-draft": paths["profile_draft"],
+        "provider-draft-export": paths["provider_draft_export"],
         "replay-seed": paths["replay_seed"],
     }
     target = mapping.get(action)
@@ -5793,16 +7220,40 @@ def do_provenance(action: str, rows: List[Dict[str, Any]], args: argparse.Namesp
 
 def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Namespace, runtime_dir: pathlib.Path) -> int:
     if action == "reindex":
-        paths = ensure_derived(runtime_dir, rows)
+        paths = ensure_derived(
+            runtime_dir,
+            rows,
+            mission_id=args.mission_id or MISSION_FISHIT_PIPELINE,
+        )
         print_json({"reindexed": {k: str(v) for k, v in paths.items()}})
         return 0
 
     if action == "validate":
-        report = pipeline_quality_report(runtime_dir, rows, quality_host=args.quality_host)
+        report = pipeline_quality_report(
+            runtime_dir,
+            rows,
+            quality_host=args.quality_host,
+            mission_id=args.mission_id or MISSION_FISHIT_PIPELINE,
+        )
         report_path = runtime_dir / "pipeline_ready_report.json"
         write_json(report_path, report)
+        write_mission_export_summary(
+            runtime_dir=runtime_dir,
+            rows=rows,
+            mission_id=args.mission_id or MISSION_FISHIT_PIPELINE,
+            pipeline_report=report,
+        )
         print_json(report)
         return 0 if bool(report.get("pipeline_ready")) else 2
+
+    if action == "mission-summary":
+        summary_path = write_mission_export_summary(
+            runtime_dir=runtime_dir,
+            rows=rows,
+            mission_id=args.mission_id or MISSION_FISHIT_PIPELINE,
+        )
+        print_json(load_contract_json(summary_path))
+        return 0
 
     if action in {"pack", "compress"}:
         archive_dir = runtime_dir.parent / "archive"
@@ -5833,7 +7284,12 @@ def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Name
             "field_matrix.json",
             "endpoint_candidates.json",
             "site_profile.draft.json",
+            "provider_draft_export.json",
+            "webapp_runtime_draft.json",
+            "replay_bundle.json",
+            "fixture_manifest.json",
             "profile_candidate.json",
+            "mission_export_summary.json",
             "provenance_graph.json",
             "provenance_registry.json",
             "response_index.json",
@@ -5938,6 +7394,7 @@ def do_triage(action: str, rows: List[Dict[str, Any]], args: argparse.Namespace,
                 "required_headers_report": derived["required_headers"],
                 "endpoint_candidates": derived["endpoint_candidates"],
                 "site_profile.draft": derived["profile_draft"],
+                "provider_draft_export": derived["provider_draft_export"],
                 "replay_seed": derived["replay_seed"],
             }
             for target in preset_payload.get("target_outputs", []):
@@ -6194,6 +7651,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--window-limit", type=int, default=400)
     parser.add_argument("--sampling-rate", type=int, default=1)
     parser.add_argument("--quality-host", default="")
+    parser.add_argument("--mission-id", default=MISSION_FISHIT_PIPELINE)
     parser.add_argument("--yes", action="store_true")
 
     return parser.parse_args()

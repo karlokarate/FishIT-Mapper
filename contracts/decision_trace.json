@@ -192,6 +192,80 @@
       ],
       "superseded_by": null,
       "summary": "Response/body handling now uses a deterministic policy resolver (STORE_FULL_REQUIRED/FULL/TRUNCATED/METADATA_ONLY/SKIP), enforces explicit truncation metadata including 4MB cap detection, emits truncation_event artifacts, dedupes large HTML bodies by hash, and propagates truncation visibility into extraction and replay outputs."
+    },
+    {
+      "id": "DEC-0015",
+      "aliases": [
+        "ADR-0015",
+        "MAPPER-PROVIDER-DRAFT-EXPORT-CONTRACT",
+        "MAPPER-REPLAY-MINIMIZATION-FISHIT-PLAYER-READY"
+      ],
+      "title": "Provider draft export becomes deterministic FishIT-Player-ready contract with replay-minimized requirements",
+      "status": "accepted",
+      "date": "2026-04-02",
+      "supersedes": [
+        "DEC-0014"
+      ],
+      "superseded_by": "DEC-0016",
+      "summary": "Mapper derives a versioned provider_draft_export from normalized raw runtime events, endpoint scoring, replay elimination, extraction matrix, and provenance registry; outputs include endpoint templates, required/optional request context, playback/auth drafts, confidence, and warnings with deterministic serialization."
+    },
+    {
+      "id": "DEC-0016",
+      "aliases": [
+        "ADR-0016",
+        "MAPPER-MISSION-FIRST-GUIDED-WIZARD",
+        "MAPPER-TARGET-CONTRACT-GENERATED-DOC"
+      ],
+      "title": "Mission-first guided wizard becomes canonical entrypoint and drives mission-scoped export completeness",
+      "status": "accepted",
+      "date": "2026-04-02",
+      "supersedes": [
+        "DEC-0015"
+      ],
+      "superseded_by": null,
+      "summary": "Mapper now starts from mission selection and executes a guided-manual wizard in EinkBro context with explicit step saturation states, overlay anchor correlation events, mission-scoped required evidence, and export gating that emits only mission-relevant artifacts."
+    },
+    {
+      "id": "DEC-0017",
+      "aliases": [
+        "ADR-0017",
+        "MAPPER-CONTRACT-DRIVEN-MISSION-REGISTRY",
+        "MAPPER-API-MAPPING-FIRST-ENABLEMENT"
+      ],
+      "title": "Mission registry is contract-derived and API_MAPPING is enabled with mission-aware finalization",
+      "status": "accepted",
+      "date": "2026-04-02",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Mission metadata, steps, implementation flags, and artifact aliases are generated from contracts into an app asset; API_MAPPING is now executable end-to-end with mission-aware wizard finish and export summary evaluation using deterministic artifact alias resolution."
+    },
+    {
+      "id": "DEC-0018",
+      "aliases": [
+        "ADR-0018",
+        "MAPPER-STANDALONE-APP-MISSION-ENABLEMENT",
+        "MAPPER-MISSION-ORDERED-ROLLOUT-PHASE-2"
+      ],
+      "title": "STANDALONE_APP mission is enabled end-to-end with contract-driven required steps and artifact gates",
+      "status": "accepted",
+      "date": "2026-04-02",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Mission-first rollout phase 2 enables STANDALONE_APP in launcher, wizard saturation, and mission summary/finalization using contract-derived required step set (target/home/detail/final) and deterministic artifact alias checks, while leaving REPLAY_BUNDLE visible but disabled."
+    },
+    {
+      "id": "DEC-0019",
+      "aliases": [
+        "ADR-0019",
+        "MAPPER-REPLAY-BUNDLE-MISSION-ENABLEMENT",
+        "MAPPER-MISSION-ORDERED-ROLLOUT-PHASE-3"
+      ],
+      "title": "REPLAY_BUNDLE mission is enabled with deterministic fixture-oriented readiness artifacts",
+      "status": "accepted",
+      "date": "2026-04-02",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Mission-first rollout phase 3 enables REPLAY_BUNDLE in launcher and mission-aware finalization; runtime derivation now emits replay_bundle and fixture_manifest artifacts so replay-focused readiness checks are machine-verifiable."
     }
   ]
 }

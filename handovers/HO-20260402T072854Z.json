@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260402T072854Z",
+  "generated_at_utc": "2026-04-02T07:28:54Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260402T072854Z"
+  },
+  "scope": "provider draft export + replay minimization cutover",
+  "highlights": [
+    "implemented deterministic FishIT-Player-ready provider_draft_export with endpoint templates, replay requirement minimization groups, playback/auth drafts, warnings/confidence, and byte-stable fixture serialization"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/provider_draft_export.schema.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "docs/archive/provider_draft_export.schema.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/__pycache__/main.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/__pycache__/runtime_dataset_cli.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/__pycache__/tui_catalog.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/tests/__pycache__/test_replay_dataset_cli.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/tests/__pycache__/test_runtime_dataset_hardening.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/tests/__pycache__/test_runtime_dataset_integration_smoke.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/tests/__pycache__/test_runtime_dataset_regression_fixture.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/tests/__pycache__/test_triage_dataset_cli.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/tests/__pycache__/test_tui_catalog.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/decision_trace.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/doc_contract.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/generation_plan.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/mapper_toolkit_tui_catalog.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/runtime_capture_architecture.md",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/runtime_toolkit_v2.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/archive/mapper_toolkit_tui_catalog.contract.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/archive/runtime_toolkit_v2.contract.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/toolkit/runtime_dataset_cli.py",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/toolkit/tests/test_runtime_dataset_hardening.py",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/toolkit/tests/test_runtime_dataset_integration_smoke.py",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/toolkit/tests/test_runtime_dataset_regression_fixture.py",
+      "old_path": null
+    }
+  ]
+}

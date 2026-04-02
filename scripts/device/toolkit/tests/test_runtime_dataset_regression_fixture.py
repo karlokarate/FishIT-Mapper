@@ -13,7 +13,12 @@ TOOLKIT_DIR = Path(__file__).resolve().parents[1]
 if str(TOOLKIT_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLKIT_DIR))
 
-from runtime_dataset_cli import ensure_derived, normalize_runtime_rows, read_jsonl  # type: ignore  # noqa: E402
+from runtime_dataset_cli import (  # type: ignore  # noqa: E402
+    ensure_derived,
+    normalize_runtime_rows,
+    read_jsonl,
+    replay_http_execute_deterministic,
+)
 
 
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "runtime_regression_zdf.jsonl"
@@ -52,7 +57,7 @@ class RuntimeDatasetRegressionFixtureTests(unittest.TestCase):
         rows = self._fixture_rows()
         with tempfile.TemporaryDirectory() as tmp:
             runtime_dir = Path(tmp)
-            paths = ensure_derived(runtime_dir, rows)
+            paths = ensure_derived(runtime_dir, rows, replay_executor=replay_http_execute_deterministic)
 
             response_index = json.loads(paths["response_index"].read_text(encoding="utf-8"))
             items = {str(item.get("event_id") or ""): item for item in response_index.get("items", [])}
@@ -87,7 +92,7 @@ class RuntimeDatasetRegressionFixtureTests(unittest.TestCase):
         rows = self._truncation_fixture_rows()
         with tempfile.TemporaryDirectory() as tmp:
             runtime_dir = Path(tmp)
-            paths = ensure_derived(runtime_dir, rows)
+            paths = ensure_derived(runtime_dir, rows, replay_executor=replay_http_execute_deterministic)
             responses = read_jsonl(paths["responses_normalized"])
 
             for row in responses:
@@ -115,6 +120,128 @@ class RuntimeDatasetRegressionFixtureTests(unittest.TestCase):
             self.assertGreaterEqual(len(truncation_events), 1)
             payloads = [row.get("payload", {}) for row in truncation_events]
             self.assertTrue(any(str(payload.get("response_id") or "") == "resp_graphql" for payload in payloads))
+
+    def test_provider_export_generated_with_templates_and_minimized_requirements(self) -> None:
+        rows = self._fixture_rows()
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            paths = ensure_derived(runtime_dir, rows, replay_executor=replay_http_execute_deterministic)
+            provider_export = json.loads(paths["provider_draft_export"].read_text(encoding="utf-8"))
+            self.assertTrue(str(provider_export.get("export_id") or "").startswith("provider_export_"))
+            templates = {str(item.get("endpoint_role") or ""): item for item in provider_export.get("endpoint_templates", [])}
+            self.assertIn("home", templates)
+            self.assertIn("search", templates)
+            self.assertIn("detail", templates)
+            self.assertIn("playback_resolver", templates)
+
+            replay_by_role = {str(item.get("endpoint_role") or ""): item for item in provider_export.get("replay_requirements", [])}
+            self.assertIn("search", replay_by_role)
+            self.assertGreaterEqual(len(replay_by_role["search"].get("required_headers", [])), 1)
+            normalized = normalize_runtime_rows(rows)
+            raw_search_headers = set()
+            for row in normalized:
+                if row.get("event_type") != "network_request_event":
+                    continue
+                payload = row.get("payload", {})
+                if not isinstance(payload, dict):
+                    continue
+                operation = str(payload.get("request_operation") or "").lower()
+                if "search" not in operation:
+                    continue
+                headers = payload.get("headers")
+                if not isinstance(headers, dict):
+                    continue
+                raw_search_headers.update({str(name).lower() for name in headers.keys() if name})
+            required_search_headers = {str(name).lower() for name in replay_by_role["search"].get("required_headers", []) if name}
+            self.assertTrue(required_search_headers.issubset(raw_search_headers))
+            self.assertLess(len(required_search_headers), len(raw_search_headers))
+
+            for item in provider_export.get("endpoint_templates", []):
+                host = str(item.get("normalized_host") or "")
+                self.assertNotIn("google", host)
+                self.assertNotIn("doubleclick", host)
+
+    def test_provider_export_serialization_is_byte_stable_for_same_fixture(self) -> None:
+        rows = self._fixture_rows()
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            paths_first = ensure_derived(runtime_dir, rows, replay_executor=replay_http_execute_deterministic)
+            first_bytes = paths_first["provider_draft_export"].read_bytes()
+            paths_second = ensure_derived(runtime_dir, rows, replay_executor=replay_http_execute_deterministic)
+            second_bytes = paths_second["provider_draft_export"].read_bytes()
+            self.assertEqual(first_bytes, second_bytes)
+
+    def test_provider_export_warnings_include_truncation_and_browser_context_when_present(self) -> None:
+        rows = [
+            {
+                "schema_version": 1,
+                "run_id": "run_warn",
+                "event_id": "phase_search",
+                "event_type": "probe_phase_event",
+                "ts_utc": "2026-04-02T12:00:00Z",
+                "trace_id": "trace_warn",
+                "span_id": "",
+                "action_id": "action_phase",
+                "payload": {"phase_id": "search_probe", "transition": "start"},
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_warn",
+                "event_id": "req_warn",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-02T12:00:01Z",
+                "trace_id": "trace_warn",
+                "span_id": "",
+                "action_id": "action_warn",
+                "payload": {
+                    "request_id": "req_warn",
+                    "phase_id": "search_probe",
+                    "request_operation": "search_request",
+                    "url": "https://api.zdf.de/v1/search?q=planet",
+                    "method": "GET",
+                    "headers": {
+                        "accept": "application/json",
+                        "authorization": "Bearer redacted",
+                        "cookie": "sid=abc",
+                        "referer": "https://www.zdf.de/",
+                        "origin": "https://www.zdf.de",
+                    },
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_warn",
+                "event_id": "resp_warn",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:02Z",
+                "trace_id": "trace_warn",
+                "span_id": "",
+                "action_id": "action_warn",
+                "payload": {
+                    "request_id": "req_warn",
+                    "response_id": "resp_warn",
+                    "phase_id": "search_probe",
+                    "url": "https://api.zdf.de/v1/search?q=planet",
+                    "method": "GET",
+                    "status_code": 200,
+                    "mime_type": "application/json",
+                    "headers": {"content-type": "application/json", "content-length": "10000000"},
+                    "body_preview": "{\"results\":[]}",
+                    "capture_truncated": True,
+                    "capture_limit_bytes": 4194304,
+                    "stored_size_bytes": 4194304,
+                    "host_class": "target",
+                },
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            paths = ensure_derived(runtime_dir, rows, replay_executor=replay_http_execute_deterministic)
+            provider_export = json.loads(paths["provider_draft_export"].read_text(encoding="utf-8"))
+            warning_text = " ".join([str(item) for item in provider_export.get("warnings", [])]).lower()
+            self.assertIn("truncation", warning_text)
+            self.assertIn("browser-context", warning_text)
 
 
 if __name__ == "__main__":

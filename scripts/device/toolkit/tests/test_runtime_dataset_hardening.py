@@ -10,6 +10,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import parse_qsl, urlparse
 
 TOOLKIT_DIR = Path(__file__).resolve().parents[1]
 if str(TOOLKIT_DIR) not in sys.path:
@@ -19,7 +20,9 @@ from runtime_dataset_cli import (  # type: ignore  # noqa: E402
     body_capture_decision,
     build_body_store,
     build_correlation,
+    build_endpoint_candidates,
     build_field_matrix,
+    build_provider_draft_export,
     build_provenance_registry,
     build_replay_requirements,
     build_required_headers,
@@ -27,6 +30,7 @@ from runtime_dataset_cli import (  # type: ignore  # noqa: E402
     build_response_store_index,
     build_provenance_graph,
     ensure_derived,
+    mission_required_artifacts,
     read_jsonl,
     normalize_runtime_rows,
     pipeline_quality_report,
@@ -1575,6 +1579,657 @@ class RuntimeDatasetHardeningTests(unittest.TestCase):
             "active_http_replay_skipped_unsupported_scheme",
         )
 
+    def _provider_export_rows(self):
+        return [
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "phase_home",
+                "event_type": "probe_phase_event",
+                "ts_utc": "2026-04-02T12:00:00Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_phase",
+                "payload": {"phase_id": "home_probe", "transition": "start", "operation": "home_probe_start"},
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "req_home",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-02T12:00:01Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_home",
+                "payload": {
+                    "request_id": "req_home",
+                    "phase_id": "home_probe",
+                    "request_operation": "home_bootstrap",
+                    "url": "https://www.zdf.de/",
+                    "method": "GET",
+                    "headers": {"accept": "text/html"},
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "resp_home",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:02Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_home",
+                "payload": {
+                    "request_id": "req_home",
+                    "response_id": "resp_home",
+                    "phase_id": "home_probe",
+                    "url": "https://www.zdf.de/",
+                    "method": "GET",
+                    "status_code": 200,
+                    "mime_type": "text/html",
+                    "headers": {"content-type": "text/html"},
+                    "body_preview": "<html><head><title>ZDF Home</title></head><body>home</body></html>",
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "phase_search",
+                "event_type": "probe_phase_event",
+                "ts_utc": "2026-04-02T12:00:03Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_phase",
+                "payload": {"phase_id": "search_probe", "transition": "start", "operation": "search_probe_start"},
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "req_search_1",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-02T12:00:04Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_search",
+                "payload": {
+                    "request_id": "req_search_1",
+                    "phase_id": "search_probe",
+                    "request_operation": "search_request",
+                    "url": "https://api.zdf.de/v1/search?q=planet&page=1",
+                    "method": "GET",
+                    "headers": {
+                        "accept": "application/json",
+                        "authorization": "Bearer redacted",
+                        "x-required": "1",
+                        "x-optional": "yes",
+                        "sec-fetch-mode": "cors",
+                        "cookie": "sid=abc; _ga=track",
+                        "referer": "https://www.zdf.de/",
+                        "origin": "https://www.zdf.de",
+                    },
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "resp_search_1",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:05Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_search",
+                "payload": {
+                    "request_id": "req_search_1",
+                    "response_id": "resp_search_1",
+                    "phase_id": "search_probe",
+                    "url": "https://api.zdf.de/v1/search?q=planet&page=1",
+                    "method": "GET",
+                    "status_code": 200,
+                    "mime_type": "application/json",
+                    "headers": {"content-type": "application/json"},
+                    "body_preview": "{\"results\":[{\"title\":\"Planet\"}]}",
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "req_search_2",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-02T12:00:06Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_search",
+                "payload": {
+                    "request_id": "req_search_2",
+                    "phase_id": "search_probe",
+                    "request_operation": "search_request",
+                    "url": "https://api.zdf.de/v1/search?q=planet&page=2",
+                    "method": "GET",
+                    "headers": {
+                        "accept": "application/json",
+                        "authorization": "Bearer redacted",
+                        "x-required": "1",
+                        "cookie": "sid=abc",
+                        "referer": "https://www.zdf.de/",
+                        "origin": "https://www.zdf.de",
+                    },
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "resp_search_2",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:07Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_search",
+                "payload": {
+                    "request_id": "req_search_2",
+                    "response_id": "resp_search_2",
+                    "phase_id": "search_probe",
+                    "url": "https://api.zdf.de/v1/search?q=planet&page=2",
+                    "method": "GET",
+                    "status_code": 200,
+                    "mime_type": "application/json",
+                    "headers": {"content-type": "application/json"},
+                    "body_preview": "{\"results\":[{\"title\":\"Planet 2\"}]}",
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "phase_detail",
+                "event_type": "probe_phase_event",
+                "ts_utc": "2026-04-02T12:00:08Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_phase",
+                "payload": {"phase_id": "detail_probe", "transition": "start", "operation": "detail_probe_start"},
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "req_detail",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-02T12:00:09Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_detail",
+                "payload": {
+                    "request_id": "req_detail",
+                    "phase_id": "detail_probe",
+                    "request_operation": "detail_graphql_query",
+                    "url": "https://api.zdf.de/v1/detail/42",
+                    "method": "GET",
+                    "headers": {"accept": "application/json"},
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "resp_detail",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:10Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_detail",
+                "payload": {
+                    "request_id": "req_detail",
+                    "response_id": "resp_detail",
+                    "phase_id": "detail_probe",
+                    "url": "https://api.zdf.de/v1/detail/42",
+                    "method": "GET",
+                    "status_code": 200,
+                    "mime_type": "application/json",
+                    "headers": {"content-type": "application/json"},
+                    "body_preview": "{\"item\":{\"title\":\"Episode\",\"canonicalId\":\"c42\",\"playback\":{\"manifest\":\"https://nrodlzdf-a.akamaihd.net/master.m3u8\"}}}",
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "phase_playback",
+                "event_type": "probe_phase_event",
+                "ts_utc": "2026-04-02T12:00:11Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_phase",
+                "payload": {"phase_id": "playback_probe", "transition": "start", "operation": "playback_probe_start"},
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "req_manifest",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-02T12:00:12Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_playback",
+                "payload": {
+                    "request_id": "req_manifest",
+                    "phase_id": "playback_probe",
+                    "request_operation": "playback_manifest_fetch",
+                    "url": "https://nrodlzdf-a.akamaihd.net/stream/master.m3u8",
+                    "method": "GET",
+                    "headers": {"accept": "application/vnd.apple.mpegurl", "authorization": "Bearer redacted", "cookie": "sid=abc"},
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "resp_manifest",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:13Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_playback",
+                "payload": {
+                    "request_id": "req_manifest",
+                    "response_id": "resp_manifest",
+                    "phase_id": "playback_probe",
+                    "url": "https://nrodlzdf-a.akamaihd.net/stream/master.m3u8",
+                    "method": "GET",
+                    "status_code": 200,
+                    "mime_type": "application/vnd.apple.mpegurl",
+                    "headers": {"content-type": "application/vnd.apple.mpegurl"},
+                    "body_preview": "#EXTM3U",
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "req_segment",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-02T12:00:14Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_playback",
+                "payload": {
+                    "request_id": "req_segment",
+                    "phase_id": "playback_probe",
+                    "request_operation": "playback_media_segment",
+                    "url": "https://nrodlzdf-a.akamaihd.net/stream/seg-1.m4s",
+                    "method": "GET",
+                    "headers": {"range": "bytes=0-1024", "cookie": "sid=abc"},
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "resp_segment",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:15Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_playback",
+                "payload": {
+                    "request_id": "req_segment",
+                    "response_id": "resp_segment",
+                    "phase_id": "playback_probe",
+                    "url": "https://nrodlzdf-a.akamaihd.net/stream/seg-1.m4s",
+                    "method": "GET",
+                    "status_code": 200,
+                    "mime_type": "video/mp4",
+                    "headers": {"content-type": "video/mp4"},
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "phase_auth",
+                "event_type": "probe_phase_event",
+                "ts_utc": "2026-04-02T12:00:16Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_phase",
+                "payload": {"phase_id": "auth_probe", "transition": "start", "operation": "auth_probe_start"},
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "req_auth",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-02T12:00:17Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_auth",
+                "payload": {
+                    "request_id": "req_auth",
+                    "phase_id": "auth_probe",
+                    "request_operation": "auth_token_refresh",
+                    "url": "https://api.zdf.de/v1/auth/refresh",
+                    "method": "POST",
+                    "headers": {"authorization": "Bearer secret", "content-type": "application/json"},
+                    "body": "{\"refreshToken\":\"abc\"}",
+                    "host_class": "target",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_provider",
+                "event_id": "resp_auth",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:18Z",
+                "trace_id": "trace_provider",
+                "span_id": "",
+                "action_id": "action_auth",
+                "payload": {
+                    "request_id": "req_auth",
+                    "response_id": "resp_auth",
+                    "phase_id": "auth_probe",
+                    "url": "https://api.zdf.de/v1/auth/refresh",
+                    "method": "POST",
+                    "status_code": 200,
+                    "mime_type": "application/json",
+                    "headers": {"content-type": "application/json"},
+                    "body_preview": "{\"token\":\"new\"}",
+                    "host_class": "target",
+                },
+            },
+        ]
+
+    def _provider_export_payload(self):
+        rows = self._provider_export_rows()
+        normalized = normalize_runtime_rows(rows)
+        endpoint_candidates = build_endpoint_candidates(normalized)
+        required_headers = build_required_headers_active_replay(
+            normalized,
+            timeout_ms=2000,
+            replay_executor=lambda **kwargs: {
+                "success": ("x-required" in kwargs.get("headers", {}))
+                and ("sid=" in str(kwargs.get("headers", {}).get("cookie", ""))),
+                "status_code": 200 if ("x-required" in kwargs.get("headers", {})) and ("sid=" in str(kwargs.get("headers", {}).get("cookie", ""))) else 403,
+                "error": "",
+            },
+        )
+        replay_requirements = build_replay_requirements(normalized, prefer_active_replay=False)
+        field_matrix = build_field_matrix(normalized)
+        provenance_registry = build_provenance_registry(normalized)
+        export = build_provider_draft_export(
+            normalized,
+            endpoint_candidates=endpoint_candidates,
+            replay_requirements=replay_requirements,
+            required_headers_payload=required_headers,
+            field_matrix=field_matrix,
+            provenance_registry=provenance_registry,
+        )
+        return export
+
+    def test_provider_endpoint_template_normalization(self) -> None:
+        export = self._provider_export_payload()
+        templates = {str(item.get("endpoint_role") or ""): item for item in export.get("endpoint_templates", [])}
+        self.assertIn("search", templates)
+        search_tpl = templates["search"]
+        self.assertEqual(search_tpl.get("normalized_host"), "api.zdf.de")
+        self.assertEqual(search_tpl.get("normalized_path"), "/v1/search")
+        self.assertEqual(search_tpl.get("method"), "GET")
+        query_tpl = search_tpl.get("stable_query_template", {})
+        self.assertIn("q", query_tpl)
+
+    def test_provider_export_target_site_id_is_stable_and_canonical(self) -> None:
+        rows = normalize_runtime_rows(
+            [
+                {
+                    "schema_version": 1,
+                    "run_id": "run_target_site",
+                    "event_id": "req_home",
+                    "event_type": "network_request_event",
+                    "ts_utc": "2026-04-02T12:00:00Z",
+                    "trace_id": "trace_target_site",
+                    "span_id": "",
+                    "action_id": "action_home",
+                    "payload": {
+                        "request_id": "req_home",
+                        "phase_id": "home_probe",
+                        "request_operation": "home_request",
+                        "url": "https://www.zdf.de/",
+                        "method": "GET",
+                        "headers": {"accept": "application/json"},
+                        "host_class": "target_document",
+                    },
+                },
+                {
+                    "schema_version": 1,
+                    "run_id": "run_target_site",
+                    "event_id": "resp_home",
+                    "event_type": "network_response_event",
+                    "ts_utc": "2026-04-02T12:00:01Z",
+                    "trace_id": "trace_target_site",
+                    "span_id": "",
+                    "action_id": "action_home",
+                    "payload": {
+                        "request_id": "req_home",
+                        "response_id": "resp_home",
+                        "phase_id": "home_probe",
+                        "url": "https://www.zdf.de/",
+                        "method": "GET",
+                        "status_code": 200,
+                        "mime_type": "application/json",
+                        "headers": {"content-type": "application/json"},
+                        "body_preview": "{\"ok\":true}",
+                        "host_class": "target_document",
+                    },
+                },
+                {
+                    "schema_version": 1,
+                    "run_id": "run_target_site",
+                    "event_id": "req_search",
+                    "event_type": "network_request_event",
+                    "ts_utc": "2026-04-02T12:00:02Z",
+                    "trace_id": "trace_target_site",
+                    "span_id": "",
+                    "action_id": "action_search",
+                    "payload": {
+                        "request_id": "req_search",
+                        "phase_id": "search_probe",
+                        "request_operation": "search_request",
+                        "url": "https://api.zdf.de/v1/search?q=planet",
+                        "method": "GET",
+                        "headers": {"accept": "application/json"},
+                        "host_class": "target_api",
+                    },
+                },
+                {
+                    "schema_version": 1,
+                    "run_id": "run_target_site",
+                    "event_id": "resp_search",
+                    "event_type": "network_response_event",
+                    "ts_utc": "2026-04-02T12:00:03Z",
+                    "trace_id": "trace_target_site",
+                    "span_id": "",
+                    "action_id": "action_search",
+                    "payload": {
+                        "request_id": "req_search",
+                        "response_id": "resp_search",
+                        "phase_id": "search_probe",
+                        "url": "https://api.zdf.de/v1/search?q=planet",
+                        "method": "GET",
+                        "status_code": 200,
+                        "mime_type": "application/json",
+                        "headers": {"content-type": "application/json"},
+                        "body_preview": "{\"items\":[]}",
+                        "host_class": "target_api",
+                    },
+                },
+            ]
+        )
+        required_headers_payload = {
+            "schema_version": 1,
+            "inference_mode": "active_http_replay",
+            "endpoint_minimal_sets": [
+                {
+                    "operation": "home",
+                    "phase_id": "home_probe",
+                    "method": "GET",
+                    "host": "www.zdf.de",
+                    "path": "/",
+                    "request_ids": ["req_home"],
+                    "candidate_headers": ["accept"],
+                    "minimal_required_headers": ["accept"],
+                    "candidate_cookies": [],
+                    "minimal_required_cookies": [],
+                    "validation_mode": "active_http_replay",
+                    "elimination_mode": "active_http_replay_iterative",
+                },
+                {
+                    "operation": "search",
+                    "phase_id": "search_probe",
+                    "method": "GET",
+                    "host": "api.zdf.de",
+                    "path": "/v1/search",
+                    "request_ids": ["req_search"],
+                    "candidate_headers": ["accept"],
+                    "minimal_required_headers": ["accept"],
+                    "candidate_cookies": [],
+                    "minimal_required_cookies": [],
+                    "validation_mode": "active_http_replay",
+                    "elimination_mode": "active_http_replay_iterative",
+                },
+            ],
+        }
+        export = build_provider_draft_export(
+            rows,
+            endpoint_candidates={"candidates": []},
+            replay_requirements=build_replay_requirements(rows, prefer_active_replay=False),
+            required_headers_payload=required_headers_payload,
+            field_matrix=build_field_matrix(rows),
+            provenance_registry=build_provenance_registry(rows),
+        )
+        self.assertEqual(export.get("target_site_id"), "zdf.de")
+        descriptor = export.get("fishit_player_contract", {}).get("external_provider_descriptor", {})
+        self.assertEqual(descriptor.get("target_site_id"), "zdf.de")
+
+    def test_active_replay_minimizes_query_params_and_body_fields(self) -> None:
+        rows = normalize_runtime_rows(
+            [
+                {
+                    "schema_version": 1,
+                    "run_id": "run_active_min",
+                    "event_id": "req_active",
+                    "event_type": "network_request_event",
+                    "ts_utc": "2026-04-02T12:00:00Z",
+                    "trace_id": "trace_active_min",
+                    "span_id": "",
+                    "action_id": "action_active",
+                    "payload": {
+                        "request_id": "req_active",
+                        "phase_id": "search_probe",
+                        "request_operation": "search_request",
+                        "url": "http://127.0.0.1:54321/v1/search?q=planet&lang=de&token=abc",
+                        "method": "POST",
+                        "headers": {
+                            "x-required": "1",
+                            "x-optional": "yes",
+                            "cookie": "sid=abc",
+                            "content-type": "application/json",
+                        },
+                        "body": "{\"required\":\"yes\",\"optional\":\"x\"}",
+                        "host_class": "target_api",
+                    },
+                },
+                {
+                    "schema_version": 1,
+                    "run_id": "run_active_min",
+                    "event_id": "resp_active",
+                    "event_type": "network_response_event",
+                    "ts_utc": "2026-04-02T12:00:01Z",
+                    "trace_id": "trace_active_min",
+                    "span_id": "",
+                    "action_id": "action_active",
+                    "payload": {
+                        "request_id": "req_active",
+                        "response_id": "resp_active",
+                        "phase_id": "search_probe",
+                        "url": "http://127.0.0.1:54321/v1/search?q=planet&lang=de&token=abc",
+                        "method": "POST",
+                        "status_code": 200,
+                        "mime_type": "application/json",
+                        "headers": {"content-type": "application/json"},
+                        "body_preview": "{\"ok\":true}",
+                        "host_class": "target_api",
+                    },
+                },
+            ]
+        )
+
+        def stub_executor(**kwargs):
+            headers = {str(name).lower(): str(value) for name, value in kwargs.get("headers", {}).items()}
+            parsed = urlparse(str(kwargs.get("url") or ""))
+            query_keys = {str(name) for name, _ in parse_qsl(parsed.query, keep_blank_values=True)}
+            body_bytes = kwargs.get("body") or b""
+            body_keys = set()
+            if body_bytes:
+                try:
+                    body_obj = json.loads(body_bytes.decode("utf-8"))
+                    if isinstance(body_obj, dict):
+                        body_keys = {str(name) for name in body_obj.keys()}
+                except Exception:
+                    body_keys = set()
+            success = headers.get("x-required") == "1" and "q" in query_keys and "required" in body_keys
+            return {"success": success, "status_code": 200 if success else 403, "error": ""}
+
+        payload = build_required_headers_active_replay(
+            rows,
+            timeout_ms=2000,
+            allow_unsafe_methods=True,
+            replay_executor=stub_executor,
+        )
+        endpoint_sets = list(payload.get("endpoint_minimal_sets") or [])
+        self.assertEqual(len(endpoint_sets), 1)
+        endpoint = endpoint_sets[0]
+        self.assertEqual(endpoint.get("minimal_required_query_params"), ["q"])
+        self.assertEqual(endpoint.get("minimal_required_body_fields"), ["required"])
+        self.assertIn("lang", set(endpoint.get("candidate_query_params") or []))
+        self.assertIn("optional", set(endpoint.get("candidate_body_fields") or []))
+        steps = list(endpoint.get("elimination_steps") or [])
+        self.assertTrue(any(str(step.get("dimension") or "") == "query_param" for step in steps))
+        self.assertTrue(any(str(step.get("dimension") or "") == "body_field" for step in steps))
+
+    def test_provider_replay_minimizer_removes_non_required_headers(self) -> None:
+        export = self._provider_export_payload()
+        replay_by_role = {str(item.get("endpoint_role") or ""): item for item in export.get("replay_requirements", [])}
+        search_req = replay_by_role["search"]
+        self.assertIn("x-required", search_req.get("required_headers", []))
+        self.assertNotIn("x-optional", search_req.get("required_headers", []))
+        self.assertIn("x-optional", search_req.get("optional_headers", []))
+
+    def test_provider_required_provenance_inputs_are_exported(self) -> None:
+        export = self._provider_export_payload()
+        replay_by_role = {str(item.get("endpoint_role") or ""): item for item in export.get("replay_requirements", [])}
+        search_req = replay_by_role["search"]
+        provenance_inputs = set(search_req.get("required_provenance_inputs", []))
+        self.assertIn("cookies.sid", provenance_inputs)
+        auth_req = replay_by_role["auth_or_refresh"]
+        self.assertIn("api-auth", set(auth_req.get("required_provenance_inputs", [])))
+
+    def test_provider_playback_export_prefers_manifest_over_segment_noise(self) -> None:
+        export = self._provider_export_payload()
+        playback = export.get("playback_draft", {})
+        self.assertIn(playback.get("manifest_kind_detected"), {"hls", "dash"})
+        self.assertNotIn("range", playback.get("manifest_required_headers", []))
+        self.assertNotIn(".m4s", " ".join(playback.get("stream_container_hints", [])))
+
+    def test_provider_auth_export_never_emits_raw_token_values(self) -> None:
+        export = self._provider_export_payload()
+        auth = export.get("auth_draft", {})
+        joined = json.dumps(auth, ensure_ascii=True).lower()
+        self.assertNotIn("bearer secret", joined)
+        for item in auth.get("provenance_backed_token_inputs", []):
+            self.assertNotIn("bearer", str(item).lower())
+
     def test_provenance_graph_builds_edges(self) -> None:
         rows = [
             {
@@ -1599,6 +2254,66 @@ class RuntimeDatasetHardeningTests(unittest.TestCase):
         graph = build_provenance_graph(rows)
         self.assertEqual(graph.get("node_count"), 2)
         self.assertGreaterEqual(graph.get("edge_count", 0), 2)
+
+    def test_mission_event_normalization_sets_required_fields(self) -> None:
+        rows = normalize_runtime_rows(
+            [
+                {
+                    "schema_version": 1,
+                    "run_id": "run_mission_evt",
+                    "event_id": "mission_1",
+                    "event_type": "mission_event",
+                    "ts_utc": "2026-04-02T12:00:00Z",
+                    "trace_id": "trace_mission_evt",
+                    "span_id": "",
+                    "action_id": "action_mission_evt",
+                    "payload": {
+                        "operation": "mission_selected",
+                        "mission_id": "FISHIT_PIPELINE",
+                        "wizard_step_id": "target_url_input",
+                        "saturation_state": "INCOMPLETE",
+                        "phase_id": "background_noise",
+                        "target_site_id": "zdf_de",
+                        "export_readiness": "NOT_READY",
+                        "reason": "launcher_selection",
+                    },
+                }
+            ]
+        )
+        payload = rows[0].get("payload", {})
+        self.assertEqual(payload.get("operation"), "mission_selected")
+        self.assertEqual(payload.get("mission_id"), "FISHIT_PIPELINE")
+        self.assertEqual(payload.get("wizard_step_id"), "target_url_input")
+        self.assertEqual(payload.get("export_readiness"), "NOT_READY")
+        self.assertEqual(payload.get("host_class"), "ignored")
+
+    def test_api_mapping_required_artifact_aliases_are_deterministic(self) -> None:
+        artifacts = mission_required_artifacts("API_MAPPING")
+        by_id = {str(item.get("id") or ""): item for item in artifacts}
+        self.assertIn("site_runtime_model", by_id)
+        self.assertIn("endpoint_templates", by_id)
+        self.assertIn("replay_bundle", by_id)
+        self.assertIn("runtime_events", by_id)
+        self.assertIn("site_profile.draft.json", by_id["site_runtime_model"].get("paths", []))
+        self.assertIn("endpoint_candidates.json", by_id["endpoint_templates"].get("paths", []))
+        self.assertIn("replay_seed.json", by_id["replay_bundle"].get("paths", []))
+
+    def test_standalone_required_artifact_aliases_include_webapp_runtime_draft(self) -> None:
+        artifacts = mission_required_artifacts("STANDALONE_APP")
+        by_id = {str(item.get("id") or ""): item for item in artifacts}
+        self.assertIn("webapp_runtime_draft", by_id)
+        self.assertIn("webapp_runtime_draft.json", by_id["webapp_runtime_draft"].get("paths", []))
+        self.assertIn("provider_draft_export.json", by_id["webapp_runtime_draft"].get("paths", []))
+
+    def test_replay_bundle_required_artifact_aliases_include_fixture_outputs(self) -> None:
+        artifacts = mission_required_artifacts("REPLAY_BUNDLE")
+        by_id = {str(item.get("id") or ""): item for item in artifacts}
+        self.assertIn("replay_bundle", by_id)
+        self.assertIn("runtime_events", by_id)
+        self.assertIn("response_index", by_id)
+        self.assertIn("fixture_manifest", by_id)
+        self.assertIn("replay_bundle.json", by_id["replay_bundle"].get("paths", []))
+        self.assertIn("fixture_manifest.json", by_id["fixture_manifest"].get("paths", []))
 
 
 if __name__ == "__main__":

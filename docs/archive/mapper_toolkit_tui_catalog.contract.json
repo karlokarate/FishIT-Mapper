@@ -446,6 +446,97 @@
       "params": []
     },
     {
+      "id": "ui.anchor_create",
+      "screen": "ui",
+      "title": "Anchor Create",
+      "description": "Create a manual overlay anchor for correlation.",
+      "safety": "normal",
+      "argv": [
+        "ui",
+        "anchor-create"
+      ],
+      "params": [
+        {
+          "key": "name",
+          "label": "Anchor name",
+          "type": "string",
+          "required": false,
+          "flag": "--name",
+          "example": "search_input"
+        },
+        {
+          "key": "type",
+          "label": "Anchor type",
+          "type": "string",
+          "required": false,
+          "flag": "--type",
+          "default": "custom"
+        },
+        {
+          "key": "url",
+          "label": "URL override",
+          "type": "string",
+          "required": false,
+          "flag": "--url",
+          "example": "https://www.zdf.de"
+        }
+      ]
+    },
+    {
+      "id": "ui.anchor_label",
+      "screen": "ui",
+      "title": "Anchor Label",
+      "description": "Update anchor name/type for an existing overlay anchor.",
+      "safety": "normal",
+      "argv": [
+        "ui",
+        "anchor-label"
+      ],
+      "params": [
+        {
+          "key": "anchor_id",
+          "label": "Anchor ID",
+          "type": "string",
+          "required": true,
+          "flag": "--anchor-id"
+        },
+        {
+          "key": "name",
+          "label": "Anchor name",
+          "type": "string",
+          "required": false,
+          "flag": "--name"
+        },
+        {
+          "key": "type",
+          "label": "Anchor type",
+          "type": "string",
+          "required": false,
+          "flag": "--type"
+        }
+      ]
+    },
+    {
+      "id": "ui.anchor_remove",
+      "screen": "ui",
+      "title": "Anchor Remove",
+      "description": "Remove an overlay anchor by ID.",
+      "safety": "normal",
+      "argv": [
+        "ui",
+        "anchor-remove"
+      ],
+      "params": [
+        {
+          "key": "anchor_id",
+          "label": "Anchor ID",
+          "type": "string",
+          "required": true,
+          "flag": "--anchor-id"
+        }
+      ]
+    },
+    {
       "id": "ui.flow_run",
       "screen": "ui",
       "title": "Flow Run",
@@ -1825,6 +1916,18 @@
       "params": []
     },
     {
+      "id": "mapping.provider_draft_export",
+      "screen": "mapping",
+      "title": "Provider Draft Export",
+      "description": "Generate FishIT-Player-ready provider draft export.",
+      "safety": "normal",
+      "argv": [
+        "mapping",
+        "provider-draft-export"
+      ],
+      "params": []
+    },
+    {
       "id": "mapping.replay_seed",
       "screen": "mapping",
       "title": "Replay Seed",
@@ -1890,6 +1993,33 @@
           "required": false,
           "flag": "--quality-host",
           "example": "api.example.com"
+        }
+      ]
+    },
+    {
+      "id": "housekeeping.mission_summary",
+      "screen": "housekeeping",
+      "title": "Mission Summary",
+      "description": "Generate mission_export_summary.json with readiness and missing evidence.",
+      "safety": "normal",
+      "argv": [
+        "housekeeping",
+        "mission-summary"
+      ],
+      "params": [
+        {
+          "key": "mission_id",
+          "label": "Mission ID",
+          "type": "choice",
+          "required": false,
+          "flag": "--mission-id",
+          "default": "FISHIT_PIPELINE",
+          "choices": [
+            "FISHIT_PIPELINE",
+            "STANDALONE_APP",
+            "API_MAPPING",
+            "REPLAY_BUNDLE"
+          ]
         }
       ]
     },
@@ -1993,6 +2123,168 @@
         "show"
       ],
       "params": []
+    },
+    {
+      "id": "settings.wizard_start",
+      "screen": "settings",
+      "title": "Wizard Start",
+      "description": "Start mission-first wizard session.",
+      "safety": "normal",
+      "argv": [
+        "wizard",
+        "start"
+      ],
+      "params": [
+        {
+          "key": "mission_id",
+          "label": "Mission ID",
+          "type": "choice",
+          "required": false,
+          "flag": "--mission-id",
+          "default": "FISHIT_PIPELINE",
+          "choices": [
+            "FISHIT_PIPELINE",
+            "STANDALONE_APP",
+            "API_MAPPING",
+            "REPLAY_BUNDLE"
+          ]
+        },
+        {
+          "key": "device",
+          "label": "Device serial (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--device"
+        }
+      ]
+    },
+    {
+      "id": "settings.wizard_status",
+      "screen": "settings",
+      "title": "Wizard Status",
+      "description": "Read current mission wizard state from app runtime.",
+      "safety": "normal",
+      "argv": [
+        "wizard",
+        "status"
+      ],
+      "params": []
+    },
+    {
+      "id": "settings.wizard_set_target_url",
+      "screen": "settings",
+      "title": "Wizard Set Target URL",
+      "description": "Bind target URL and open it in browser context.",
+      "safety": "normal",
+      "argv": [
+        "wizard",
+        "set-target-url"
+      ],
+      "params": [
+        {
+          "key": "url",
+          "label": "Target URL",
+          "type": "string",
+          "required": true,
+          "positional": true,
+          "example": "https://www.zdf.de"
+        }
+      ]
+    },
+    {
+      "id": "settings.wizard_next_step",
+      "screen": "settings",
+      "title": "Wizard Next Step",
+      "description": "Advance to next wizard step when current is saturated.",
+      "safety": "normal",
+      "argv": [
+        "wizard",
+        "next-step"
+      ],
+      "params": []
+    },
+    {
+      "id": "settings.wizard_retry_step",
+      "screen": "settings",
+      "title": "Wizard Retry Step",
+      "description": "Reset current wizard step to INCOMPLETE for retry.",
+      "safety": "normal",
+      "argv": [
+        "wizard",
+        "retry-step"
+      ],
+      "params": []
+    },
+    {
+      "id": "settings.wizard_skip_optional_step",
+      "screen": "settings",
+      "title": "Wizard Skip Optional",
+      "description": "Skip current optional wizard step.",
+      "safety": "normal",
+      "argv": [
+        "wizard",
+        "skip-optional-step"
+      ],
+      "params": []
+    },
+    {
+      "id": "settings.wizard_finish",
+      "screen": "settings",
+      "title": "Wizard Finish",
+      "description": "Finalize wizard session and run pull/reindex/validate by default.",
+      "safety": "normal",
+      "argv": [
+        "wizard",
+        "finish"
+      ],
+      "params": [
+        {
+          "key": "saturation_state",
+          "label": "Saturation state",
+          "type": "choice",
+          "required": false,
+          "flag": "--saturation-state",
+          "default": "SATURATED",
+          "choices": [
+            "SATURATED",
+            "NEEDS_MORE_EVIDENCE",
+            "BLOCKED",
+            "INCOMPLETE"
+          ]
+        },
+        {
+          "key": "mission_id",
+          "label": "Mission ID",
+          "type": "choice",
+          "required": false,
+          "flag": "--mission-id",
+          "default": "FISHIT_PIPELINE",
+          "choices": [
+            "FISHIT_PIPELINE",
+            "STANDALONE_APP",
+            "API_MAPPING",
+            "REPLAY_BUNDLE"
+          ]
+        },
+        {
+          "key": "broadcast_only",
+          "label": "Broadcast only (skip host finalization)",
+          "type": "choice",
+          "required": false,
+          "flag": "--broadcast-only",
+          "takes_value": false,
+          "choices": [
+            "yes"
+          ]
+        },
+        {
+          "key": "device",
+          "label": "Device serial (optional)",
+          "type": "string",
+          "required": false,
+          "flag": "--device"
+        }
+      ]
     },
     {
       "id": "settings.provenance_mark",

@@ -141,6 +141,8 @@ class RuntimeDatasetIntegrationSmokeTests(unittest.TestCase):
                 "field_matrix.json",
                 "required_headers_report.json",
                 "replay_requirements.json",
+                "provider_draft_export.json",
+                "mission_export_summary.json",
             ]
             for name in required:
                 path = runtime_dir / name
@@ -170,6 +172,256 @@ class RuntimeDatasetIntegrationSmokeTests(unittest.TestCase):
             replay = payload.get("replay_requirements", {})
             self.assertIn("truncation_summary", replay)
             self.assertIn("total_truncated_responses", replay.get("truncation_summary", {}))
+
+    def test_reindex_preserves_wizard_and_anchor_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            rows = [
+                {
+                    "schema_version": 1,
+                    "run_id": "run_wizard",
+                    "event_id": "mission_selected",
+                    "event_type": "mission_event",
+                    "ts_utc": "2026-04-02T09:59:59Z",
+                    "trace_id": "trace_wiz",
+                    "span_id": "",
+                    "action_id": "action_wiz",
+                    "payload": {
+                        "operation": "mission_selected",
+                        "mission_id": "FISHIT_PIPELINE",
+                        "wizard_step_id": "target_url_input",
+                        "saturation_state": "INCOMPLETE",
+                        "phase_id": "background_noise",
+                        "target_site_id": "zdf_de",
+                        "export_readiness": "NOT_READY",
+                        "reason": "launcher_selection",
+                    },
+                },
+                {
+                    "schema_version": 1,
+                    "run_id": "run_wizard",
+                    "event_id": "wiz_start",
+                    "event_type": "wizard_event",
+                    "ts_utc": "2026-04-02T10:00:00Z",
+                    "trace_id": "trace_wiz",
+                    "span_id": "",
+                    "action_id": "action_wiz",
+                    "payload": {
+                        "operation": "wizard_started",
+                        "mission_id": "FISHIT_PIPELINE",
+                        "wizard_step_id": "target_url_input",
+                        "saturation_state": "INCOMPLETE",
+                        "phase_id": "background_noise",
+                        "target_site_id": "zdf_de",
+                    },
+                },
+                {
+                    "schema_version": 1,
+                    "run_id": "run_wizard",
+                    "event_id": "anchor_created",
+                    "event_type": "overlay_anchor_event",
+                    "ts_utc": "2026-04-02T10:00:01Z",
+                    "trace_id": "trace_wiz",
+                    "span_id": "",
+                    "action_id": "action_wiz",
+                    "payload": {
+                        "operation": "overlay_anchor_created",
+                        "anchor_id": "anchor_1",
+                        "name": "search_input",
+                        "anchor_type": "search_input",
+                        "phase_id": "search_probe",
+                        "target_site_id": "zdf_de",
+                    },
+                },
+            ]
+            rows.extend(phase_fixture_rows(run_id="run_wizard"))
+            write_events(runtime_dir, rows)
+            result = run_cli("housekeeping", "reindex", runtime_dir=runtime_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            events_path = runtime_dir / "events.jsonl"
+            self.assertTrue(events_path.exists())
+            event_types = []
+            with events_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    row = json.loads(line)
+                    event_types.append(row.get("event_type"))
+            self.assertIn("mission_event", event_types)
+            self.assertIn("wizard_event", event_types)
+            self.assertIn("overlay_anchor_event", event_types)
+
+    def test_mission_summary_reports_readiness_and_missing_requirements(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            rows = [
+                {
+                    "schema_version": 1,
+                    "run_id": "run_mission",
+                    "event_id": "mission_selected",
+                    "event_type": "mission_event",
+                    "ts_utc": "2026-04-02T10:01:00Z",
+                    "trace_id": "trace_mission",
+                    "span_id": "",
+                    "action_id": "action_mission",
+                    "payload": {
+                        "operation": "mission_selected",
+                        "mission_id": "FISHIT_PIPELINE",
+                        "wizard_step_id": "target_url_input",
+                        "saturation_state": "INCOMPLETE",
+                        "phase_id": "background_noise",
+                        "target_site_id": "zdf_de",
+                        "export_readiness": "NOT_READY",
+                        "reason": "launcher_selection",
+                    },
+                }
+            ]
+            rows.extend(phase_fixture_rows(run_id="run_mission"))
+            write_events(runtime_dir, rows)
+            result = run_cli(
+                "housekeeping",
+                "mission-summary",
+                "--mission-id",
+                "FISHIT_PIPELINE",
+                runtime_dir=runtime_dir,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout or "{}")
+            self.assertIn(payload.get("export_readiness"), {"NOT_READY", "PARTIAL", "BLOCKED", "READY"})
+            self.assertIn("missing_required_steps", payload)
+            self.assertIn("missing_required_files", payload)
+            self.assertIn("required_file_aliases", payload)
+            summary_path = runtime_dir / "mission_export_summary.json"
+            self.assertTrue(summary_path.exists())
+
+    def test_api_mapping_mission_summary_uses_mission_specific_requirements(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            rows = [
+                {
+                    "schema_version": 1,
+                    "run_id": "run_api_mapping",
+                    "event_id": "mission_selected",
+                    "event_type": "mission_event",
+                    "ts_utc": "2026-04-02T10:01:00Z",
+                    "trace_id": "trace_api_mapping",
+                    "span_id": "",
+                    "action_id": "action_api_mapping",
+                    "payload": {
+                        "operation": "mission_selected",
+                        "mission_id": "API_MAPPING",
+                        "wizard_step_id": "target_url_input",
+                        "saturation_state": "INCOMPLETE",
+                        "phase_id": "background_noise",
+                        "target_site_id": "zdf_de",
+                        "export_readiness": "NOT_READY",
+                        "reason": "launcher_selection",
+                    },
+                }
+            ]
+            rows.extend(phase_fixture_rows(run_id="run_api_mapping"))
+            write_events(runtime_dir, rows)
+            result = run_cli(
+                "housekeeping",
+                "reindex",
+                "--mission-id",
+                "API_MAPPING",
+                runtime_dir=runtime_dir,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            summary = json.loads((runtime_dir / "mission_export_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary.get("mission_id"), "API_MAPPING")
+            required_steps = set(summary.get("required_steps") or [])
+            self.assertIn("search_probe_step", required_steps)
+            self.assertNotIn("playback_probe_step", required_steps)
+
+    def test_standalone_mission_summary_uses_home_detail_required_steps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            rows = [
+                {
+                    "schema_version": 1,
+                    "run_id": "run_standalone",
+                    "event_id": "mission_selected",
+                    "event_type": "mission_event",
+                    "ts_utc": "2026-04-02T10:01:00Z",
+                    "trace_id": "trace_standalone",
+                    "span_id": "",
+                    "action_id": "action_standalone",
+                    "payload": {
+                        "operation": "mission_selected",
+                        "mission_id": "STANDALONE_APP",
+                        "wizard_step_id": "target_url_input",
+                        "saturation_state": "INCOMPLETE",
+                        "phase_id": "background_noise",
+                        "target_site_id": "zdf_de",
+                        "export_readiness": "NOT_READY",
+                        "reason": "launcher_selection",
+                    },
+                }
+            ]
+            rows.extend(phase_fixture_rows(run_id="run_standalone"))
+            write_events(runtime_dir, rows)
+            result = run_cli(
+                "housekeeping",
+                "reindex",
+                "--mission-id",
+                "STANDALONE_APP",
+                runtime_dir=runtime_dir,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            summary = json.loads((runtime_dir / "mission_export_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary.get("mission_id"), "STANDALONE_APP")
+            required_steps = set(summary.get("required_steps") or [])
+            self.assertIn("home_probe_step", required_steps)
+            self.assertIn("detail_probe_step", required_steps)
+            self.assertNotIn("search_probe_step", required_steps)
+            self.assertNotIn("playback_probe_step", required_steps)
+            required_files = set(summary.get("required_files") or [])
+            self.assertIn("webapp_runtime_draft", required_files)
+
+    def test_replay_bundle_mission_summary_uses_home_only_required_steps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            rows = [
+                {
+                    "schema_version": 1,
+                    "run_id": "run_replay_bundle",
+                    "event_id": "mission_selected",
+                    "event_type": "mission_event",
+                    "ts_utc": "2026-04-02T10:01:00Z",
+                    "trace_id": "trace_replay_bundle",
+                    "span_id": "",
+                    "action_id": "action_replay_bundle",
+                    "payload": {
+                        "operation": "mission_selected",
+                        "mission_id": "REPLAY_BUNDLE",
+                        "wizard_step_id": "target_url_input",
+                        "saturation_state": "INCOMPLETE",
+                        "phase_id": "background_noise",
+                        "target_site_id": "zdf_de",
+                        "export_readiness": "NOT_READY",
+                        "reason": "launcher_selection",
+                    },
+                }
+            ]
+            rows.extend(phase_fixture_rows(run_id="run_replay_bundle"))
+            write_events(runtime_dir, rows)
+            result = run_cli(
+                "housekeeping",
+                "reindex",
+                "--mission-id",
+                "REPLAY_BUNDLE",
+                runtime_dir=runtime_dir,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            summary = json.loads((runtime_dir / "mission_export_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary.get("mission_id"), "REPLAY_BUNDLE")
+            required_steps = set(summary.get("required_steps") or [])
+            self.assertIn("home_probe_step", required_steps)
+            self.assertNotIn("search_probe_step", required_steps)
+            self.assertNotIn("detail_probe_step", required_steps)
+            required_files = set(summary.get("required_files") or [])
+            self.assertIn("replay_bundle", required_files)
+            self.assertIn("fixture_manifest", required_files)
 
     def test_candidate_body_capture_reads_full_json_html_from_store(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

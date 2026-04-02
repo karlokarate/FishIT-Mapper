@@ -36,6 +36,8 @@ class MainContentLayout(
     val mainProgressBar: ProgressBar,
     val fabImageButtonNav: TextView,
     val fabCaptureToggle: TextView,
+    val fabMissionWizard: TextView,
+    val mapperWizardBanner: TextView,
     val translationLanguage: TextView,
     val remoteTextSearch: ImageButton,
     val externalSearchClose: ImageButton,
@@ -309,6 +311,36 @@ class MainContentLayout(
             }
             root.addView(fabCaptureToggle)
 
+            val fabMissionWizard = TextView(context).apply {
+                id = R.id.fab_mission_wizard
+                layoutParams = ConstraintLayout.LayoutParams(
+                    dpToPx(context, 72), dpToPx(context, 72)
+                )
+                background = ContextCompat.getDrawable(context, R.drawable.roundcorner)
+                gravity = android.view.Gravity.CENTER
+                setShadowLayer(1.4f, 1.2f, 1.0f, android.graphics.Color.WHITE)
+                setTextColor(ContextCompat.getColor(context, android.R.color.holo_blue_dark))
+                textSize = 12f
+                text = context.getString(R.string.mapper_wizard_button_label)
+                contentDescription = context.getString(R.string.mapper_wizard_button_desc)
+                visibility = View.GONE
+            }
+            root.addView(fabMissionWizard)
+
+            val mapperWizardBanner = TextView(context).apply {
+                id = R.id.mapper_wizard_banner
+                layoutParams = ConstraintLayout.LayoutParams(
+                    0, ConstraintLayout.LayoutParams.WRAP_CONTENT
+                )
+                background = ContextCompat.getDrawable(context, R.drawable.background_with_border)
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(dpToPx(context, 12), dpToPx(context, 10), dpToPx(context, 12), dpToPx(context, 10))
+                textSize = 14f
+                text = context.getString(R.string.mapper_wizard_banner_label)
+                visibility = View.GONE
+            }
+            root.addView(mapperWizardBanner)
+
             // translation_language
             val translationLanguage = TextView(context).apply {
                 id = R.id.translation_language
@@ -448,6 +480,20 @@ class MainContentLayout(
             constraintSet.setMargin(fabCaptureToggle.id, ConstraintSet.END, dpToPx(context, 92))
             constraintSet.setMargin(fabCaptureToggle.id, ConstraintSet.BOTTOM, dpToPx(context, 12))
 
+            // fab_mission_wizard: left of capture toggle
+            constraintSet.connect(fabMissionWizard.id, ConstraintSet.END, fabCaptureToggle.id, ConstraintSet.START)
+            constraintSet.connect(fabMissionWizard.id, ConstraintSet.BOTTOM, swipeRefreshLayout.id, ConstraintSet.BOTTOM)
+            constraintSet.setMargin(fabMissionWizard.id, ConstraintSet.END, dpToPx(context, 12))
+            constraintSet.setMargin(fabMissionWizard.id, ConstraintSet.BOTTOM, dpToPx(context, 12))
+
+            // mapper_wizard_banner: top overlay
+            constraintSet.connect(mapperWizardBanner.id, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+            constraintSet.connect(mapperWizardBanner.id, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+            constraintSet.connect(mapperWizardBanner.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+            constraintSet.setMargin(mapperWizardBanner.id, ConstraintSet.START, dpToPx(context, 12))
+            constraintSet.setMargin(mapperWizardBanner.id, ConstraintSet.END, dpToPx(context, 12))
+            constraintSet.setMargin(mapperWizardBanner.id, ConstraintSet.TOP, dpToPx(context, 10))
+
             // translation_language: end to parent, bottom to parent
             constraintSet.connect(translationLanguage.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
             constraintSet.connect(translationLanguage.id, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
@@ -483,6 +529,8 @@ class MainContentLayout(
                 mainProgressBar = mainProgressBar,
                 fabImageButtonNav = fabImageButtonNav,
                 fabCaptureToggle = fabCaptureToggle,
+                fabMissionWizard = fabMissionWizard,
+                mapperWizardBanner = mapperWizardBanner,
                 translationLanguage = translationLanguage,
                 remoteTextSearch = remoteTextSearch,
                 externalSearchClose = externalSearchClose,

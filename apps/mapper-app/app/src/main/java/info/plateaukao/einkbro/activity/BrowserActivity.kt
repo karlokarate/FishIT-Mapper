@@ -2,6 +2,7 @@ package info.plateaukao.einkbro.activity
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.app.DownloadManager
 import android.app.DownloadManager.ACTION_DOWNLOAD_COMPLETE
 import android.app.DownloadManager.Request
@@ -28,6 +29,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Message
+import android.text.InputType
 import android.view.ActionMode
 import android.view.Gravity
 import android.view.KeyEvent
@@ -45,6 +47,7 @@ import android.webkit.ValueCallback
 import android.view.ScaleGestureDetector
 import android.webkit.WebChromeClient.CustomViewCallback
 import android.webkit.WebView
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ProgressBar
@@ -74,6 +77,7 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.lifecycle.lifecycleScope
+import dev.fishit.mapper.wave01.debug.RuntimeToolkitMissionWizard
 import dev.fishit.mapper.wave01.debug.RuntimeToolkitTelemetry
 import info.plateaukao.einkbro.R
 import info.plateaukao.einkbro.browser.AlbumController
@@ -147,6 +151,11 @@ import info.plateaukao.einkbro.view.dialog.compose.TouchAreaDialogFragment
 import info.plateaukao.einkbro.view.dialog.compose.TranslateDialogFragment
 import info.plateaukao.einkbro.view.dialog.compose.TranslationConfigDlgFragment
 import info.plateaukao.einkbro.view.dialog.compose.TtsSettingDialogFragment
+import info.plateaukao.einkbro.view.dialog.mission.MissionExportHistoryDialogFragment
+import info.plateaukao.einkbro.view.dialog.mission.MissionExportSummaryDialogFragment
+import info.plateaukao.einkbro.view.dialog.mission.MissionFixtureReplayDialogFragment
+import info.plateaukao.einkbro.view.dialog.mission.MissionLauncherDialogFragment
+import info.plateaukao.einkbro.view.dialog.mission.MissionWizardSetupDialogFragment
 import info.plateaukao.einkbro.view.handlers.GestureHandler
 import info.plateaukao.einkbro.view.handlers.MenuActionHandler
 import info.plateaukao.einkbro.view.handlers.ToolbarActionHandler
@@ -196,7 +205,13 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 
-open class BrowserActivity : FragmentActivity(), BrowserController {
+open class BrowserActivity : FragmentActivity(),
+    BrowserController,
+    MissionLauncherDialogFragment.Host,
+    MissionWizardSetupDialogFragment.Host,
+    MissionExportSummaryDialogFragment.Host,
+    MissionFixtureReplayDialogFragment.Host,
+    MissionExportHistoryDialogFragment.Host {
     private lateinit var progressBar: ProgressBar
     protected lateinit var ebWebView: EBWebView
     protected open var shouldRunClearService: Boolean = true
@@ -1109,6 +1124,17 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
     }
 
     private fun promptRuntimeExportDestination() {
+        val summary = RuntimeToolkitTelemetry.buildMissionExportSummary(this)
+        RuntimeToolkitTelemetry.logMissionEvent(
+            context = this,
+            operation = "export_requested",
+            exportReadiness = summary.exportReadiness,
+            reason = summary.reason,
+            payload = mapOf(
+                "missing_required_steps" to summary.missingRequiredSteps,
+                "missing_required_artifacts" to summary.missingRequiredArtifacts,
+            ),
+        )
         val filename = "mapper_runtime_export_${Instant.now().toString().replace(':', '-').replace('.', '-')}.zip"
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -1139,11 +1165,33 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
                     }
                 }
             }.onSuccess {
+                val updatedSummary = RuntimeToolkitTelemetry.buildMissionExportSummary(this@BrowserActivity)
+                RuntimeToolkitTelemetry.logMissionEvent(
+                    context = this@BrowserActivity,
+                    operation = "export_finalized",
+                    exportReadiness = updatedSummary.exportReadiness,
+                    reason = "runtime_export_written",
+                    payload = mapOf(
+                        "destination_uri" to destinationUri.toString(),
+                        "missing_required_artifacts" to updatedSummary.missingRequiredArtifacts,
+                    ),
+                )
                 EBToast.showShort(
                     this@BrowserActivity,
                     getString(R.string.mapper_capture_exported, destinationUri.toString())
                 )
             }.onFailure { throwable ->
+                val updatedSummary = RuntimeToolkitTelemetry.buildMissionExportSummary(this@BrowserActivity)
+                RuntimeToolkitTelemetry.logMissionEvent(
+                    context = this@BrowserActivity,
+                    operation = "export_finalized",
+                    exportReadiness = "BLOCKED",
+                    reason = "runtime_export_failed",
+                    payload = mapOf(
+                        "error" to (throwable.message ?: "unknown"),
+                        "missing_required_artifacts" to updatedSummary.missingRequiredArtifacts,
+                    ),
+                )
                 EBToast.showShort(
                     this@BrowserActivity,
                     getString(
@@ -1377,6 +1425,9 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
         }
         if (this::captureToggleButton.isInitialized) {
             updateCaptureToggleUi(RuntimeToolkitTelemetry.isCaptureEnabled(this))
+        }
+        if (this::missionWizardButton.isInitialized) {
+            updateMissionWizardUi()
         }
     }
 
@@ -1642,7 +1693,23 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
 
         when (intent.action) {
             "", Intent.ACTION_MAIN -> {
-                initSavedTabs { addAlbum() }
+                if (isLauncherMainIntent(intent)) {
+                    initSavedTabs()
+                    val session = RuntimeToolkitTelemetry.missionSessionState(this)
+                    if (currentAlbumController == null) {
+                        if (session.missionId.isBlank()) {
+                            showMissionLauncherDialog()
+                        } else {
+                            showMissionWizardSetupDialog(session.missionId, session.targetUrl)
+                        }
+                    } else if (session.missionId.isNotBlank()) {
+                        showMissionWizardPanel()
+                    } else {
+                        updateMissionWizardUi()
+                    }
+                } else {
+                    initSavedTabs { addAlbum() }
+                }
             }
 
             ACTION_VIEW -> {
@@ -1696,6 +1763,7 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
                 } else {
                     val url = viewUri.toString()
                     getUrlMatchedBrowser(url)?.let { showAlbum(it) } ?: trackedAddAlbum(url, "intent_view")
+                    showMissionWizardBannerForUrl(url)
                 }
             }
 
@@ -1866,6 +1934,7 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
         }
         initFAB()
         initCaptureOverlayButton()
+        initMissionWizardOverlay()
         if (config.enableNavButtonGesture) {
             val onNavButtonTouchListener = object : SwipeTouchListener(this@BrowserActivity) {
                 override fun onSwipeTop() = gestureHandler.handle(config.navGestureUp)
@@ -2050,6 +2119,9 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
 
     private lateinit var fabImageViewController: FabImageViewController
     private lateinit var captureToggleButton: TextView
+    private lateinit var missionWizardButton: TextView
+    private lateinit var missionWizardBanner: TextView
+    private var pendingMissionBannerUrl: String = ""
 
     private fun initFAB() {
         fabImageViewController = FabImageViewController(
@@ -2108,6 +2180,823 @@ open class BrowserActivity : FragmentActivity(), BrowserController {
             captureToggleButton.contentDescription = getString(R.string.mapper_capture_button_desc_off)
             captureToggleButton.setTextColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
         }
+    }
+
+    private fun initMissionWizardOverlay() {
+        RuntimeToolkitMissionWizard.ensureRegistryLoaded(this)
+        missionWizardButton = findViewById(R.id.fab_mission_wizard)
+        missionWizardBanner = findViewById(R.id.mapper_wizard_banner)
+
+        missionWizardButton.visibility = VISIBLE
+        missionWizardButton.text = getString(R.string.mapper_wizard_button_label)
+        missionWizardButton.contentDescription = getString(R.string.mapper_wizard_button_desc)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            missionWizardButton.tooltipText = getString(R.string.mapper_wizard_button_desc)
+        }
+        missionWizardButton.setOnClickListener {
+            val session = RuntimeToolkitTelemetry.missionSessionState(this)
+            if (session.missionId.isBlank()) {
+                showMissionLauncherDialog()
+            } else {
+                showMissionWizardPanel()
+            }
+        }
+        missionWizardButton.setOnLongClickListener {
+            showMissionLauncherDialog()
+            true
+        }
+
+        missionWizardBanner.visibility = GONE
+        missionWizardBanner.setOnClickListener {
+            val seedUrl = pendingMissionBannerUrl
+            pendingMissionBannerUrl = ""
+            missionWizardBanner.visibility = GONE
+            showMissionWizardSetupDialog(
+                missionId = RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE,
+                seedUrl = seedUrl,
+            )
+        }
+        if (pendingMissionBannerUrl.isNotBlank()) {
+            missionWizardBanner.text = getString(R.string.mapper_wizard_banner_label)
+            missionWizardBanner.visibility = VISIBLE
+        }
+        updateMissionWizardUi()
+    }
+
+    private fun updateMissionWizardUi() {
+        if (!this::missionWizardButton.isInitialized) return
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        if (state.missionId.isBlank()) {
+            missionWizardButton.setTextColor(ContextCompat.getColor(this, android.R.color.holo_blue_dark))
+            missionWizardButton.text = getString(R.string.mapper_wizard_button_label)
+        } else {
+            val stepLabel = when {
+                state.wizardStepId.startsWith("home") -> "HOME"
+                state.wizardStepId.startsWith("search") -> "SRCH"
+                state.wizardStepId.startsWith("detail") -> "DTL"
+                state.wizardStepId.startsWith("playback") -> "PLAY"
+                state.wizardStepId.startsWith("auth") -> "AUTH"
+                state.wizardStepId.startsWith("final") -> "DONE"
+                else -> "WIZ"
+            }
+            missionWizardButton.text = stepLabel
+            val color = if (state.saturationState == RuntimeToolkitMissionWizard.SATURATION_SATURATED) {
+                android.R.color.holo_green_dark
+            } else {
+                android.R.color.holo_orange_dark
+            }
+            missionWizardButton.setTextColor(ContextCompat.getColor(this, color))
+        }
+    }
+
+    private fun isLauncherMainIntent(intent: Intent): Boolean {
+        if (intent.action != Intent.ACTION_MAIN) return false
+        val categories = intent.categories ?: emptySet<String>()
+        return categories.contains(Intent.CATEGORY_LAUNCHER)
+    }
+
+    private fun showMissionWizardBannerForUrl(url: String) {
+        if (!this::missionWizardBanner.isInitialized) {
+            pendingMissionBannerUrl = url
+            return
+        }
+        val session = RuntimeToolkitTelemetry.missionSessionState(this)
+        if (session.missionId.isNotBlank()) {
+            missionWizardBanner.visibility = GONE
+            return
+        }
+        pendingMissionBannerUrl = url
+        missionWizardBanner.text = getString(R.string.mapper_wizard_banner_label)
+        missionWizardBanner.visibility = VISIBLE
+    }
+
+    private fun showMissionLauncherDialog() {
+        if (supportFragmentManager.findFragmentByTag(MissionLauncherDialogFragment.TAG) != null) return
+        MissionLauncherDialogFragment()
+            .show(supportFragmentManager, MissionLauncherDialogFragment.TAG)
+    }
+
+    private fun showMissionWizardSetupDialog(missionId: String, seedUrl: String) {
+        if (supportFragmentManager.findFragmentByTag(MissionWizardSetupDialogFragment.TAG) != null) return
+        MissionWizardSetupDialogFragment
+            .newInstance(missionId = missionId, targetUrl = seedUrl)
+            .show(supportFragmentManager, MissionWizardSetupDialogFragment.TAG)
+    }
+
+    override fun onMissionLauncherSelectMission(missionId: String) {
+        showMissionWizardSetupDialog(missionId = missionId, seedUrl = "")
+    }
+
+    override fun onMissionLauncherOpenFixtureReplay() {
+        showMissionFixtureReplayDialog()
+    }
+
+    private fun showMissionFixtureReplayDialog() {
+        val status = RuntimeToolkitTelemetry.fixtureReplayStatus(this)
+        val canStartReplayMission = RuntimeToolkitMissionWizard.isMissionImplemented(
+            RuntimeToolkitMissionWizard.MISSION_REPLAY_BUNDLE,
+            this,
+        )
+        if (supportFragmentManager.findFragmentByTag(MissionFixtureReplayDialogFragment.TAG) != null) return
+        MissionFixtureReplayDialogFragment
+            .newInstance(
+                title = getString(R.string.mapper_mission_fixture_replay),
+                body = formatFixtureReplayStatusText(status),
+                canStartReplayMission = canStartReplayMission,
+            )
+            .show(supportFragmentManager, MissionFixtureReplayDialogFragment.TAG)
+    }
+
+    private fun formatFixtureReplayStatusText(status: RuntimeToolkitTelemetry.FixtureReplayStatus): String {
+        val lines = mutableListOf<String>()
+        lines += getString(R.string.mapper_mission_fixture_replay_message)
+        lines += ""
+        lines += "ready: ${status.ready}"
+        lines += "replay_bundle: ${status.replayBundlePresent}"
+        lines += "fixture_manifest: ${status.fixtureManifestPresent}"
+        lines += "response_index: ${status.responseIndexPresent}"
+        lines += "runtime_events: ${status.runtimeEventsPresent}"
+        lines += "latest_export: ${status.latestExportPresent}"
+        if (status.latestExportPath.isNotBlank()) {
+            lines += "latest_export_path: ${status.latestExportPath}"
+        }
+        return lines.joinToString("\n")
+    }
+
+    private fun showMissionExportHistoryDialog() {
+        val exports = RuntimeToolkitTelemetry.listExportBundles(this)
+        val lines = mutableListOf<String>()
+        val bundleLabels = mutableListOf<String>()
+        val bundlePaths = mutableListOf<String>()
+        if (exports.isEmpty()) {
+            lines += getString(R.string.mapper_mission_export_history_empty)
+        } else {
+            exports.take(10).forEachIndexed { idx, bundle ->
+                lines += "${idx + 1}. ${bundle.fileName}"
+                lines += "   ${bundle.sizeBytes} bytes | ${bundle.modifiedAtUtc}"
+                lines += "   ${bundle.absolutePath}"
+                bundleLabels += "${bundle.fileName} (${bundle.modifiedAtUtc})"
+                bundlePaths += bundle.absolutePath
+            }
+            if (exports.size > 10) {
+                lines += ""
+                lines += "+ ${exports.size - 10} more export bundles"
+            }
+        }
+        val replayEnabled = RuntimeToolkitMissionWizard.isMissionImplemented(
+            RuntimeToolkitMissionWizard.MISSION_REPLAY_BUNDLE,
+            this,
+        )
+        if (supportFragmentManager.findFragmentByTag(MissionExportHistoryDialogFragment.TAG) != null) return
+        MissionExportHistoryDialogFragment
+            .newInstance(
+                title = getString(R.string.mapper_mission_export_history_title),
+                body = lines.joinToString("\n"),
+                replayEnabled = replayEnabled,
+                bundleLabels = bundleLabels,
+                bundlePaths = bundlePaths,
+            )
+            .show(supportFragmentManager, MissionExportHistoryDialogFragment.TAG)
+    }
+
+    override fun onMissionFixtureReplayOpenExportHistory() {
+        showMissionExportHistoryDialog()
+    }
+
+    private fun seedReplayMissionFromCurrentContext() {
+        val session = RuntimeToolkitTelemetry.missionSessionState(this)
+        val seedUrl = session.targetUrl.ifBlank { ebWebView.url.orEmpty() }
+        showMissionWizardSetupDialog(
+            missionId = RuntimeToolkitMissionWizard.MISSION_REPLAY_BUNDLE,
+            seedUrl = seedUrl,
+        )
+    }
+
+    override fun onMissionFixtureReplayStartReplayMission() {
+        seedReplayMissionFromCurrentContext()
+    }
+
+    override fun onMissionExportHistoryRunReplay(bundlePath: String) {
+        runFixtureReplayFromExport(bundlePath)
+    }
+
+    override fun onMissionExportHistoryStartReplayMission() {
+        seedReplayMissionFromCurrentContext()
+    }
+
+    private fun runFixtureReplayFromExport(bundlePath: String) {
+        lifecycleScope.launch {
+            val readiness = withContext(Dispatchers.IO) {
+                RuntimeToolkitTelemetry.evaluateExportBundleReplayReadiness(bundlePath)
+            }
+            if (!readiness.ready) {
+                RuntimeToolkitTelemetry.logMissionEvent(
+                    context = this@BrowserActivity,
+                    operation = "fixture_replay_blocked",
+                    missionId = RuntimeToolkitTelemetry.missionSessionState(this@BrowserActivity).missionId,
+                    wizardStepId = RuntimeToolkitTelemetry.missionSessionState(this@BrowserActivity).wizardStepId,
+                    saturationState = RuntimeToolkitTelemetry.missionSessionState(this@BrowserActivity).saturationState,
+                    exportReadiness = "BLOCKED",
+                    reason = "bundle_readiness_failed",
+                    payload = mapOf(
+                        "bundle_path" to bundlePath,
+                        "missing_required_entries" to readiness.missingRequiredEntries,
+                        "warnings" to readiness.warnings,
+                    ),
+                )
+                AlertDialog.Builder(this@BrowserActivity)
+                    .setTitle(getString(R.string.mapper_mission_fixture_replay))
+                    .setMessage(
+                        buildString {
+                            append("Fixture replay blocked for selected bundle.\n\n")
+                            append("Bundle: ${readiness.bundleFileName}\n")
+                            append("Missing entries: ${readiness.missingRequiredEntries.joinToString(", ").ifBlank { "none" }}\n")
+                            if (readiness.warnings.isNotEmpty()) {
+                                append("Warnings: ${readiness.warnings.joinToString(", ")}")
+                            }
+                        },
+                    )
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+                return@launch
+            }
+
+            EBToast.showShort(this@BrowserActivity, "Running fixture replay from export...")
+            RuntimeToolkitTelemetry.logMissionEvent(
+                context = this@BrowserActivity,
+                operation = "fixture_replay_started",
+                missionId = RuntimeToolkitTelemetry.missionSessionState(this@BrowserActivity).missionId,
+                wizardStepId = RuntimeToolkitTelemetry.missionSessionState(this@BrowserActivity).wizardStepId,
+                saturationState = RuntimeToolkitTelemetry.missionSessionState(this@BrowserActivity).saturationState,
+                exportReadiness = "IN_PROGRESS",
+                reason = "bundle_selected",
+                payload = mapOf(
+                    "bundle_path" to bundlePath,
+                    "runnable_step_count" to readiness.runnableStepCount,
+                    "replay_step_count" to readiness.replayStepCount,
+                ),
+            )
+
+            val result = withContext(Dispatchers.IO) {
+                RuntimeToolkitTelemetry.executeFixtureReplayFromExport(
+                    context = this@BrowserActivity,
+                    bundlePath = bundlePath,
+                    maxRequests = 3,
+                )
+            }
+            val exportReadiness = if (result.successCount > 0) "PARTIAL" else "BLOCKED"
+            RuntimeToolkitTelemetry.logMissionEvent(
+                context = this@BrowserActivity,
+                operation = "fixture_replay_finished",
+                missionId = RuntimeToolkitTelemetry.missionSessionState(this@BrowserActivity).missionId,
+                wizardStepId = RuntimeToolkitTelemetry.missionSessionState(this@BrowserActivity).wizardStepId,
+                saturationState = RuntimeToolkitTelemetry.missionSessionState(this@BrowserActivity).saturationState,
+                exportReadiness = exportReadiness,
+                reason = if (result.successCount > 0) "fixture_replay_success" else "fixture_replay_no_success",
+                payload = mapOf(
+                    "bundle_path" to bundlePath,
+                    "attempted_count" to result.attemptedCount,
+                    "success_count" to result.successCount,
+                    "failed_count" to result.failedCount,
+                    "skipped_count" to result.skippedCount,
+                    "report_path" to result.reportPath,
+                    "warnings" to result.warnings,
+                ),
+            )
+
+            val summary = buildString {
+                append("Bundle: ${result.bundleFileName}\n")
+                append("Transport: ${result.transport}\n")
+                append("Attempted: ${result.attemptedCount}\n")
+                append("Success: ${result.successCount}\n")
+                append("Failed: ${result.failedCount}\n")
+                append("Skipped: ${result.skippedCount}\n")
+                if (result.reportPath.isNotBlank()) {
+                    append("Report: ${result.reportPath}\n")
+                }
+                if (result.warnings.isNotEmpty()) {
+                    append("\nWarnings:\n")
+                    result.warnings.forEach { append("- $it\n") }
+                }
+            }
+            AlertDialog.Builder(this@BrowserActivity)
+                .setTitle(getString(R.string.mapper_mission_fixture_replay))
+                .setMessage(summary.trim())
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+        }
+    }
+
+    override fun onMissionLauncherOpenAdvancedSettings() {
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        val lines = mutableListOf<String>()
+        lines += getString(R.string.mapper_mission_advanced_settings_message_header)
+        lines += ""
+        lines += "mission_id: ${state.missionId.ifBlank { RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE }}"
+        lines += "target_site_id: ${state.targetSiteId.ifBlank { "unknown_target" }}"
+        lines += "saturation_state: ${state.saturationState}"
+        lines += "scope_mode: ${RuntimeToolkitTelemetry.scopeMode(this)}"
+        lines += "target_host_family: ${RuntimeToolkitTelemetry.targetHostFamily(this).joinToString(",")}"
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.mapper_mission_advanced_settings))
+            .setMessage(lines.joinToString("\n"))
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    override fun onMissionSetupConfirmed(missionId: String, targetUrl: String) {
+        if (!RuntimeToolkitMissionWizard.isMissionImplemented(missionId, this)) {
+            EBToast.showShort(this, getString(R.string.mapper_mission_not_available))
+            return
+        }
+        if (targetUrl.isBlank()) {
+            EBToast.showShort(this, getString(R.string.mapper_target_url_required))
+            showMissionWizardSetupDialog(missionId = missionId, seedUrl = "")
+            return
+        }
+        RuntimeToolkitTelemetry.logMissionEvent(
+            context = this,
+            operation = "mission_selected",
+            missionId = missionId,
+            wizardStepId = RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+            exportReadiness = "NOT_READY",
+            reason = "setup_confirmed",
+        )
+        val state = RuntimeToolkitTelemetry.startMissionSession(
+            context = this,
+            missionId = missionId,
+        )
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = this,
+            operation = "wizard_started",
+            missionId = state.missionId,
+            wizardStepId = state.wizardStepId,
+            saturationState = state.saturationState,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+            targetSiteId = state.targetSiteId,
+        )
+        applyMissionTargetUrl(targetUrl, autoAdvance = true)
+        showMissionWizardPanel()
+    }
+
+    private fun applyMissionTargetUrl(urlInput: String, autoAdvance: Boolean) {
+        val url = urlInput.trim()
+        if (url.isBlank()) return
+        val normalizedUrl = if (BrowserUnit.isURL(url)) url else "https://$url"
+        val state = RuntimeToolkitTelemetry.setMissionTarget(this, normalizedUrl)
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = this,
+            stepId = RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+        )
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = this,
+            operation = "wizard_step_completed",
+            missionId = state.missionId,
+            wizardStepId = RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+            targetSiteId = state.targetSiteId,
+            payload = mapOf("target_url" to normalizedUrl),
+        )
+        RuntimeToolkitTelemetry.logMissionEvent(
+            context = this,
+            operation = "mission_config_applied",
+            missionId = state.missionId,
+            wizardStepId = RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+            exportReadiness = "NOT_READY",
+            reason = "target_url_bound",
+            payload = mapOf(
+                "target_url" to normalizedUrl,
+                "target_site_id" to state.targetSiteId,
+                "target_host_family" to state.targetHostFamily,
+            ),
+        )
+        if (currentAlbumController != null && config.isExternalSearchInSameTab) {
+            trackedLoadUrl(normalizedUrl, "wizard_target_url_input")
+        } else {
+            trackedAddAlbum(normalizedUrl, "wizard_target_url_input")
+        }
+        if (autoAdvance) {
+            RuntimeToolkitTelemetry.advanceMissionWizardStep(this)
+        }
+        updateMissionWizardUi()
+    }
+
+    private fun promptTargetUrlInput() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.mapper_target_url_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setText(RuntimeToolkitTelemetry.missionSessionState(this@BrowserActivity).targetUrl)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Target URL")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Open") { _, _ ->
+                applyMissionTargetUrl(input.text?.toString().orEmpty(), autoAdvance = true)
+                showMissionWizardPanel()
+            }
+            .show()
+    }
+
+    private fun formatWizardStatus(state: RuntimeToolkitTelemetry.MissionSessionState): String {
+        val steps = RuntimeToolkitMissionWizard.stepsForMission(state.missionId, this)
+        val lines = mutableListOf<String>()
+        lines += "Mission: ${state.missionId.ifBlank { "none" }}"
+        lines += "Current step: ${state.wizardStepId}"
+        lines += "Saturation: ${state.saturationState}"
+        lines += "Target site: ${state.targetSiteId.ifBlank { "unknown_target" }}"
+        lines += "Target URL: ${state.targetUrl.ifBlank { "-" }}"
+        lines += ""
+        lines += "Steps:"
+        steps.forEach { step ->
+            val marker = if (step.stepId == state.wizardStepId) ">" else " "
+            val status = state.stepStates[step.stepId] ?: RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE
+            val optional = if (step.optional) " (optional)" else ""
+            lines += "$marker ${step.stepId}$optional -> $status"
+        }
+        return lines.joinToString("\n")
+    }
+
+    private fun showMissionWizardPanel() {
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        if (state.missionId.isBlank()) {
+            showMissionLauncherDialog()
+            return
+        }
+        val actions = arrayOf(
+            "Start step",
+            "Check saturation",
+            "Next",
+            "Retry",
+            "Skip optional",
+            "Finish",
+            "Export summary",
+            "Anchor: Create",
+            "Anchor: Label",
+            "Anchor: Remove",
+            "Close",
+        )
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.mapper_wizard_status_title))
+            .setMessage(formatWizardStatus(state))
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> beginCurrentWizardStep()
+                    1 -> checkCurrentWizardStepSaturation()
+                    2 -> moveToNextWizardStep()
+                    3 -> retryCurrentWizardStep()
+                    4 -> skipOptionalCurrentWizardStep()
+                    5 -> finishMissionWizard()
+                    6 -> showMissionExportSummaryDialog()
+                    7 -> promptCreateAnchor()
+                    8 -> promptLabelAnchor()
+                    9 -> promptRemoveAnchor()
+                    else -> Unit
+                }
+            }
+            .show()
+    }
+
+    private fun beginCurrentWizardStep() {
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, this)
+        if (step == null) {
+            EBToast.showShort(this, "Unknown wizard step")
+            return
+        }
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = this,
+            stepId = step.stepId,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        )
+        if (!step.phaseId.isNullOrBlank()) {
+            RuntimeToolkitTelemetry.logProbePhaseEvent(
+                context = this,
+                phaseId = step.phaseId,
+                transition = "start",
+            )
+        }
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = this,
+            operation = "wizard_step_started",
+            missionId = state.missionId,
+            wizardStepId = step.stepId,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+            targetSiteId = state.targetSiteId,
+            payload = mapOf("instruction" to step.browserInstruction),
+        )
+        if (step.stepId == RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT) {
+            promptTargetUrlInput()
+        } else {
+            EBToast.showShort(this, step.browserInstruction)
+        }
+        updateMissionWizardUi()
+    }
+
+    private fun checkCurrentWizardStepSaturation() {
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        val result = RuntimeToolkitTelemetry.evaluateMissionStepSaturation(
+            context = this,
+            stepId = state.wizardStepId,
+        )
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = this,
+            stepId = state.wizardStepId,
+            saturationState = result.state,
+        )
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = this,
+            operation = "wizard_step_saturation_updated",
+            missionId = state.missionId,
+            wizardStepId = state.wizardStepId,
+            saturationState = result.state,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+            targetSiteId = state.targetSiteId,
+            payload = result.metrics + mapOf("reason" to result.reason),
+        )
+        val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, this)
+        if (result.state == RuntimeToolkitMissionWizard.SATURATION_SATURATED && !step?.phaseId.isNullOrBlank()) {
+            RuntimeToolkitTelemetry.logProbePhaseEvent(
+                context = this,
+                phaseId = step?.phaseId ?: "background_noise",
+                transition = "stop",
+            )
+            RuntimeToolkitTelemetry.clearActivePhaseId(this)
+            RuntimeToolkitTelemetry.logWizardEvent(
+                context = this,
+                operation = "wizard_step_completed",
+                missionId = state.missionId,
+                wizardStepId = state.wizardStepId,
+                saturationState = result.state,
+                phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+                targetSiteId = state.targetSiteId,
+                payload = mapOf("reason" to result.reason),
+            )
+        }
+        updateMissionWizardUi()
+        EBToast.showShort(this, "${state.wizardStepId}: ${result.state}")
+    }
+
+    private fun moveToNextWizardStep() {
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        val current = state.stepStates[state.wizardStepId].orEmpty()
+        if (current != RuntimeToolkitMissionWizard.SATURATION_SATURATED) {
+            RuntimeToolkitTelemetry.logWizardEvent(
+                context = this,
+                operation = "wizard_step_blocked",
+                missionId = state.missionId,
+                wizardStepId = state.wizardStepId,
+                saturationState = RuntimeToolkitMissionWizard.SATURATION_BLOCKED,
+                phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+                targetSiteId = state.targetSiteId,
+                payload = mapOf("reason" to "current_step_not_saturated"),
+            )
+            EBToast.showShort(this, "Current step not saturated")
+            return
+        }
+        val next = RuntimeToolkitTelemetry.advanceMissionWizardStep(this)
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = this,
+            operation = "wizard_step_started",
+            missionId = next.missionId,
+            wizardStepId = next.wizardStepId,
+            saturationState = next.saturationState,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+            targetSiteId = next.targetSiteId,
+        )
+        updateMissionWizardUi()
+        showMissionWizardPanel()
+    }
+
+    private fun retryCurrentWizardStep() {
+        val state = RuntimeToolkitTelemetry.retryMissionWizardStep(this)
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = this,
+            operation = "wizard_step_started",
+            missionId = state.missionId,
+            wizardStepId = state.wizardStepId,
+            saturationState = state.saturationState,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+            targetSiteId = state.targetSiteId,
+            payload = mapOf("retry" to true),
+        )
+        updateMissionWizardUi()
+        showMissionWizardPanel()
+    }
+
+    private fun skipOptionalCurrentWizardStep() {
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        if (!RuntimeToolkitMissionWizard.isOptionalStep(state.missionId, state.wizardStepId, this)) {
+            EBToast.showShort(this, "Current step is not optional")
+            return
+        }
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = this,
+            operation = "wizard_step_completed",
+            missionId = state.missionId,
+            wizardStepId = state.wizardStepId,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+            targetSiteId = state.targetSiteId,
+            payload = mapOf("skipped_optional" to true),
+        )
+        RuntimeToolkitTelemetry.skipOptionalMissionWizardStep(this)
+        updateMissionWizardUi()
+        showMissionWizardPanel()
+    }
+
+    private fun finishMissionWizard() {
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        val result = RuntimeToolkitTelemetry.evaluateMissionStepSaturation(
+            context = this,
+            stepId = RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT,
+        )
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = this,
+            stepId = RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT,
+            saturationState = result.state,
+        )
+        val finished = RuntimeToolkitTelemetry.finishMissionSession(this, result.state)
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = this,
+            operation = "wizard_finished",
+            missionId = finished.missionId,
+            wizardStepId = RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT,
+            saturationState = result.state,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+            targetSiteId = finished.targetSiteId,
+            payload = result.metrics + mapOf("reason" to result.reason),
+        )
+        val summaryFile = RuntimeToolkitTelemetry.writeMissionExportSummary(this)
+        val summary = RuntimeToolkitTelemetry.buildMissionExportSummary(this, finished.missionId)
+        RuntimeToolkitTelemetry.logMissionEvent(
+            context = this,
+            operation = "export_requested",
+            missionId = finished.missionId,
+            wizardStepId = RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT,
+            saturationState = result.state,
+            exportReadiness = summary.exportReadiness,
+            reason = summary.reason,
+            payload = mapOf(
+                "summary_path" to summaryFile.absolutePath,
+                "missing_required_steps" to summary.missingRequiredSteps,
+                "missing_required_artifacts" to summary.missingRequiredArtifacts,
+            ),
+        )
+        updateMissionWizardUi()
+        if (result.state == RuntimeToolkitMissionWizard.SATURATION_SATURATED) {
+            EBToast.showShort(this, "Wizard finished: SATURATED")
+        } else {
+            EBToast.showShort(this, "Wizard finish needs more evidence: ${result.reason}")
+        }
+        showMissionExportSummaryDialog()
+    }
+
+    private fun formatMissionExportSummaryText(summary: RuntimeToolkitTelemetry.MissionExportSummary): String {
+        val lines = mutableListOf<String>()
+        lines += "Mission: ${summary.missionId}"
+        lines += "Target site: ${summary.targetSiteId}"
+        lines += "Target URL: ${summary.targetUrl.ifBlank { "-" }}"
+        lines += "Export readiness: ${summary.exportReadiness}"
+        lines += "Reason: ${summary.reason}"
+        lines += ""
+        lines += "Missing required steps:"
+        if (summary.missingRequiredSteps.isEmpty()) {
+            lines += "- none"
+        } else {
+            summary.missingRequiredSteps.forEach { lines += "- $it" }
+        }
+        lines += ""
+        lines += "Missing required artifacts:"
+        if (summary.missingRequiredArtifacts.isEmpty()) {
+            lines += "- none"
+        } else {
+            summary.missingRequiredArtifacts.forEach { lines += "- $it" }
+        }
+        lines += ""
+        lines += "Warnings:"
+        if (summary.warnings.isEmpty()) {
+            lines += "- none"
+        } else {
+            summary.warnings.forEach { lines += "- $it" }
+        }
+        return lines.joinToString("\n")
+    }
+
+    private fun showMissionExportSummaryDialog() {
+        val summary = RuntimeToolkitTelemetry.buildMissionExportSummary(this)
+        val exportReady = summary.exportReadiness == "READY"
+        if (supportFragmentManager.findFragmentByTag(MissionExportSummaryDialogFragment.TAG) != null) return
+        MissionExportSummaryDialogFragment
+            .newInstance(
+                title = getString(R.string.mapper_mission_export_summary_title),
+                body = formatMissionExportSummaryText(summary),
+                exportReady = exportReady,
+            )
+            .show(supportFragmentManager, MissionExportSummaryDialogFragment.TAG)
+    }
+
+    override fun onMissionExportSummaryRequestExport() {
+        promptRuntimeExportDestination()
+    }
+
+    private fun promptCreateAnchor() {
+        val nameInput = EditText(this).apply {
+            id = View.generateViewId()
+            hint = "Anchor name"
+        }
+        val typeInput = EditText(this).apply { hint = "Anchor type (e.g. search_input)" }
+        val container = RelativeLayout(this).apply {
+            addView(nameInput)
+            val typeParams = RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.MATCH_PARENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT,
+            )
+            typeParams.addRule(RelativeLayout.BELOW, nameInput.id)
+            typeParams.topMargin = 24
+            addView(typeInput, typeParams)
+            setPadding(24, 24, 24, 24)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Create Anchor")
+            .setView(container)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Create") { _, _ ->
+                val created = RuntimeToolkitTelemetry.createOverlayAnchor(
+                    context = this,
+                    name = nameInput.text?.toString().orEmpty(),
+                    anchorType = typeInput.text?.toString().orEmpty(),
+                    url = ebWebView.url.orEmpty(),
+                )
+                EBToast.showShort(this, "Anchor created: ${created.anchorId.takeLast(8)}")
+            }
+            .show()
+    }
+
+    private fun promptLabelAnchor() {
+        val anchors = RuntimeToolkitTelemetry.listOverlayAnchors(this)
+        if (anchors.isEmpty()) {
+            EBToast.showShort(this, "No anchors available")
+            return
+        }
+        val labels = anchors.map { "${it.name} (${it.anchorType})" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Label Anchor")
+            .setItems(labels) { _, which ->
+                val selected = anchors[which]
+                val nameInput = EditText(this).apply {
+                    id = View.generateViewId()
+                    setText(selected.name)
+                }
+                val typeInput = EditText(this).apply { setText(selected.anchorType) }
+                val container = RelativeLayout(this).apply {
+                    addView(nameInput)
+                    val typeParams = RelativeLayout.LayoutParams(
+                        RelativeLayout.LayoutParams.MATCH_PARENT,
+                        RelativeLayout.LayoutParams.WRAP_CONTENT,
+                    )
+                    typeParams.addRule(RelativeLayout.BELOW, nameInput.id)
+                    typeParams.topMargin = 24
+                    addView(typeInput, typeParams)
+                    setPadding(24, 24, 24, 24)
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("Update Anchor")
+                    .setView(container)
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Save") { _, _ ->
+                        RuntimeToolkitTelemetry.labelOverlayAnchor(
+                            context = this,
+                            anchorId = selected.anchorId,
+                            name = nameInput.text?.toString().orEmpty(),
+                            anchorType = typeInput.text?.toString().orEmpty(),
+                        )
+                        EBToast.showShort(this, "Anchor updated")
+                    }
+                    .show()
+            }
+            .show()
+    }
+
+    private fun promptRemoveAnchor() {
+        val anchors = RuntimeToolkitTelemetry.listOverlayAnchors(this)
+        if (anchors.isEmpty()) {
+            EBToast.showShort(this, "No anchors available")
+            return
+        }
+        val labels = anchors.map { "${it.name} (${it.anchorType})" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Remove Anchor")
+            .setItems(labels) { _, which ->
+                val removed = RuntimeToolkitTelemetry.removeOverlayAnchor(this, anchors[which].anchorId)
+                EBToast.showShort(this, if (removed) "Anchor removed" else "Anchor remove failed")
+            }
+            .show()
     }
 
     private fun isMapperDebuggableBuild(): Boolean {

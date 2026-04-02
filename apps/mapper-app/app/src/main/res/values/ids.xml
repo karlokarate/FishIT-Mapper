@@ -5,6 +5,8 @@
     <item name="main_progress_bar" type="id" />
     <item name="fab_imageButtonNav" type="id" />
     <item name="fab_capture_toggle" type="id" />
+    <item name="fab_mission_wizard" type="id" />
+    <item name="mapper_wizard_banner" type="id" />
     <item name="translation_language" type="id" />
     <item name="remote_text_search" type="id" />
     <item name="external_search_close" type="id" />

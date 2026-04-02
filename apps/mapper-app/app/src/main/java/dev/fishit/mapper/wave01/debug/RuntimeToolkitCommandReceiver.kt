@@ -51,6 +51,16 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
                 OP_SET_PROBE_PHASE -> handleSetProbePhase(context, intent)
                 OP_CLEAR_PROBE_PHASE -> handleClearProbePhase(context)
                 OP_MARK_PROVENANCE -> handleMarkProvenance(context, intent)
+                OP_WIZARD_START -> handleWizardStart(context, intent)
+                OP_WIZARD_STATUS -> handleWizardStatus(context)
+                OP_WIZARD_SET_TARGET_URL -> handleWizardSetTargetUrl(context, intent)
+                OP_WIZARD_NEXT_STEP -> handleWizardNextStep(context)
+                OP_WIZARD_RETRY_STEP -> handleWizardRetryStep(context)
+                OP_WIZARD_SKIP_OPTIONAL_STEP -> handleWizardSkipOptionalStep(context)
+                OP_WIZARD_FINISH -> handleWizardFinish(context, intent)
+                OP_ANCHOR_CREATE -> handleAnchorCreate(context, intent)
+                OP_ANCHOR_LABEL -> handleAnchorLabel(context, intent)
+                OP_ANCHOR_REMOVE -> handleAnchorRemove(context, intent)
                 OP_NATIVE_REPLAY_REQUEST -> handleNativeReplayRequest(context, intent)
                 OP_RESET_SITE_STATE -> handleResetSiteState(context, intent)
                 OP_CLEAR_RUNTIME_EVENTS -> handleClearRuntimeEvents(context)
@@ -423,6 +433,292 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
         )
     }
 
+    private fun handleWizardStart(context: Context, intent: Intent) {
+        val missionId = intent.getStringExtra(EXTRA_MISSION_ID).orEmpty()
+            .ifBlank { RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE }
+        RuntimeToolkitMissionWizard.ensureRegistryLoaded(context)
+        if (!RuntimeToolkitMissionWizard.isMissionImplemented(missionId, context)) {
+            RuntimeToolkitTelemetry.emitAck(
+                OP_WIZARD_START,
+                "blocked",
+                mapOf(
+                    "mission_id" to missionId,
+                    "reason" to "mission_not_implemented",
+                ),
+            )
+            return
+        }
+        RuntimeToolkitTelemetry.logMissionEvent(
+            context = context,
+            operation = "mission_selected",
+            missionId = missionId,
+            wizardStepId = RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+            exportReadiness = "NOT_READY",
+            reason = "receiver_wizard_start",
+        )
+        val session = RuntimeToolkitTelemetry.startMissionSession(context, missionId)
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = context,
+            operation = "wizard_started",
+            missionId = session.missionId,
+            wizardStepId = session.wizardStepId,
+            saturationState = session.saturationState,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
+            targetSiteId = session.targetSiteId,
+        )
+        RuntimeToolkitTelemetry.emitAck(
+            OP_WIZARD_START,
+            "ok",
+            RuntimeToolkitTelemetry.missionSessionSnapshot(context),
+        )
+    }
+
+    private fun handleWizardStatus(context: Context) {
+        RuntimeToolkitTelemetry.emitAck(
+            OP_WIZARD_STATUS,
+            "ok",
+            RuntimeToolkitTelemetry.missionSessionSnapshot(context),
+        )
+    }
+
+    private fun handleWizardSetTargetUrl(context: Context, intent: Intent) {
+        val url = intent.getStringExtra(EXTRA_URL).orEmpty()
+        require(url.isNotBlank()) { "wizard_set_target_url requires url" }
+        val state = RuntimeToolkitTelemetry.setMissionTarget(context, url)
+        RuntimeToolkitTelemetry.logMissionEvent(
+            context = context,
+            operation = "mission_config_applied",
+            missionId = state.missionId,
+            wizardStepId = RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+            exportReadiness = "NOT_READY",
+            reason = "receiver_target_url_bound",
+            payload = mapOf(
+                "target_url" to url,
+                "target_site_id" to state.targetSiteId,
+                "target_host_family" to state.targetHostFamily,
+            ),
+        )
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = context,
+            stepId = RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+        )
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = context,
+            operation = "wizard_step_completed",
+            missionId = state.missionId,
+            wizardStepId = RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
+            targetSiteId = state.targetSiteId,
+            payload = mapOf("target_url" to url),
+        )
+        context.startActivity(
+            Intent(context, BrowserActivity::class.java)
+                .setAction(Intent.ACTION_VIEW)
+                .setData(Uri.parse(url))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        )
+        RuntimeToolkitTelemetry.emitAck(
+            OP_WIZARD_SET_TARGET_URL,
+            "ok",
+            RuntimeToolkitTelemetry.missionSessionSnapshot(context),
+        )
+    }
+
+    private fun handleWizardNextStep(context: Context) {
+        val before = RuntimeToolkitTelemetry.missionSessionState(context)
+        val currentState = before.stepStates[before.wizardStepId].orEmpty()
+        val isOptional = RuntimeToolkitMissionWizard.isOptionalStep(before.missionId, before.wizardStepId, context)
+        if (!isOptional && currentState != RuntimeToolkitMissionWizard.SATURATION_SATURATED) {
+            RuntimeToolkitTelemetry.logWizardEvent(
+                context = context,
+                operation = "wizard_step_blocked",
+                missionId = before.missionId,
+                wizardStepId = before.wizardStepId,
+                saturationState = RuntimeToolkitMissionWizard.SATURATION_BLOCKED,
+                phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
+                targetSiteId = before.targetSiteId,
+                payload = mapOf("reason" to "current_step_not_saturated"),
+            )
+            RuntimeToolkitTelemetry.emitAck(
+                OP_WIZARD_NEXT_STEP,
+                "blocked",
+                RuntimeToolkitTelemetry.missionSessionSnapshot(context),
+            )
+            return
+        }
+        val after = RuntimeToolkitTelemetry.advanceMissionWizardStep(context)
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = context,
+            operation = "wizard_step_started",
+            missionId = after.missionId,
+            wizardStepId = after.wizardStepId,
+            saturationState = after.saturationState,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
+            targetSiteId = after.targetSiteId,
+        )
+        RuntimeToolkitTelemetry.emitAck(
+            OP_WIZARD_NEXT_STEP,
+            "ok",
+            RuntimeToolkitTelemetry.missionSessionSnapshot(context),
+        )
+    }
+
+    private fun handleWizardRetryStep(context: Context) {
+        val state = RuntimeToolkitTelemetry.retryMissionWizardStep(context)
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = context,
+            operation = "wizard_step_started",
+            missionId = state.missionId,
+            wizardStepId = state.wizardStepId,
+            saturationState = state.saturationState,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
+            targetSiteId = state.targetSiteId,
+            payload = mapOf("retry" to true),
+        )
+        RuntimeToolkitTelemetry.emitAck(
+            OP_WIZARD_RETRY_STEP,
+            "ok",
+            RuntimeToolkitTelemetry.missionSessionSnapshot(context),
+        )
+    }
+
+    private fun handleWizardSkipOptionalStep(context: Context) {
+        val before = RuntimeToolkitTelemetry.missionSessionState(context)
+        if (!RuntimeToolkitMissionWizard.isOptionalStep(before.missionId, before.wizardStepId, context)) {
+            RuntimeToolkitTelemetry.emitAck(
+                OP_WIZARD_SKIP_OPTIONAL_STEP,
+                "blocked",
+                mapOf("reason" to "current_step_not_optional") + RuntimeToolkitTelemetry.missionSessionSnapshot(context),
+            )
+            return
+        }
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = context,
+            operation = "wizard_step_completed",
+            missionId = before.missionId,
+            wizardStepId = before.wizardStepId,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
+            targetSiteId = before.targetSiteId,
+            payload = mapOf("skipped_optional" to true),
+        )
+        val after = RuntimeToolkitTelemetry.skipOptionalMissionWizardStep(context)
+        RuntimeToolkitTelemetry.emitAck(
+            OP_WIZARD_SKIP_OPTIONAL_STEP,
+            "ok",
+            RuntimeToolkitTelemetry.missionSessionSnapshot(context),
+        )
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = context,
+            operation = "wizard_step_started",
+            missionId = after.missionId,
+            wizardStepId = after.wizardStepId,
+            saturationState = after.saturationState,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
+            targetSiteId = after.targetSiteId,
+        )
+    }
+
+    private fun handleWizardFinish(context: Context, intent: Intent) {
+        val missionId = intent.getStringExtra(EXTRA_MISSION_ID).orEmpty()
+        val sessionMission = RuntimeToolkitTelemetry.missionSessionState(context).missionId
+        val effectiveMissionId = missionId.ifBlank { sessionMission }
+            .ifBlank { RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE }
+        val requestedSaturation = intent.getStringExtra(EXTRA_SATURATION_STATE).orEmpty()
+            .ifBlank { RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE }
+        val state = RuntimeToolkitTelemetry.finishMissionSession(context, requestedSaturation)
+        val summaryFile = RuntimeToolkitTelemetry.writeMissionExportSummary(context, effectiveMissionId)
+        val summary = RuntimeToolkitTelemetry.buildMissionExportSummary(context, effectiveMissionId)
+        RuntimeToolkitTelemetry.logMissionEvent(
+            context = context,
+            operation = "export_requested",
+            missionId = effectiveMissionId,
+            wizardStepId = state.wizardStepId,
+            saturationState = state.saturationState,
+            exportReadiness = summary.exportReadiness,
+            reason = summary.reason,
+            payload = mapOf(
+                "summary_path" to summaryFile.absolutePath,
+                "missing_required_steps" to summary.missingRequiredSteps,
+                "missing_required_artifacts" to summary.missingRequiredArtifacts,
+            ),
+        )
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = context,
+            operation = "wizard_finished",
+            missionId = state.missionId,
+            wizardStepId = state.wizardStepId,
+            saturationState = state.saturationState,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
+            targetSiteId = state.targetSiteId,
+        )
+        RuntimeToolkitTelemetry.emitAck(
+            OP_WIZARD_FINISH,
+            "ok",
+            RuntimeToolkitTelemetry.missionSessionSnapshot(context),
+        )
+    }
+
+    private fun handleAnchorCreate(context: Context, intent: Intent) {
+        val name = intent.getStringExtra(EXTRA_ANCHOR_NAME).orEmpty()
+        val anchorType = intent.getStringExtra(EXTRA_ANCHOR_TYPE).orEmpty()
+        val url = intent.getStringExtra(EXTRA_URL).orEmpty()
+        val created = RuntimeToolkitTelemetry.createOverlayAnchor(
+            context = context,
+            name = name,
+            anchorType = anchorType,
+            url = url,
+        )
+        RuntimeToolkitTelemetry.emitAck(
+            OP_ANCHOR_CREATE,
+            "ok",
+            mapOf(
+                "anchor_id" to created.anchorId,
+                "name" to created.name,
+                "anchor_type" to created.anchorType,
+            ),
+        )
+    }
+
+    private fun handleAnchorLabel(context: Context, intent: Intent) {
+        val anchorId = intent.getStringExtra(EXTRA_ANCHOR_ID).orEmpty()
+        require(anchorId.isNotBlank()) { "anchor_label requires anchorId" }
+        val name = intent.getStringExtra(EXTRA_ANCHOR_NAME).orEmpty()
+        val anchorType = intent.getStringExtra(EXTRA_ANCHOR_TYPE).orEmpty()
+        val updated = RuntimeToolkitTelemetry.labelOverlayAnchor(
+            context = context,
+            anchorId = anchorId,
+            name = name,
+            anchorType = anchorType,
+        )
+        RuntimeToolkitTelemetry.emitAck(
+            OP_ANCHOR_LABEL,
+            if (updated != null) "ok" else "error",
+            mapOf(
+                "anchor_id" to anchorId,
+                "updated" to (updated != null),
+            ),
+        )
+    }
+
+    private fun handleAnchorRemove(context: Context, intent: Intent) {
+        val anchorId = intent.getStringExtra(EXTRA_ANCHOR_ID).orEmpty()
+        require(anchorId.isNotBlank()) { "anchor_remove requires anchorId" }
+        val removed = RuntimeToolkitTelemetry.removeOverlayAnchor(context, anchorId)
+        RuntimeToolkitTelemetry.emitAck(
+            OP_ANCHOR_REMOVE,
+            if (removed) "ok" else "error",
+            mapOf(
+                "anchor_id" to anchorId,
+                "removed" to removed,
+            ),
+        )
+    }
+
     private fun handleNativeReplayRequest(context: Context, intent: Intent) {
         val url = intent.getStringExtra(EXTRA_URL).orEmpty()
         require(url.isNotBlank()) { "native_replay_request requires url" }
@@ -646,6 +942,11 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
         const val EXTRA_PRODUCED_BY = "producedBy"
         const val EXTRA_CONSUMED_BY = "consumedBy"
         const val EXTRA_DERIVED_FROM = "derivedFrom"
+        const val EXTRA_MISSION_ID = "missionId"
+        const val EXTRA_SATURATION_STATE = "saturationState"
+        const val EXTRA_ANCHOR_ID = "anchorId"
+        const val EXTRA_ANCHOR_NAME = "anchorName"
+        const val EXTRA_ANCHOR_TYPE = "anchorType"
 
         private const val PREF_RUNTIME_SETTINGS = "mapper_toolkit_runtime_settings"
 
@@ -666,6 +967,16 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
         const val OP_SET_PROBE_PHASE = "set_probe_phase"
         const val OP_CLEAR_PROBE_PHASE = "clear_probe_phase"
         const val OP_MARK_PROVENANCE = "mark_provenance"
+        const val OP_WIZARD_START = "wizard_start"
+        const val OP_WIZARD_STATUS = "wizard_status"
+        const val OP_WIZARD_SET_TARGET_URL = "wizard_set_target_url"
+        const val OP_WIZARD_NEXT_STEP = "wizard_next_step"
+        const val OP_WIZARD_RETRY_STEP = "wizard_retry_step"
+        const val OP_WIZARD_SKIP_OPTIONAL_STEP = "wizard_skip_optional_step"
+        const val OP_WIZARD_FINISH = "wizard_finish"
+        const val OP_ANCHOR_CREATE = "anchor_create"
+        const val OP_ANCHOR_LABEL = "anchor_label"
+        const val OP_ANCHOR_REMOVE = "anchor_remove"
         const val OP_NATIVE_REPLAY_REQUEST = "native_replay_request"
         const val OP_RESET_SITE_STATE = "reset_site_state"
         const val OP_CLEAR_RUNTIME_EVENTS = "clear_runtime_events"

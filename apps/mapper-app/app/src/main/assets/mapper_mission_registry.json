@@ -1,0 +1,617 @@
+{
+  "schema_version": 1,
+  "source_contract": "contracts/mapper_target.yaml",
+  "missions": [
+    {
+      "mission_id": "FISHIT_PIPELINE",
+      "display_name": "FishIT Pipeline",
+      "description": "Build a FishIT-compatible provider draft with replay-minimized endpoint requirements for home, search, detail, playback, and auth when present.",
+      "implemented": true,
+      "availability_notes": "primary production mission in current cut",
+      "required_probe_set": [
+        "home_probe",
+        "search_probe",
+        "detail_probe",
+        "playback_probe"
+      ],
+      "optional_probe_set": [
+        "auth_probe",
+        "replay_probe"
+      ],
+      "expected_output_targets": [
+        "site_runtime_model",
+        "fishit_provider_draft",
+        "endpoint_templates",
+        "field_matrix",
+        "auth_draft",
+        "playback_draft",
+        "confidence_report",
+        "warnings"
+      ],
+      "required_steps": [
+        "target_url_input",
+        "home_probe_step",
+        "search_probe_step",
+        "detail_probe_step",
+        "playback_probe_step",
+        "final_validation_export"
+      ],
+      "optional_steps": [
+        "auth_probe_step_optional"
+      ],
+      "steps": [
+        {
+          "step_id": "target_url_input",
+          "display_name": "Target URL Input",
+          "optional": false,
+          "phase_id": null,
+          "browser_instruction": "Ziel-URL eingeben und laden.",
+          "required_signals": [
+            "target_site_id_correlated"
+          ]
+        },
+        {
+          "step_id": "home_probe_step",
+          "display_name": "Home Probe",
+          "optional": false,
+          "phase_id": "home_probe",
+          "browser_instruction": "Startseite laden und stabilen Home-Traffic erzeugen.",
+          "required_signals": [
+            "home_candidate_count_min"
+          ]
+        },
+        {
+          "step_id": "search_probe_step",
+          "display_name": "Search Probe",
+          "optional": false,
+          "phase_id": "search_probe",
+          "browser_instruction": "Suche ausfuehren, bis Such-Traffic gesaettigt ist.",
+          "required_signals": [
+            "search_candidate_count_min",
+            "field_matrix_search_mapping_present"
+          ]
+        },
+        {
+          "step_id": "detail_probe_step",
+          "display_name": "Detail Probe",
+          "optional": false,
+          "phase_id": "detail_probe",
+          "browser_instruction": "Detailseite oeffnen und Detail-Requests erfassen.",
+          "required_signals": [
+            "detail_candidate_count_min",
+            "field_matrix_detail_mapping_present"
+          ]
+        },
+        {
+          "step_id": "playback_probe_step",
+          "display_name": "Playback Probe",
+          "optional": false,
+          "phase_id": "playback_probe",
+          "browser_instruction": "Playback starten und Resolver/Manifest erfassen.",
+          "required_signals": [
+            "playback_resolver_or_manifest_present"
+          ]
+        },
+        {
+          "step_id": "final_validation_export",
+          "display_name": "Final Validation & Export",
+          "optional": false,
+          "phase_id": null,
+          "browser_instruction": "Saettigung pruefen und missionrelevante Exporte finalisieren.",
+          "required_signals": [
+            "mission_relevant_export_artifacts_ready"
+          ]
+        },
+        {
+          "step_id": "auth_probe_step_optional",
+          "display_name": "Auth Probe (Optional)",
+          "optional": true,
+          "phase_id": "auth_probe",
+          "browser_instruction": "Optional anmelden, um Auth-/Refresh-Evidenz zu erfassen.",
+          "required_signals": []
+        }
+      ],
+      "required_artifacts": [
+        {
+          "id": "site_runtime_model",
+          "paths": [
+            "site_profile.draft.json",
+            "site_runtime_model.json"
+          ]
+        },
+        {
+          "id": "fishit_provider_draft",
+          "paths": [
+            "provider_draft_export.json",
+            "fishit_provider_draft.json"
+          ]
+        },
+        {
+          "id": "endpoint_templates",
+          "paths": [
+            "endpoint_candidates.json",
+            "endpoint_templates.json"
+          ]
+        },
+        {
+          "id": "field_matrix",
+          "paths": [
+            "field_matrix.json"
+          ]
+        },
+        {
+          "id": "auth_draft",
+          "paths": [
+            "replay_requirements.json",
+            "auth_draft.json"
+          ]
+        },
+        {
+          "id": "playback_draft",
+          "paths": [
+            "replay_seed.json",
+            "playback_draft.json"
+          ]
+        },
+        {
+          "id": "confidence_report",
+          "paths": [
+            "pipeline_ready_report.json",
+            "confidence_report.json"
+          ]
+        },
+        {
+          "id": "warnings",
+          "paths": [
+            "mission_export_summary.json",
+            "warnings.json"
+          ]
+        }
+      ]
+    },
+    {
+      "mission_id": "STANDALONE_APP",
+      "display_name": "Selective App Builder",
+      "description": "Build a selective website-to-app runtime bundle with navigation, session bootstrap, playback policy, and optional selective native data endpoints.",
+      "implemented": true,
+      "availability_notes": "enabled in this slice with mission-aware finalization",
+      "required_probe_set": [
+        "home_probe",
+        "detail_probe"
+      ],
+      "optional_probe_set": [
+        "search_probe",
+        "playback_probe",
+        "auth_probe"
+      ],
+      "expected_output_targets": [
+        "site_runtime_model",
+        "webapp_runtime_draft",
+        "endpoint_templates",
+        "field_matrix",
+        "playback_draft",
+        "confidence_report",
+        "warnings"
+      ],
+      "required_steps": [
+        "target_url_input",
+        "home_probe_step",
+        "detail_probe_step",
+        "final_validation_export"
+      ],
+      "optional_steps": [
+        "search_probe_step",
+        "playback_probe_step",
+        "auth_probe_step_optional"
+      ],
+      "steps": [
+        {
+          "step_id": "target_url_input",
+          "display_name": "Target URL Input",
+          "optional": false,
+          "phase_id": null,
+          "browser_instruction": "Ziel-URL eingeben und laden.",
+          "required_signals": [
+            "target_site_id_correlated"
+          ]
+        },
+        {
+          "step_id": "home_probe_step",
+          "display_name": "Home Probe",
+          "optional": false,
+          "phase_id": "home_probe",
+          "browser_instruction": "Startseite laden und stabilen Home-Traffic erzeugen.",
+          "required_signals": [
+            "home_candidate_count_min"
+          ]
+        },
+        {
+          "step_id": "detail_probe_step",
+          "display_name": "Detail Probe",
+          "optional": false,
+          "phase_id": "detail_probe",
+          "browser_instruction": "Detailseite oeffnen und Detail-Requests erfassen.",
+          "required_signals": [
+            "detail_candidate_count_min"
+          ]
+        },
+        {
+          "step_id": "final_validation_export",
+          "display_name": "Final Validation & Export",
+          "optional": false,
+          "phase_id": null,
+          "browser_instruction": "Saettigung pruefen und missionrelevante Exporte finalisieren.",
+          "required_signals": [
+            "mission_relevant_export_artifacts_ready"
+          ]
+        },
+        {
+          "step_id": "search_probe_step",
+          "display_name": "Search Probe",
+          "optional": true,
+          "phase_id": "search_probe",
+          "browser_instruction": "Suche ausfuehren, bis Such-Traffic gesaettigt ist.",
+          "required_signals": []
+        },
+        {
+          "step_id": "playback_probe_step",
+          "display_name": "Playback Probe",
+          "optional": true,
+          "phase_id": "playback_probe",
+          "browser_instruction": "Playback starten und Resolver/Manifest erfassen.",
+          "required_signals": []
+        },
+        {
+          "step_id": "auth_probe_step_optional",
+          "display_name": "Auth Probe (Optional)",
+          "optional": true,
+          "phase_id": "auth_probe",
+          "browser_instruction": "Optional anmelden, um Auth-/Refresh-Evidenz zu erfassen.",
+          "required_signals": []
+        }
+      ],
+      "required_artifacts": [
+        {
+          "id": "site_runtime_model",
+          "paths": [
+            "site_profile.draft.json",
+            "site_runtime_model.json"
+          ]
+        },
+        {
+          "id": "webapp_runtime_draft",
+          "paths": [
+            "webapp_runtime_draft.json"
+          ]
+        },
+        {
+          "id": "endpoint_templates",
+          "paths": [
+            "endpoint_candidates.json",
+            "endpoint_templates.json"
+          ]
+        },
+        {
+          "id": "field_matrix",
+          "paths": [
+            "field_matrix.json"
+          ]
+        },
+        {
+          "id": "playback_draft",
+          "paths": [
+            "replay_seed.json",
+            "playback_draft.json"
+          ]
+        },
+        {
+          "id": "confidence_report",
+          "paths": [
+            "pipeline_ready_report.json",
+            "confidence_report.json"
+          ]
+        },
+        {
+          "id": "warnings",
+          "paths": [
+            "mission_export_summary.json",
+            "warnings.json"
+          ]
+        }
+      ]
+    },
+    {
+      "mission_id": "API_MAPPING",
+      "display_name": "API / Endpoint Mapping",
+      "description": "Build a technical endpoint/auth/provenance/replay export with minimal consumer UI assumptions.",
+      "implemented": true,
+      "availability_notes": "enabled in this slice with mission-aware finalization",
+      "required_probe_set": [
+        "home_probe",
+        "search_probe",
+        "detail_probe"
+      ],
+      "optional_probe_set": [
+        "playback_probe",
+        "auth_probe",
+        "replay_probe"
+      ],
+      "expected_output_targets": [
+        "site_runtime_model",
+        "endpoint_templates",
+        "replay_bundle",
+        "confidence_report",
+        "warnings"
+      ],
+      "required_steps": [
+        "target_url_input",
+        "home_probe_step",
+        "search_probe_step",
+        "detail_probe_step",
+        "final_validation_export"
+      ],
+      "optional_steps": [
+        "playback_probe_step",
+        "auth_probe_step_optional"
+      ],
+      "steps": [
+        {
+          "step_id": "target_url_input",
+          "display_name": "Target URL Input",
+          "optional": false,
+          "phase_id": null,
+          "browser_instruction": "Ziel-URL eingeben und laden.",
+          "required_signals": [
+            "target_site_id_correlated"
+          ]
+        },
+        {
+          "step_id": "home_probe_step",
+          "display_name": "Home Probe",
+          "optional": false,
+          "phase_id": "home_probe",
+          "browser_instruction": "Startseite laden und stabilen Home-Traffic erzeugen.",
+          "required_signals": []
+        },
+        {
+          "step_id": "search_probe_step",
+          "display_name": "Search Probe",
+          "optional": false,
+          "phase_id": "search_probe",
+          "browser_instruction": "Suche ausfuehren, bis Such-Traffic gesaettigt ist.",
+          "required_signals": [
+            "search_candidate_count_min"
+          ]
+        },
+        {
+          "step_id": "detail_probe_step",
+          "display_name": "Detail Probe",
+          "optional": false,
+          "phase_id": "detail_probe",
+          "browser_instruction": "Detailseite oeffnen und Detail-Requests erfassen.",
+          "required_signals": [
+            "detail_candidate_count_min"
+          ]
+        },
+        {
+          "step_id": "final_validation_export",
+          "display_name": "Final Validation & Export",
+          "optional": false,
+          "phase_id": null,
+          "browser_instruction": "Saettigung pruefen und missionrelevante Exporte finalisieren.",
+          "required_signals": [
+            "mission_relevant_export_artifacts_ready"
+          ]
+        },
+        {
+          "step_id": "playback_probe_step",
+          "display_name": "Playback Probe",
+          "optional": true,
+          "phase_id": "playback_probe",
+          "browser_instruction": "Playback starten und Resolver/Manifest erfassen.",
+          "required_signals": []
+        },
+        {
+          "step_id": "auth_probe_step_optional",
+          "display_name": "Auth Probe (Optional)",
+          "optional": true,
+          "phase_id": "auth_probe",
+          "browser_instruction": "Optional anmelden, um Auth-/Refresh-Evidenz zu erfassen.",
+          "required_signals": []
+        }
+      ],
+      "required_artifacts": [
+        {
+          "id": "site_runtime_model",
+          "paths": [
+            "site_profile.draft.json",
+            "site_runtime_model.json"
+          ]
+        },
+        {
+          "id": "endpoint_templates",
+          "paths": [
+            "endpoint_candidates.json",
+            "endpoint_templates.json"
+          ]
+        },
+        {
+          "id": "replay_bundle",
+          "paths": [
+            "replay_seed.json",
+            "replay_bundle.json"
+          ]
+        },
+        {
+          "id": "confidence_report",
+          "paths": [
+            "pipeline_ready_report.json",
+            "confidence_report.json"
+          ]
+        },
+        {
+          "id": "warnings",
+          "paths": [
+            "mission_export_summary.json",
+            "warnings.json"
+          ]
+        },
+        {
+          "id": "runtime_events",
+          "paths": [
+            "events/runtime_events.jsonl",
+            "runtime_events.jsonl"
+          ]
+        }
+      ]
+    },
+    {
+      "mission_id": "REPLAY_BUNDLE",
+      "display_name": "Replay / Debug Bundle",
+      "description": "Produce a fixture-ready replay bundle with raw events, response indexes, provenance, and expected outcomes for deterministic offline replay.",
+      "implemented": true,
+      "availability_notes": "enabled in this slice with mission-aware finalization",
+      "required_probe_set": [
+        "home_probe"
+      ],
+      "optional_probe_set": [
+        "search_probe",
+        "detail_probe",
+        "playback_probe",
+        "auth_probe",
+        "replay_probe"
+      ],
+      "expected_output_targets": [
+        "site_runtime_model",
+        "replay_bundle",
+        "confidence_report",
+        "warnings",
+        "fixture_bundle"
+      ],
+      "required_steps": [
+        "target_url_input",
+        "home_probe_step",
+        "final_validation_export"
+      ],
+      "optional_steps": [
+        "search_probe_step",
+        "detail_probe_step",
+        "playback_probe_step",
+        "auth_probe_step_optional"
+      ],
+      "steps": [
+        {
+          "step_id": "target_url_input",
+          "display_name": "Target URL Input",
+          "optional": false,
+          "phase_id": null,
+          "browser_instruction": "Ziel-URL eingeben und laden.",
+          "required_signals": [
+            "target_site_id_correlated"
+          ]
+        },
+        {
+          "step_id": "home_probe_step",
+          "display_name": "Home Probe",
+          "optional": false,
+          "phase_id": "home_probe",
+          "browser_instruction": "Startseite laden und stabilen Home-Traffic erzeugen.",
+          "required_signals": [
+            "home_candidate_count_min"
+          ]
+        },
+        {
+          "step_id": "final_validation_export",
+          "display_name": "Final Validation & Export",
+          "optional": false,
+          "phase_id": null,
+          "browser_instruction": "Saettigung pruefen und missionrelevante Exporte finalisieren.",
+          "required_signals": [
+            "mission_relevant_export_artifacts_ready"
+          ]
+        },
+        {
+          "step_id": "search_probe_step",
+          "display_name": "Search Probe",
+          "optional": true,
+          "phase_id": "search_probe",
+          "browser_instruction": "Suche ausfuehren, bis Such-Traffic gesaettigt ist.",
+          "required_signals": []
+        },
+        {
+          "step_id": "detail_probe_step",
+          "display_name": "Detail Probe",
+          "optional": true,
+          "phase_id": "detail_probe",
+          "browser_instruction": "Detailseite oeffnen und Detail-Requests erfassen.",
+          "required_signals": []
+        },
+        {
+          "step_id": "playback_probe_step",
+          "display_name": "Playback Probe",
+          "optional": true,
+          "phase_id": "playback_probe",
+          "browser_instruction": "Playback starten und Resolver/Manifest erfassen.",
+          "required_signals": []
+        },
+        {
+          "step_id": "auth_probe_step_optional",
+          "display_name": "Auth Probe (Optional)",
+          "optional": true,
+          "phase_id": "auth_probe",
+          "browser_instruction": "Optional anmelden, um Auth-/Refresh-Evidenz zu erfassen.",
+          "required_signals": []
+        }
+      ],
+      "required_artifacts": [
+        {
+          "id": "site_runtime_model",
+          "paths": [
+            "site_profile.draft.json",
+            "site_runtime_model.json"
+          ]
+        },
+        {
+          "id": "replay_bundle",
+          "paths": [
+            "replay_seed.json",
+            "replay_bundle.json"
+          ]
+        },
+        {
+          "id": "confidence_report",
+          "paths": [
+            "pipeline_ready_report.json",
+            "confidence_report.json"
+          ]
+        },
+        {
+          "id": "warnings",
+          "paths": [
+            "mission_export_summary.json",
+            "warnings.json"
+          ]
+        },
+        {
+          "id": "runtime_events",
+          "paths": [
+            "events/runtime_events.jsonl",
+            "runtime_events.jsonl"
+          ]
+        },
+        {
+          "id": "response_index",
+          "paths": [
+            "response_index.json"
+          ]
+        },
+        {
+          "id": "fixture_manifest",
+          "paths": [
+            "fixture_manifest.json"
+          ]
+        }
+      ]
+    }
+  ]
+}
