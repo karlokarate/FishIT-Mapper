@@ -303,6 +303,71 @@ class RuntimeDatasetHardeningTests(unittest.TestCase):
         self.assertEqual(by_event_id["req_search"]["payload"].get("phase_id"), "search_probe")
         self.assertEqual(by_event_id["req_bg"]["payload"].get("phase_id"), "background_noise")
 
+    def test_phase_assignment_upgrades_background_when_marker_window_active(self) -> None:
+        rows = [
+            {
+                "schema_version": 1,
+                "run_id": "run_1",
+                "event_id": "phase_search",
+                "event_type": "probe_phase_event",
+                "ts_utc": "2026-04-01T12:00:00Z",
+                "trace_id": "trace_phase",
+                "span_id": "",
+                "action_id": "action_phase",
+                "payload": {"phase_id": "search_probe", "transition": "start"},
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_1",
+                "event_id": "req_search_bg",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-01T12:00:01Z",
+                "trace_id": "trace_1",
+                "span_id": "",
+                "action_id": "action_1",
+                "payload": {
+                    "request_id": "req_search_bg",
+                    "phase_id": "background_noise",
+                    "request_operation": "search_request",
+                    "url": "https://api.example.com/v1/search?q=something",
+                    "method": "GET",
+                    "headers": {},
+                },
+            },
+        ]
+        normalized = normalize_runtime_rows(rows)
+        by_event_id = {str(row.get("event_id")): row for row in normalized}
+        self.assertEqual(by_event_id["req_search_bg"]["payload"].get("phase_id"), "search_probe")
+
+    def test_extraction_event_contract_is_normalized(self) -> None:
+        rows = [
+            {
+                "schema_version": 1,
+                "run_id": "run_1",
+                "event_id": "extract_1",
+                "event_type": "extraction_event",
+                "ts_utc": "2026-04-01T12:00:02Z",
+                "trace_id": "trace_1",
+                "span_id": "",
+                "action_id": "action_1",
+                "payload": {
+                    "operation": "js_bridge_network_event_failed",
+                    "source": "webview_js_bridge",
+                    "phase_id": "home_probe",
+                },
+            }
+        ]
+        normalized = normalize_runtime_rows(rows)
+        payload = normalized[0].get("payload", {})
+        self.assertEqual(payload.get("operation"), "js_bridge_network_event_failed")
+        self.assertEqual(payload.get("phase_id"), "home_probe")
+        self.assertEqual(payload.get("host_class"), "ignored")
+        self.assertEqual(payload.get("extraction_kind"), "runtime_event")
+        self.assertFalse(payload.get("success"))
+        self.assertEqual(payload.get("extracted_field_count"), 0)
+        self.assertEqual(payload.get("confidence_summary"), "none")
+        self.assertEqual(payload.get("source_ref"), "extract_1")
+
     def test_truncation_semantics_are_explicit(self) -> None:
         rows = [
             {

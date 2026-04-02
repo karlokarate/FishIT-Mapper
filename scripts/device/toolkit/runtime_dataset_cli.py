@@ -666,6 +666,52 @@ def event_request_operation(row: Dict[str, Any]) -> str:
     return ""
 
 
+def parse_boolish(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "y", "ok"}:
+            return True
+        if lowered in {"0", "false", "no", "n"}:
+            return False
+    return default
+
+
+def infer_extraction_success(operation: str, extracted_field_count: int) -> bool:
+    if extracted_field_count > 0:
+        return True
+    lowered = operation.strip().lower()
+    return not ("fail" in lowered or "error" in lowered or lowered.endswith("_failed"))
+
+
+def infer_extraction_kind(operation: str) -> str:
+    lowered = operation.strip().lower()
+    if "field_matrix" in lowered:
+        return "field_matrix"
+    if "playback" in lowered:
+        return "playback"
+    if "detail" in lowered:
+        return "detail"
+    if "search" in lowered:
+        return "search"
+    if "auth" in lowered:
+        return "auth"
+    return "runtime_event"
+
+
+def infer_extraction_confidence(extracted_field_count: int, success: bool) -> str:
+    if not success or extracted_field_count <= 0:
+        return "none"
+    if extracted_field_count >= 6:
+        return "high"
+    if extracted_field_count >= 3:
+        return "medium"
+    return "low"
+
+
 def event_semantic_labels(row: Dict[str, Any]) -> List[str]:
     payload = event_payload(row)
     val = payload.get("semantic_labels")
@@ -1002,7 +1048,7 @@ def pick_phase_for_event(
     explicit = normalize_phase_id(raw_phase)
     if raw_phase == "unscoped":
         explicit = ""
-    if explicit:
+    if explicit and explicit != PHASE_BACKGROUND:
         return explicit
 
     inferred = inferred_phase_for_row(row)
@@ -1023,7 +1069,7 @@ def pick_phase_for_event(
         if current_phase and current_phase != PHASE_BACKGROUND:
             return current_phase
         return PHASE_HOME
-    return PHASE_BACKGROUND
+    return explicit if explicit else PHASE_BACKGROUND
 
 
 def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib.Path] = None) -> List[Dict[str, Any]]:
@@ -1115,6 +1161,38 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
             mime_type=mime_type,
         )
         payload["host_class"] = host_class
+
+        if event_type == "extraction_event":
+            operation = str(payload.get("operation") or "runtime_event").strip() or "runtime_event"
+            extracted_field_count = max(safe_int(payload.get("extracted_field_count"), default=0), 0)
+            success = parse_boolish(
+                payload.get("success"),
+                default=infer_extraction_success(operation, extracted_field_count),
+            )
+            source_ref = str(payload.get("source_ref") or "").strip()
+            if not source_ref:
+                source_ref = (
+                    str(payload.get("source_event_id") or "").strip()
+                    or str(payload.get("request_id") or "").strip()
+                    or str(payload.get("response_id") or "").strip()
+                    or str(payload.get("url") or "").strip()
+                    or str(row.get("event_id") or "").strip()
+                    or f"runtime:{operation}"
+                )
+            extraction_kind = str(payload.get("extraction_kind") or "").strip() or infer_extraction_kind(operation)
+            confidence_summary = str(payload.get("confidence_summary") or "").strip() or infer_extraction_confidence(
+                extracted_field_count,
+                success,
+            )
+            payload["operation"] = operation
+            payload["source_ref"] = source_ref
+            payload["phase_id"] = phase_id
+            payload["host_class"] = host_class
+            payload["extraction_kind"] = extraction_kind
+            payload["success"] = success
+            payload["extracted_field_count"] = extracted_field_count
+            payload["confidence_summary"] = confidence_summary
+            continue
 
         if event_type == "network_request_event":
             method = event_method(row) or "GET"

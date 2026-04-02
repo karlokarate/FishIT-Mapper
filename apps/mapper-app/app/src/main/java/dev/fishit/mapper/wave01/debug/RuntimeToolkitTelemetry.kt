@@ -598,12 +598,41 @@ object RuntimeToolkitTelemetry {
         operation: String,
         payload: Map<String, Any?> = emptyMap(),
     ) {
+        val normalizedOperation = operation.trim().ifBlank { "runtime_event" }
+        val phaseId = stringPayloadValue(payload["phase_id"]) ?: activePhaseId(context)
+        val hostClass = stringPayloadValue(payload["host_class"])
+            ?: classifyHost(
+                url = stringPayloadValue(payload["url"]).orEmpty(),
+                targetHosts = targetHostFamily(context),
+                scopeMode = scopeMode(context),
+                phaseId = phaseId,
+                source = stringPayloadValue(payload["source"]).orEmpty(),
+            )
+        val extractedFieldCount = intPayloadValue(payload["extracted_field_count"]) ?: 0
+        val success = boolPayloadValue(payload["success"])
+            ?: inferExtractionSuccess(normalizedOperation, extractedFieldCount)
+        val extractionKind = stringPayloadValue(payload["extraction_kind"])
+            ?: inferExtractionKind(normalizedOperation)
+        val sourceRef = stringPayloadValue(payload["source_ref"])
+            ?: inferExtractionSourceRef(normalizedOperation, payload)
+        val confidenceSummary = stringPayloadValue(payload["confidence_summary"])
+            ?: inferExtractionConfidence(extractedFieldCount, success)
+
         val correlation = currentCorrelationContext(context)
         logEvent(
             context = context,
             eventType = "extraction_event",
             correlation = correlation,
-            payload = payload + mapOf("operation" to operation),
+            payload = payload + mapOf(
+                "operation" to normalizedOperation,
+                "source_ref" to sourceRef,
+                "phase_id" to phaseId,
+                "host_class" to hostClass,
+                "extraction_kind" to extractionKind,
+                "success" to success,
+                "extracted_field_count" to extractedFieldCount,
+                "confidence_summary" to confidenceSummary,
+            ),
         )
     }
 
@@ -978,6 +1007,76 @@ object RuntimeToolkitTelemetry {
 
     private fun runtimeSettings(context: Context) =
         context.getSharedPreferences(PREF_RUNTIME_SETTINGS, Context.MODE_PRIVATE)
+
+    private fun stringPayloadValue(value: Any?): String? {
+        if (value == null) return null
+        val normalized = value.toString().trim()
+        return normalized.takeIf { it.isNotEmpty() }
+    }
+
+    private fun intPayloadValue(value: Any?): Int? {
+        return when (value) {
+            is Int -> value
+            is Long -> value.toInt()
+            is Double -> value.toInt()
+            is Float -> value.toInt()
+            is Number -> value.toInt()
+            is String -> value.trim().toIntOrNull()
+            else -> null
+        }
+    }
+
+    private fun boolPayloadValue(value: Any?): Boolean? {
+        return when (value) {
+            is Boolean -> value
+            is Number -> value.toInt() != 0
+            is String -> when (value.trim().lowercase(Locale.ROOT)) {
+                "1", "true", "yes", "y", "ok" -> true
+                "0", "false", "no", "n" -> false
+                else -> null
+            }
+            else -> null
+        }
+    }
+
+    private fun inferExtractionSuccess(operation: String, extractedFieldCount: Int): Boolean {
+        if (extractedFieldCount > 0) return true
+        val normalized = operation.lowercase(Locale.ROOT)
+        return !(
+            normalized.contains("fail") ||
+                normalized.contains("error") ||
+                normalized.endsWith("_failed")
+            )
+    }
+
+    private fun inferExtractionKind(operation: String): String {
+        val normalized = operation.lowercase(Locale.ROOT)
+        return when {
+            normalized.contains("field_matrix") -> "field_matrix"
+            normalized.contains("playback") -> "playback"
+            normalized.contains("detail") -> "detail"
+            normalized.contains("search") -> "search"
+            normalized.contains("auth") -> "auth"
+            else -> "runtime_event"
+        }
+    }
+
+    private fun inferExtractionSourceRef(operation: String, payload: Map<String, Any?>): String {
+        stringPayloadValue(payload["source_event_id"])?.let { return "event:$it" }
+        stringPayloadValue(payload["request_id"])?.let { return "request:$it" }
+        stringPayloadValue(payload["response_id"])?.let { return "response:$it" }
+        stringPayloadValue(payload["url"])?.let { return "url:$it" }
+        return "runtime:$operation"
+    }
+
+    private fun inferExtractionConfidence(extractedFieldCount: Int, success: Boolean): String {
+        if (!success || extractedFieldCount <= 0) return "none"
+        return when {
+            extractedFieldCount >= 6 -> "high"
+            extractedFieldCount >= 3 -> "medium"
+            else -> "low"
+        }
+    }
 
     private fun setRuntimeSetting(context: Context, key: String, value: String) {
         runtimeSettings(context).edit().putString(key, value).commit()

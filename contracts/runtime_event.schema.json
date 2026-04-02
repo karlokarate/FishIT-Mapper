@@ -166,24 +166,47 @@
         "properties": {
           "payload": {
             "type": "object",
-            "anyOf": [
-              {
-                "required": [
-                  "operation"
+            "required": [
+              "source_ref",
+              "phase_id",
+              "host_class",
+              "extraction_kind",
+              "success",
+              "extracted_field_count",
+              "confidence_summary"
+            ],
+            "properties": {
+              "phase_id": {
+                "type": "string",
+                "enum": [
+                  "home_probe",
+                  "search_probe",
+                  "detail_probe",
+                  "playback_probe",
+                  "auth_probe",
+                  "background_noise"
                 ]
               },
-              {
-                "required": [
-                  "source_ref",
-                  "phase_id",
-                  "host_class",
-                  "extraction_kind",
-                  "success",
-                  "extracted_field_count",
-                  "confidence_summary"
+              "host_class": {
+                "type": "string",
+                "enum": [
+                  "target_document",
+                  "target_api",
+                  "target_playback",
+                  "target_asset",
+                  "browser_bootstrap",
+                  "google_noise",
+                  "analytics_noise",
+                  "background_noise",
+                  "ignored"
                 ]
-              }
-            ]
+              },
+              "success": { "type": "boolean" },
+              "extracted_field_count": { "type": "integer", "minimum": 0 },
+              "source_ref": { "type": "string", "minLength": 1 },
+              "extraction_kind": { "type": "string", "minLength": 1 },
+              "confidence_summary": { "type": "string", "minLength": 1 }
+            }
           }
         }
       }
