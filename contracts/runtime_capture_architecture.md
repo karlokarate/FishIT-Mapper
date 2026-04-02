@@ -126,9 +126,21 @@
 - Rollups are generated from normalized raw events only.
 - Mission finalization writes `mission_export_summary.json` with:
   - `export_readiness`
+  - `reason`
   - `missing_required_steps`
   - `missing_required_files`
   - `pipeline_ready`
+  - `hard_gates_passed`
+  - `gate_results`
+  - `failed_gates`
+- `READY` is a hard gate result and requires:
+  - required mission steps saturated
+  - required mission artifacts present
+  - finalized export archive present
+  - pipeline quality gate ready
+  - provider export schema validation pass (`contracts/provider_draft_export.schema.json`)
+  - replay requirements non-empty for endpoint context
+  - minimum provider field-matrix coverage threshold
 - `latest/` artifacts are published only after successful validation.
 - Publishing is atomic via stage directory swap (`latest.stage.*` -> `latest`).
 - Failed validation must keep previous `latest/` artifacts unchanged.

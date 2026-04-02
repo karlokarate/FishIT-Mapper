@@ -289,8 +289,47 @@ class RuntimeDatasetIntegrationSmokeTests(unittest.TestCase):
             self.assertIn("missing_required_steps", payload)
             self.assertIn("missing_required_files", payload)
             self.assertIn("required_file_aliases", payload)
+            self.assertIn("gate_results", payload)
+            self.assertIn("failed_gates", payload)
+            self.assertIn("hard_gates_passed", payload)
             summary_path = runtime_dir / "mission_export_summary.json"
             self.assertTrue(summary_path.exists())
+
+    def test_mission_summary_strict_readiness_returns_non_zero_when_not_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            rows = [
+                {
+                    "schema_version": 1,
+                    "run_id": "run_strict",
+                    "event_id": "mission_selected",
+                    "event_type": "mission_event",
+                    "ts_utc": "2026-04-02T10:01:00Z",
+                    "trace_id": "trace_strict",
+                    "span_id": "",
+                    "action_id": "action_strict",
+                    "payload": {
+                        "operation": "mission_selected",
+                        "mission_id": "FISHIT_PIPELINE",
+                        "wizard_step_id": "target_url_input",
+                        "saturation_state": "INCOMPLETE",
+                        "phase_id": "background_noise",
+                        "target_site_id": "zdf_de",
+                        "export_readiness": "NOT_READY",
+                        "reason": "launcher_selection",
+                    },
+                }
+            ]
+            write_events(runtime_dir, rows)
+            result = run_cli(
+                "housekeeping",
+                "mission-summary",
+                "--mission-id",
+                "FISHIT_PIPELINE",
+                "--strict-readiness",
+                runtime_dir=runtime_dir,
+            )
+            self.assertEqual(result.returncode, 2, result.stderr)
 
     def test_api_mapping_mission_summary_uses_mission_specific_requirements(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

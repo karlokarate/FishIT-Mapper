@@ -22,6 +22,7 @@ from runtime_dataset_cli import (  # type: ignore  # noqa: E402
     build_correlation,
     build_endpoint_candidates,
     build_field_matrix,
+    build_mission_export_summary,
     build_provider_draft_export,
     build_provenance_registry,
     build_replay_requirements,
@@ -2286,6 +2287,27 @@ class RuntimeDatasetHardeningTests(unittest.TestCase):
         self.assertEqual(payload.get("wizard_step_id"), "target_url_input")
         self.assertEqual(payload.get("export_readiness"), "NOT_READY")
         self.assertEqual(payload.get("host_class"), "ignored")
+
+    def test_mission_summary_blocks_when_provider_export_schema_is_invalid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            exports_dir = runtime_dir / "exports"
+            exports_dir.mkdir(parents=True, exist_ok=True)
+            (exports_dir / "finalized_bundle.zip").write_bytes(b"pk")
+            (runtime_dir / "provider_draft_export.json").write_text("{}", encoding="utf-8")
+
+            summary = build_mission_export_summary(
+                runtime_dir=runtime_dir,
+                rows=[],
+                mission_id="CUSTOM_MISSION",
+                pipeline_report={"pipeline_ready": True},
+            )
+            self.assertEqual(summary.get("export_readiness"), "BLOCKED")
+            self.assertEqual(summary.get("reason"), "provider_export_schema_validation_failed")
+            self.assertIn("provider_export_schema_gate", set(summary.get("failed_gates") or []))
+            gate = summary.get("gate_results", {}).get("provider_export_schema_gate", {})
+            self.assertFalse(gate.get("passed"))
+            self.assertGreater(int(gate.get("error_count") or 0), 0)
 
     def test_api_mapping_required_artifact_aliases_are_deterministic(self) -> None:
         artifacts = mission_required_artifacts("API_MAPPING")

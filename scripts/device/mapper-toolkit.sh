@@ -945,8 +945,8 @@ wizard_cmd() {
 
       _wizard_finish_run_stage \
         "housekeeping_mission_summary" \
-        "mission_summary_failed" \
-        run_dataset_cli housekeeping mission-summary --mission-id "$mission_id" >"$mission_summary_report" || true
+        "mission_summary_not_ready" \
+        run_dataset_cli housekeeping mission-summary --mission-id "$mission_id" --strict-readiness >"$mission_summary_report" || true
 
       finalize_snapshot_artifacts
 

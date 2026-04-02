@@ -266,6 +266,20 @@
       "supersedes": [],
       "superseded_by": null,
       "summary": "Mission-first rollout phase 3 enables REPLAY_BUNDLE in launcher and mission-aware finalization; runtime derivation now emits replay_bundle and fixture_manifest artifacts so replay-focused readiness checks are machine-verifiable."
+    },
+    {
+      "id": "DEC-0020",
+      "aliases": [
+        "ADR-0020",
+        "MAPPER-HARD-READY-GATES",
+        "MAPPER-PROVIDER-EXPORT-SCHEMA-GATE"
+      ],
+      "title": "Mission export readiness is hard-gated by provider contract validity and replay/field evidence quality",
+      "status": "accepted",
+      "date": "2026-04-02",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Mission finalization now enforces hard READY gates (required steps, required artifacts, finalized bundle, pipeline quality, provider export schema validation, replay requirements presence, field-matrix minimum coverage) and exposes machine-readable gate_results/failed_gates for deterministic wizard finish blocking."
     }
   ]
 }

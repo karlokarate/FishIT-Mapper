@@ -20,6 +20,11 @@ from collections import Counter, defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+try:
+    from jsonschema import Draft7Validator
+except Exception:  # pragma: no cover - optional dependency fallback
+    Draft7Validator = None  # type: ignore[assignment]
+
 
 SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
@@ -232,6 +237,26 @@ MISSION_ARTIFACT_ALIASES: Dict[str, List[str]] = {
     "response_index": ["response_index.json"],
     "fixture_manifest": ["fixture_manifest.json"],
 }
+
+MISSION_SUMMARY_REQUIRED_PROVIDER_FIELDS = {
+    "title",
+    "description",
+    "image/poster",
+    "canonical id",
+    "search result mapping",
+    "detail mapping",
+}
+MISSION_SUMMARY_MIN_REQUIRED_FIELD_COVERAGE = 3
+MISSION_SUMMARY_MANDATORY_PRESENT_FIELDS = {"title", "detail mapping"}
+MISSION_SUMMARY_HARD_GATES = (
+    "required_steps_gate",
+    "required_artifacts_gate",
+    "finalized_export_gate",
+    "pipeline_quality_gate",
+    "provider_export_schema_gate",
+    "replay_requirements_gate",
+    "field_matrix_coverage_gate",
+)
 
 PROVIDER_ENDPOINT_ROLES = [
     "home",
@@ -5609,6 +5634,178 @@ def mission_required_artifacts(mission_id: str) -> List[Dict[str, Any]]:
     return refs
 
 
+def _provider_export_schema_gate(runtime_dir: pathlib.Path) -> Dict[str, Any]:
+    provider_export_path = runtime_dir / "provider_draft_export.json"
+    schema_path = repo_root() / "contracts" / "provider_draft_export.schema.json"
+    result: Dict[str, Any] = {
+        "passed": False,
+        "provider_export_path": str(provider_export_path),
+        "schema_path": str(schema_path),
+        "validation_engine": "jsonschema_draft7" if Draft7Validator is not None else "required_keys_fallback",
+        "error_count": 0,
+        "errors": [],
+        "endpoint_template_count": 0,
+        "replay_requirement_count": 0,
+    }
+
+    if not provider_export_path.exists() or provider_export_path.stat().st_size == 0:
+        result["reason"] = "provider_export_missing_or_empty"
+        return result
+    if not schema_path.exists() or schema_path.stat().st_size == 0:
+        result["reason"] = "provider_export_schema_missing"
+        return result
+
+    try:
+        provider_export_raw = provider_export_path.read_text(encoding="utf-8")
+        provider_export = json.loads(provider_export_raw)
+    except Exception:
+        result["reason"] = "provider_export_invalid_json"
+        return result
+    try:
+        schema_raw = schema_path.read_text(encoding="utf-8")
+        schema_payload = json.loads(schema_raw)
+    except Exception:
+        result["reason"] = "provider_export_schema_invalid_json"
+        return result
+    if not isinstance(provider_export, dict):
+        result["reason"] = "provider_export_invalid_payload_type"
+        return result
+    if not isinstance(schema_payload, dict) or not schema_payload:
+        result["reason"] = "provider_export_schema_invalid_json"
+        return result
+
+    result["endpoint_template_count"] = len(list(provider_export.get("endpoint_templates") or []))
+    result["replay_requirement_count"] = len(list(provider_export.get("replay_requirements") or []))
+
+    if Draft7Validator is None:
+        required_keys = set(schema_payload.get("required") or [])
+        missing_keys = sorted(list(required_keys.difference(provider_export.keys())))
+        if missing_keys:
+            result["reason"] = "provider_export_schema_required_keys_missing"
+            result["errors"] = [f"missing_key:{name}" for name in missing_keys]
+            result["error_count"] = len(result["errors"])
+            return result
+        result["passed"] = True
+        result["reason"] = "provider_export_schema_valid_fallback"
+        return result
+
+    validator = Draft7Validator(schema_payload)
+    errors = sorted(list(validator.iter_errors(provider_export)), key=lambda err: list(err.absolute_path))
+    if errors:
+        compact_errors = []
+        for err in errors[:25]:
+            path = ".".join([str(part) for part in list(err.absolute_path)])
+            compact_errors.append(f"{path or '$'}: {err.message}")
+        result["reason"] = "provider_export_schema_validation_failed"
+        result["errors"] = compact_errors
+        result["error_count"] = len(errors)
+        return result
+
+    result["passed"] = True
+    result["reason"] = "provider_export_schema_valid"
+    return result
+
+
+def _replay_requirements_gate(runtime_dir: pathlib.Path) -> Dict[str, Any]:
+    provider_export_path = runtime_dir / "provider_draft_export.json"
+    result: Dict[str, Any] = {
+        "passed": False,
+        "provider_export_path": str(provider_export_path),
+        "total_replay_requirements": 0,
+        "non_empty_context_replay_requirements": 0,
+        "roles_with_replay_requirements": [],
+    }
+    provider_export = load_contract_json(provider_export_path)
+    replay_requirements = list(provider_export.get("replay_requirements") or []) if isinstance(provider_export, dict) else []
+    result["total_replay_requirements"] = len(replay_requirements)
+    if not replay_requirements:
+        result["reason"] = "replay_requirements_missing"
+        return result
+
+    roles: Set[str] = set()
+    non_empty = 0
+    for item in replay_requirements:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("endpoint_role") or "").strip()
+        if role:
+            roles.add(role)
+        has_context = any(
+            bool(item.get(key))
+            for key in (
+                "required_headers",
+                "required_cookies",
+                "required_query_params",
+                "required_body_fields",
+                "required_provenance_inputs",
+                "required_referer",
+                "required_origin",
+            )
+        )
+        if has_context:
+            non_empty += 1
+
+    result["roles_with_replay_requirements"] = sorted(list(roles))
+    result["non_empty_context_replay_requirements"] = non_empty
+    if not roles:
+        result["reason"] = "replay_requirements_missing_roles"
+        return result
+    if non_empty <= 0:
+        result["reason"] = "replay_requirements_missing_context"
+        return result
+    result["passed"] = True
+    result["reason"] = "replay_requirements_present"
+    return result
+
+
+def _field_matrix_coverage_gate(runtime_dir: pathlib.Path) -> Dict[str, Any]:
+    provider_export_path = runtime_dir / "provider_draft_export.json"
+    result: Dict[str, Any] = {
+        "passed": False,
+        "provider_export_path": str(provider_export_path),
+        "required_fields": sorted(list(MISSION_SUMMARY_REQUIRED_PROVIDER_FIELDS)),
+        "mandatory_fields": sorted(list(MISSION_SUMMARY_MANDATORY_PRESENT_FIELDS)),
+        "minimum_covered_fields": MISSION_SUMMARY_MIN_REQUIRED_FIELD_COVERAGE,
+        "covered_fields": [],
+        "missing_fields": sorted(list(MISSION_SUMMARY_REQUIRED_PROVIDER_FIELDS)),
+        "covered_count": 0,
+    }
+    provider_export = load_contract_json(provider_export_path)
+    field_rows = list(provider_export.get("field_matrix", {}).get("fields", [])) if isinstance(provider_export, dict) else []
+    if not field_rows:
+        result["reason"] = "field_matrix_missing"
+        return result
+
+    covered: Set[str] = set()
+    for row in field_rows:
+        if not isinstance(row, dict):
+            continue
+        field_name = str(row.get("field") or "").strip()
+        if field_name not in MISSION_SUMMARY_REQUIRED_PROVIDER_FIELDS:
+            continue
+        status = str(row.get("status") or "").strip().lower()
+        value = str(row.get("value_or_template") or "").strip()
+        if status != "missing" and value:
+            covered.add(field_name)
+
+    missing = sorted(list(MISSION_SUMMARY_REQUIRED_PROVIDER_FIELDS.difference(covered)))
+    result["covered_fields"] = sorted(list(covered))
+    result["missing_fields"] = missing
+    result["covered_count"] = len(covered)
+
+    missing_mandatory = sorted(list(MISSION_SUMMARY_MANDATORY_PRESENT_FIELDS.difference(covered)))
+    result["missing_mandatory_fields"] = missing_mandatory
+    if missing_mandatory:
+        result["reason"] = "field_matrix_missing_mandatory_fields"
+        return result
+    if len(covered) < MISSION_SUMMARY_MIN_REQUIRED_FIELD_COVERAGE:
+        result["reason"] = "field_matrix_minimum_coverage_not_met"
+        return result
+    result["passed"] = True
+    result["reason"] = "field_matrix_coverage_sufficient"
+    return result
+
+
 def build_mission_export_summary(
     runtime_dir: pathlib.Path,
     rows: List[Dict[str, Any]],
@@ -5648,7 +5845,40 @@ def build_mission_export_summary(
     pipeline_ready = bool(report.get("pipeline_ready")) if isinstance(report, dict) and report else False
     pipeline_report_path = str(runtime_dir / "pipeline_ready_report.json")
 
+    gate_results: Dict[str, Dict[str, Any]] = {
+        "required_steps_gate": {
+            "passed": not missing_required_steps,
+            "missing_required_steps": missing_required_steps,
+        },
+        "required_artifacts_gate": {
+            "passed": not missing_required_files,
+            "missing_required_files": missing_required_files,
+            "required_artifact_count": len(required_artifacts),
+            "available_artifact_count": len([item for item in available_files.values() if item]),
+        },
+        "finalized_export_gate": {
+            "passed": has_finalized_export,
+            "has_finalized_export": has_finalized_export,
+        },
+        "pipeline_quality_gate": {
+            "passed": pipeline_ready,
+            "pipeline_ready": pipeline_ready,
+            "pipeline_report_path": pipeline_report_path,
+        },
+    }
+    provider_export_schema_gate = _provider_export_schema_gate(runtime_dir)
+    replay_requirements_gate = _replay_requirements_gate(runtime_dir)
+    field_matrix_coverage_gate = _field_matrix_coverage_gate(runtime_dir)
+    gate_results["provider_export_schema_gate"] = provider_export_schema_gate
+    gate_results["replay_requirements_gate"] = replay_requirements_gate
+    gate_results["field_matrix_coverage_gate"] = field_matrix_coverage_gate
+
+    failed_gates = [name for name in MISSION_SUMMARY_HARD_GATES if not bool(gate_results.get(name, {}).get("passed"))]
     warnings: List[str] = []
+    for gate_name in failed_gates:
+        gate_payload = gate_results.get(gate_name, {})
+        gate_reason = str(gate_payload.get("reason") or gate_name)
+        warnings.append(f"{gate_name}:{gate_reason}")
     if missing_required_steps:
         warnings.append(f"missing_required_steps:{','.join(missing_required_steps)}")
     if missing_required_files:
@@ -5658,21 +5888,25 @@ def build_mission_export_summary(
     if not pipeline_ready:
         warnings.append("pipeline_quality_gate_not_ready")
 
-    if missing_required_steps:
+    hard_gates_passed = not failed_gates
+    if hard_gates_passed:
+        export_readiness = MISSION_EXPORT_READINESS_READY
+        reason = "all_hard_gates_passed"
+    elif missing_required_steps:
         export_readiness = MISSION_EXPORT_READINESS_BLOCKED
         reason = "missing_required_steps"
-    elif not missing_required_files and has_finalized_export and pipeline_ready:
-        export_readiness = MISSION_EXPORT_READINESS_READY
-        reason = "required_steps_artifacts_and_quality_ready"
-    elif len(missing_required_files) < len(required_artifacts):
+    elif missing_required_files and len(missing_required_files) >= len(required_artifacts):
+        export_readiness = MISSION_EXPORT_READINESS_NOT_READY
+        reason = "required_artifacts_missing"
+    elif missing_required_files:
         export_readiness = MISSION_EXPORT_READINESS_PARTIAL
         reason = "required_artifacts_partial_or_quality_pending"
     else:
-        export_readiness = MISSION_EXPORT_READINESS_NOT_READY
-        reason = "required_artifacts_missing"
+        export_readiness = MISSION_EXPORT_READINESS_BLOCKED
+        reason = str(gate_results.get(failed_gates[0], {}).get("reason") or "hard_gate_failed")
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at_utc": utc_now(),
         "mission_id": mission_id,
         "target_site_id": mission_target_site(rows, mission_id),
@@ -5691,6 +5925,9 @@ def build_mission_export_summary(
         "has_finalized_export": has_finalized_export,
         "pipeline_ready": pipeline_ready,
         "pipeline_report_path": pipeline_report_path,
+        "hard_gates_passed": hard_gates_passed,
+        "gate_results": gate_results,
+        "failed_gates": failed_gates,
         "warnings": warnings,
     }
 
@@ -7252,7 +7489,10 @@ def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Name
             rows=rows,
             mission_id=args.mission_id or MISSION_FISHIT_PIPELINE,
         )
-        print_json(load_contract_json(summary_path))
+        payload = load_contract_json(summary_path)
+        print_json(payload)
+        if bool(args.strict_readiness) and str(payload.get("export_readiness") or "") != MISSION_EXPORT_READINESS_READY:
+            return 2
         return 0
 
     if action in {"pack", "compress"}:
@@ -7652,6 +7892,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sampling-rate", type=int, default=1)
     parser.add_argument("--quality-host", default="")
     parser.add_argument("--mission-id", default=MISSION_FISHIT_PIPELINE)
+    parser.add_argument("--strict-readiness", action="store_true")
     parser.add_argument("--yes", action="store_true")
 
     return parser.parse_args()
