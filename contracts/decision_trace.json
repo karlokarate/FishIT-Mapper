@@ -176,6 +176,22 @@
       ],
       "superseded_by": null,
       "summary": "Runtime exports now use canonical target_* host classes, independent phase resolution from explicit marker windows, explicit truncation/original length semantics, candidate-only extraction attempt events, and fixture-based regression checks for ZDF-scoped provider-draft runs."
+    },
+    {
+      "id": "DEC-0014",
+      "aliases": [
+        "ADR-0014",
+        "MAPPER-TRUNCATION-POLICY-MATRIX",
+        "MAPPER-EXPLICIT-TRUNCATION-EVENTS"
+      ],
+      "title": "Body truncation handling is deterministic, policy-driven, and machine-visible across capture, extraction, and replay exports",
+      "status": "accepted",
+      "date": "2026-04-02",
+      "supersedes": [
+        "DEC-0013"
+      ],
+      "superseded_by": null,
+      "summary": "Response/body handling now uses a deterministic policy resolver (STORE_FULL_REQUIRED/FULL/TRUNCATED/METADATA_ONLY/SKIP), enforces explicit truncation metadata including 4MB cap detection, emits truncation_event artifacts, dedupes large HTML bodies by hash, and propagates truncation visibility into extraction and replay outputs."
     }
   ]
 }

@@ -44,6 +44,7 @@ object RuntimeToolkitTelemetry {
     private const val DEDUP_RETENTION_NS = 12_000_000_000L
     private const val DEFAULT_SCOPE_MODE = "strict_target"
     private const val PHASE_BACKGROUND = "background_noise"
+    private const val LEGACY_CAP_4MB = 4 * 1024 * 1024
 
     private val ioLock = Any()
     private val requestLock = Any()
@@ -462,14 +463,43 @@ object RuntimeToolkitTelemetry {
             contentLengthInt > 0L -> contentLengthInt
             else -> null
         }
-        val explicitCaptureTruncated = (payload["capture_truncated"] as? Boolean) ?: false
-        val explicitCaptureLimit = (payload["capture_limit_bytes"] as? Number)?.toInt() ?: 0
+        val explicitCaptureTruncated = boolPayloadValue(payload["capture_truncated"]) ?: false
+        val explicitCaptureLimit = intPayloadValue(payload["capture_limit_bytes"]) ?: 0
         val inferredCaptureTruncated = contentLengthInt > 0 && storedSizeBytes > 0 && storedSizeBytes.toLong() < contentLengthInt
-        val captureTruncated = explicitCaptureTruncated || inferredCaptureTruncated
+        val bodyCapturePolicy = stringPayloadValue(payload["body_capture_policy"])
+            ?: inferBodyCapturePolicy(
+                url = url,
+                mimeType = mimeType,
+                hostClass = hostClass,
+                phaseId = phaseId,
+                source = source,
+            )
+        val candidateRelevance = stringPayloadValue(payload["candidate_relevance"])
+            ?: inferCandidateRelevance(bodyCapturePolicy)
+        var captureTruncated = explicitCaptureTruncated || inferredCaptureTruncated
+        if (!captureTruncated && storedSizeBytes == LEGACY_CAP_4MB && bodyCapturePolicy !in setOf("metadata_only", "skipped_media_segment", "skip_body")) {
+            captureTruncated = true
+        }
         val captureLimitBytes = if (captureTruncated) {
-            if (explicitCaptureLimit > 0) explicitCaptureLimit else storedSizeBytes
+            when {
+                explicitCaptureLimit > 0 -> explicitCaptureLimit
+                storedSizeBytes == LEGACY_CAP_4MB -> LEGACY_CAP_4MB
+                else -> storedSizeBytes
+            }
         } else {
             0
+        }
+        val truncationReason = if (captureTruncated) {
+            stringPayloadValue(payload["truncation_reason"])
+                ?: if (captureLimitBytes == LEGACY_CAP_4MB) "body_size_limit" else "body_size_limit"
+        } else {
+            ""
+        }
+        val captureReason = stringPayloadValue(payload["capture_reason"]) ?: "response_capture"
+        val captureFailure = if (captureTruncated && bodyCapturePolicy == "full_candidate_required") {
+            stringPayloadValue(payload["capture_failure"]) ?: "required_body_truncated"
+        } else {
+            stringPayloadValue(payload["capture_failure"]) ?: ""
         }
         val bodyHash = if (rawBody != null && rawBody.isNotEmpty()) sha256(rawBody) else null
         val resolvedMime = resolveMimeType(
@@ -531,6 +561,11 @@ object RuntimeToolkitTelemetry {
                 "stored_size_bytes" to storedSizeBytes,
                 "capture_truncated" to captureTruncated,
                 "capture_limit_bytes" to captureLimitBytes,
+                "truncation_reason" to truncationReason,
+                "body_capture_policy" to bodyCapturePolicy,
+                "candidate_relevance" to candidateRelevance,
+                "capture_reason" to captureReason,
+                "capture_failure" to captureFailure,
                 "body_preview" to bodyPreview,
                 "response_store_path" to responsePath,
                 "body_ref" to responsePath,
@@ -539,6 +574,30 @@ object RuntimeToolkitTelemetry {
                 "response_observed" to true,
             ),
         )
+        if (captureTruncated || captureFailure.isNotBlank()) {
+            logTruncationEvent(
+                context = context,
+                payload = mapOf(
+                    "request_id" to resolvedRequestId,
+                    "response_id" to eventId,
+                    "body_ref" to responsePath,
+                    "normalized_host" to normalizedParts.host,
+                    "normalized_path" to normalizedParts.path,
+                    "mime_type" to resolvedMime.mimeType,
+                    "phase_id" to phaseId,
+                    "host_class" to hostClass,
+                    "capture_limit_bytes" to captureLimitBytes,
+                    "stored_size_bytes" to storedSizeBytes,
+                    "original_content_length" to originalContentLength,
+                    "truncation_reason" to truncationReason,
+                    "body_capture_policy" to bodyCapturePolicy,
+                    "candidate_relevance" to candidateRelevance,
+                    "capture_truncated" to captureTruncated,
+                    "required_body_failure" to captureFailure,
+                    "target_site_id" to targetSiteId,
+                ),
+            )
+        }
         emitDerivedAuthEvents(
             context = context,
             semantic = semantic,
@@ -632,6 +691,25 @@ object RuntimeToolkitTelemetry {
                 "success" to success,
                 "extracted_field_count" to extractedFieldCount,
                 "confidence_summary" to confidenceSummary,
+            ),
+        )
+    }
+
+    fun logTruncationEvent(
+        context: Context,
+        payload: Map<String, Any?> = emptyMap(),
+    ) {
+        val correlation = currentCorrelationContext(context)
+        logEvent(
+            context = context,
+            eventType = "truncation_event",
+            correlation = correlation,
+            payload = payload + mapOf(
+                "phase_id" to (stringPayloadValue(payload["phase_id"]) ?: activePhaseId(context)),
+                "host_class" to (stringPayloadValue(payload["host_class"]) ?: "ignored"),
+                "truncation_reason" to (stringPayloadValue(payload["truncation_reason"]) ?: "body_size_limit"),
+                "body_capture_policy" to (stringPayloadValue(payload["body_capture_policy"]) ?: "metadata_only"),
+                "candidate_relevance" to (stringPayloadValue(payload["candidate_relevance"]) ?: "non_candidate"),
             ),
         )
     }
@@ -1075,6 +1153,41 @@ object RuntimeToolkitTelemetry {
             extractedFieldCount >= 6 -> "high"
             extractedFieldCount >= 3 -> "medium"
             else -> "low"
+        }
+    }
+
+    private fun inferBodyCapturePolicy(
+        url: String,
+        mimeType: String?,
+        hostClass: String,
+        phaseId: String,
+        source: String,
+    ): String {
+        val merged = "${url.lowercase(Locale.ROOT)} ${(mimeType ?: "").lowercase(Locale.ROOT)} ${source.lowercase(Locale.ROOT)}"
+        val isMediaSegment = merged.contains(".m4s") ||
+            merged.contains(".ts") ||
+            merged.contains(".mp4") ||
+            merged.contains("video/") ||
+            merged.contains("audio/")
+        if (isMediaSegment) return "skipped_media_segment"
+        if (hostClass !in setOf("target_document", "target_api", "target_playback")) return "metadata_only"
+        if (merged.contains("graphql") || merged.contains(".m3u8") || merged.contains(".mpd") || merged.contains("manifest") || merged.contains("resolver")) {
+            return "full_candidate_required"
+        }
+        if (merged.contains("json") && phaseId in setOf("home_probe", "search_probe", "detail_probe", "playback_probe", "auth_probe")) {
+            return "full_candidate_required"
+        }
+        if (merged.contains("html") && phaseId in setOf("home_probe", "search_probe", "detail_probe", "playback_probe", "auth_probe")) {
+            return "full_candidate"
+        }
+        return "metadata_only"
+    }
+
+    private fun inferCandidateRelevance(bodyCapturePolicy: String): String {
+        return when (bodyCapturePolicy) {
+            "full_candidate_required" -> "required_candidate"
+            "full_candidate", "truncated_candidate" -> "signal_candidate"
+            else -> "non_candidate"
         }
     }
 

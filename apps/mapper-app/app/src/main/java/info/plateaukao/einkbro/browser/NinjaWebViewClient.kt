@@ -500,7 +500,8 @@ class EBWebViewClient(
             val html = decodeEvaluateJavascriptString(raw).trim()
             if (html.isBlank()) return@evaluateJavascript
             val bytes = html.toByteArray(Charsets.UTF_8)
-            val capped = if (bytes.size > MAX_MAIN_FRAME_HTML_CAPTURE_BYTES) {
+            val isTruncated = bytes.size > MAX_MAIN_FRAME_HTML_CAPTURE_BYTES
+            val capped = if (isTruncated) {
                 bytes.copyOf(MAX_MAIN_FRAME_HTML_CAPTURE_BYTES)
             } else {
                 bytes
@@ -519,8 +520,13 @@ class EBWebViewClient(
                 requestId = requestId,
                 payload = mapOf(
                     "capture_mode" to "main_frame_dom_snapshot",
-                    "capture_truncated" to (bytes.size > MAX_MAIN_FRAME_HTML_CAPTURE_BYTES),
-                    "capture_limit_bytes" to if (bytes.size > MAX_MAIN_FRAME_HTML_CAPTURE_BYTES) capped.size else 0,
+                    "capture_truncated" to isTruncated,
+                    "capture_limit_bytes" to if (isTruncated) MAX_MAIN_FRAME_HTML_CAPTURE_BYTES else 0,
+                    "truncation_reason" to if (isTruncated) "body_size_limit" else "",
+                    "body_capture_policy" to if (isTruncated) "truncated_candidate" else "full_candidate",
+                    "candidate_relevance" to "signal_candidate",
+                    "capture_reason" to "main_frame_dom_snapshot",
+                    "capture_failure" to "",
                     "captured_body_bytes" to capped.size,
                     "stored_size_bytes" to capped.size,
                     "content_length_header" to bytes.size.toString(),

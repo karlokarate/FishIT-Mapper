@@ -35,6 +35,7 @@
         "auth_event",
         "correlation_event",
         "extraction_event",
+        "truncation_event",
         "triage_alert_event",
         "probe_phase_event",
         "provenance_event",
@@ -119,6 +120,8 @@
               "original_content_length",
               "stored_size_bytes",
               "capture_truncated",
+              "truncation_reason",
+              "body_capture_policy",
               "source_channel",
               "headers"
             ],
@@ -235,6 +238,32 @@
                 ]
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event_type": { "const": "truncation_event" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": [
+              "request_id",
+              "response_id",
+              "body_ref",
+              "normalized_host",
+              "normalized_path",
+              "mime_type",
+              "phase_id",
+              "host_class",
+              "capture_limit_bytes",
+              "stored_size_bytes",
+              "original_content_length",
+              "truncation_reason",
+              "body_capture_policy",
+              "candidate_relevance"
+            ]
           }
         }
       }

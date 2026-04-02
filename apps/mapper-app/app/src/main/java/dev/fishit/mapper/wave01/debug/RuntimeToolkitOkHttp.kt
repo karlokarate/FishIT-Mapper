@@ -86,6 +86,8 @@ class RuntimeToolkitOkHttpInterceptor(
             val capturePlan = resolveCapturePlan(
                 url = request.url.toString(),
                 contentType = response.body?.contentType(),
+                hostClass = requestLog.hostClass,
+                phaseId = requestLog.phaseId,
             )
             val peekBytes = runCatching { response.peekBody(capturePlan.peekBytes).bytes() }.getOrNull()
             val rawBody = if (capturePlan.captureRaw && peekBytes != null && peekBytes.isNotEmpty()) {
@@ -108,7 +110,21 @@ class RuntimeToolkitOkHttpInterceptor(
                 capturePlan.captureRaw && capturePlan.peekBytes > 0 && storedSizeBytes.toLong() >= capturePlan.peekBytes -> true
                 else -> false
             }
-            val captureLimitBytes = if (captureTruncated) storedSizeBytes else 0
+            val captureLimitBytes = if (captureTruncated) {
+                if (capturePlan.peekBytes > 0) capturePlan.peekBytes.toInt() else storedSizeBytes
+            } else {
+                0
+            }
+            val truncationReason = if (captureTruncated) {
+                capturePlan.truncationReasonOnLimit ?: "body_size_limit"
+            } else {
+                ""
+            }
+            val captureFailure = if (captureTruncated && capturePlan.mode == BODY_ACTION_STORE_FULL_REQUIRED) {
+                "required_body_truncated"
+            } else {
+                ""
+            }
 
             RuntimeToolkitTelemetry.logNetworkResponse(
                 context = appContext,
@@ -144,6 +160,11 @@ class RuntimeToolkitOkHttpInterceptor(
                     "captured_body_bytes" to (rawBody?.size ?: 0),
                     "capture_truncated" to captureTruncated,
                     "capture_limit_bytes" to captureLimitBytes,
+                    "truncation_reason" to truncationReason,
+                    "body_capture_policy" to capturePlan.bodyCapturePolicy,
+                    "capture_reason" to capturePlan.captureReason,
+                    "candidate_relevance" to capturePlan.candidateRelevance,
+                    "capture_failure" to captureFailure,
                     "redirected" to (priorCode != null),
                     "prior_status_code" to priorCode,
                 ),
@@ -278,11 +299,23 @@ class RuntimeToolkitOkHttpInterceptor(
         val mode: String,
         val captureRaw: Boolean,
         val peekBytes: Long,
+        val bodyCapturePolicy: String,
+        val captureReason: String,
+        val candidateRelevance: String,
+        val truncationReasonOnLimit: String?,
     )
 
-    private fun resolveCapturePlan(url: String, contentType: MediaType?): CapturePlan {
+    private fun resolveCapturePlan(
+        url: String,
+        contentType: MediaType?,
+        hostClass: String,
+        phaseId: String,
+    ): CapturePlan {
         val normalizedUrl = url.lowercase(Locale.ROOT)
         val mime = contentType?.toString()?.lowercase(Locale.ROOT).orEmpty()
+        val merged = "$normalizedUrl $mime"
+        val isSignalHost = hostClass in setOf("target_document", "target_api", "target_playback")
+        val isCandidatePhase = phaseId in setOf("home_probe", "search_probe", "detail_probe", "playback_probe", "auth_probe")
         val isMediaSegment = normalizedUrl.endsWith(".ts") ||
             normalizedUrl.endsWith(".m4s") ||
             normalizedUrl.endsWith(".m4a") ||
@@ -292,7 +325,27 @@ class RuntimeToolkitOkHttpInterceptor(
             mime.startsWith("video/") ||
             mime.startsWith("audio/")
         if (isMediaSegment) {
-            return CapturePlan(mode = "metadata_only", captureRaw = false, peekBytes = 0L)
+            return CapturePlan(
+                mode = BODY_ACTION_STORE_METADATA_ONLY,
+                captureRaw = false,
+                peekBytes = 0L,
+                bodyCapturePolicy = "skipped_media_segment",
+                captureReason = "generic_media_segment",
+                candidateRelevance = "non_candidate",
+                truncationReasonOnLimit = "stream_capture_policy",
+            )
+        }
+
+        if (!isSignalHost) {
+            return CapturePlan(
+                mode = BODY_ACTION_STORE_METADATA_ONLY,
+                captureRaw = false,
+                peekBytes = 0L,
+                bodyCapturePolicy = "metadata_only",
+                captureReason = "non_signal_host_class",
+                candidateRelevance = "non_candidate",
+                truncationReasonOnLimit = "stream_capture_policy",
+            )
         }
 
         val isManifest = normalizedUrl.endsWith(".m3u8") ||
@@ -300,11 +353,54 @@ class RuntimeToolkitOkHttpInterceptor(
             mime.contains("application/vnd.apple.mpegurl") ||
             mime.contains("application/x-mpegurl") ||
             mime.contains("application/dash+xml")
-        if (isManifest || shouldCaptureTextLike(contentType)) {
-            return CapturePlan(mode = "full_raw", captureRaw = true, peekBytes = MAX_PEEK_BYTES_FULL)
+        val isGraphqlJson = merged.contains("graphql") && mime.contains("json")
+        val isResolverPayload = merged.contains("resolver") || merged.contains("playback")
+        val isCandidateJson = mime.contains("json") && isSignalHost && isCandidatePhase
+        if (isManifest || isGraphqlJson || isResolverPayload || isCandidateJson) {
+            return CapturePlan(
+                mode = BODY_ACTION_STORE_FULL_REQUIRED,
+                captureRaw = true,
+                peekBytes = MAX_PEEK_BYTES_FULL,
+                bodyCapturePolicy = "full_candidate_required",
+                captureReason = "candidate_payload_required",
+                candidateRelevance = "required_candidate",
+                truncationReasonOnLimit = "body_size_limit",
+            )
         }
 
-        return CapturePlan(mode = "snippet", captureRaw = true, peekBytes = MAX_PEEK_BYTES_SNIPPET)
+        if (mime.contains("html") && !isCandidatePhase) {
+            return CapturePlan(
+                mode = BODY_ACTION_STORE_TRUNCATED,
+                captureRaw = true,
+                peekBytes = MAX_PEEK_BYTES_TRUNCATED,
+                bodyCapturePolicy = "truncated_candidate",
+                captureReason = "non_candidate_html",
+                candidateRelevance = "non_candidate",
+                truncationReasonOnLimit = "body_size_limit",
+            )
+        }
+
+        if (shouldCaptureTextLike(contentType)) {
+            return CapturePlan(
+                mode = BODY_ACTION_STORE_FULL,
+                captureRaw = true,
+                peekBytes = MAX_PEEK_BYTES_FULL,
+                bodyCapturePolicy = "full_candidate",
+                captureReason = "text_like_payload",
+                candidateRelevance = if (isSignalHost) "signal_candidate" else "non_candidate",
+                truncationReasonOnLimit = "body_size_limit",
+            )
+        }
+
+        return CapturePlan(
+            mode = BODY_ACTION_STORE_METADATA_ONLY,
+            captureRaw = false,
+            peekBytes = 0L,
+            bodyCapturePolicy = "metadata_only",
+            captureReason = "binary_snippet_only",
+            candidateRelevance = "non_candidate",
+            truncationReasonOnLimit = "stream_capture_policy",
+        )
     }
 
     private fun shouldCaptureTextLike(contentType: MediaType?): Boolean {
@@ -383,7 +479,12 @@ class RuntimeToolkitOkHttpInterceptor(
     }
 
     companion object {
+        private const val BODY_ACTION_STORE_FULL = "STORE_FULL"
+        private const val BODY_ACTION_STORE_FULL_REQUIRED = "STORE_FULL_REQUIRED"
+        private const val BODY_ACTION_STORE_TRUNCATED = "STORE_TRUNCATED"
+        private const val BODY_ACTION_STORE_METADATA_ONLY = "STORE_METADATA_ONLY"
         private const val MAX_PEEK_BYTES_FULL = 16L * 1024L * 1024L
+        private const val MAX_PEEK_BYTES_TRUNCATED = 4L * 1024L * 1024L
         private const val MAX_PEEK_BYTES_SNIPPET = 32L * 1024L
         private const val MAX_BODY_PREVIEW_BYTES = 16 * 1024
     }

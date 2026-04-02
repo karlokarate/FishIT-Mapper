@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import threading
@@ -15,6 +16,7 @@ if str(TOOLKIT_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLKIT_DIR))
 
 from runtime_dataset_cli import (  # type: ignore  # noqa: E402
+    body_capture_decision,
     build_body_store,
     build_correlation,
     build_field_matrix,
@@ -25,6 +27,7 @@ from runtime_dataset_cli import (  # type: ignore  # noqa: E402
     build_response_store_index,
     build_provenance_graph,
     ensure_derived,
+    read_jsonl,
     normalize_runtime_rows,
     pipeline_quality_report,
 )
@@ -367,6 +370,108 @@ class RuntimeDatasetHardeningTests(unittest.TestCase):
         self.assertEqual(payload.get("extracted_field_count"), 0)
         self.assertEqual(payload.get("confidence_summary"), "none")
         self.assertEqual(payload.get("source_ref"), "extract_1")
+
+    def test_truncation_event_preserves_explicit_host_class_without_url(self) -> None:
+        rows = [
+            {
+                "schema_version": 1,
+                "run_id": "run_1",
+                "event_id": "trunc_1",
+                "event_type": "truncation_event",
+                "ts_utc": "2026-04-01T12:00:03Z",
+                "trace_id": "trace_1",
+                "span_id": "",
+                "action_id": "action_1",
+                "payload": {
+                    "request_id": "req_1",
+                    "response_id": "resp_1",
+                    "phase_id": "detail_probe",
+                    "host_class": "target_api",
+                    "normalized_host": "api.zdf.de",
+                    "normalized_path": "/tmd/2/path",
+                    "mime_type": "application/json",
+                    "capture_truncated": True,
+                    "capture_limit_bytes": 4194304,
+                    "stored_size_bytes": 4194304,
+                    "truncation_reason": "body_size_limit",
+                },
+            }
+        ]
+        normalized = normalize_runtime_rows(rows)
+        payload = normalized[0].get("payload", {})
+        self.assertEqual(payload.get("host_class"), "target_api")
+        self.assertEqual(payload.get("normalized_host"), "api.zdf.de")
+        self.assertEqual(payload.get("normalized_path"), "/tmd/2/path")
+        self.assertEqual(payload.get("phase_id"), "detail_probe")
+
+    def test_candidate_document_requirement_is_explicit_marker_only(self) -> None:
+        base_row = {
+            "schema_version": 1,
+            "run_id": "run_1",
+            "event_id": "resp_html",
+            "event_type": "network_response_event",
+            "ts_utc": "2026-04-01T12:00:03Z",
+            "trace_id": "trace_1",
+            "span_id": "",
+            "action_id": "action_1",
+            "payload": {
+                "request_id": "req_1",
+                "response_id": "resp_html",
+                "phase_id": "detail_probe",
+                "host_class": "target_document",
+                "url": "https://www.example.com/detail/1",
+                "method": "GET",
+                "status_code": 200,
+                "mime_type": "text/html",
+                "headers": {"content-type": "text/html"},
+                "body_preview": "<html><title>A</title></html>",
+            },
+        }
+        normalized = normalize_runtime_rows([base_row])
+        without_marker = body_capture_decision(normalized[0])
+        self.assertEqual(without_marker.get("body_capture_policy"), "full_candidate")
+
+        with_marker_row = json.loads(json.dumps(base_row))
+        with_marker_row["event_id"] = "resp_html_marker"
+        with_marker_row["payload"]["candidate_document"] = True
+        normalized_with_marker = normalize_runtime_rows([with_marker_row])
+        with_marker = body_capture_decision(normalized_with_marker[0])
+        self.assertEqual(with_marker.get("body_capture_policy"), "full_candidate_required")
+
+    def test_truncated_signal_candidate_does_not_emit_required_body_failure(self) -> None:
+        rows = [
+            {
+                "schema_version": 1,
+                "run_id": "run_1",
+                "event_id": "resp_signal",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-01T12:00:04Z",
+                "trace_id": "trace_1",
+                "span_id": "",
+                "action_id": "action_1",
+                "payload": {
+                    "request_id": "req_signal",
+                    "response_id": "resp_signal",
+                    "phase_id": "home_probe",
+                    "host_class": "target_document",
+                    "url": "https://www.example.com/",
+                    "method": "GET",
+                    "status_code": 200,
+                    "mime_type": "text/html",
+                    "headers": {"content-type": "text/html", "content-length": "6000000"},
+                    "body_preview": "<html><title>A</title></html>",
+                    "capture_truncated": True,
+                    "capture_limit_bytes": 4194304,
+                    "body_capture_policy": "truncated_candidate",
+                    "capture_failure": "",
+                },
+            }
+        ]
+        normalized = normalize_runtime_rows(rows)
+        payload = normalized[0].get("payload", {})
+        self.assertTrue(payload.get("capture_truncated"))
+        self.assertEqual(payload.get("body_capture_policy"), "truncated_candidate")
+        self.assertEqual(str(payload.get("capture_failure") or ""), "")
 
     def test_truncation_semantics_are_explicit(self) -> None:
         rows = [
@@ -771,8 +876,254 @@ class RuntimeDatasetHardeningTests(unittest.TestCase):
             by_event = {str(item.get("event_id")): item for item in items}
             self.assertGreaterEqual(int(by_event["resp_json"].get("size_bytes") or 0), len(json_body))
             self.assertGreaterEqual(int(by_event["resp_html"].get("size_bytes") or 0), len(html_body))
-            self.assertEqual(by_event["resp_json"].get("body_capture_policy"), "candidate_full")
-            self.assertEqual(by_event["resp_html"].get("body_capture_policy"), "candidate_full")
+            self.assertEqual(by_event["resp_json"].get("body_capture_policy"), "full_candidate_required")
+            self.assertIn(by_event["resp_html"].get("body_capture_policy"), {"full_candidate", "full_candidate_required"})
+
+    def test_candidate_graphql_json_never_truncates_under_normal_limits(self) -> None:
+        rows = [
+            {
+                "schema_version": 1,
+                "run_id": "run_graphql",
+                "event_id": "resp_graphql",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:00Z",
+                "trace_id": "trace_graphql",
+                "span_id": "",
+                "action_id": "action_graphql",
+                "payload": {
+                    "request_id": "req_graphql",
+                    "response_id": "resp_graphql",
+                    "phase_id": "search_probe",
+                    "host_class": "target",
+                    "url": "https://api.example.com/graphql?operationName=SearchQuery",
+                    "method": "POST",
+                    "status_code": 200,
+                    "mime_type": "application/json",
+                    "headers": {"content-length": "120"},
+                    "stored_size_bytes": 120,
+                    "capture_truncated": False,
+                    "body_preview": "{\"data\":{\"search\":[{\"title\":\"A\"}]}}",
+                },
+            }
+        ]
+        normalized = normalize_runtime_rows(rows)
+        payload = normalized[0]["payload"]
+        self.assertFalse(payload.get("capture_truncated"))
+        self.assertEqual(payload.get("body_capture_policy"), "full_candidate_required")
+        self.assertEqual(payload.get("truncation_reason"), "")
+
+    def test_manifest_never_truncates_under_normal_limits(self) -> None:
+        rows = [
+            {
+                "schema_version": 1,
+                "run_id": "run_manifest",
+                "event_id": "resp_manifest",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:01Z",
+                "trace_id": "trace_manifest",
+                "span_id": "",
+                "action_id": "action_manifest",
+                "payload": {
+                    "request_id": "req_manifest",
+                    "response_id": "resp_manifest",
+                    "phase_id": "playback_probe",
+                    "host_class": "target",
+                    "url": "https://cdn.example.com/path/master.m3u8",
+                    "method": "GET",
+                    "status_code": 200,
+                    "mime_type": "application/vnd.apple.mpegurl",
+                    "headers": {"content-length": "220"},
+                    "stored_size_bytes": 220,
+                    "capture_truncated": False,
+                    "body_preview": "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1200000\nhttps://cdn.example.com/child.m3u8\n",
+                },
+            }
+        ]
+        normalized = normalize_runtime_rows(rows)
+        payload = normalized[0]["payload"]
+        self.assertFalse(payload.get("capture_truncated"))
+        self.assertEqual(payload.get("body_capture_policy"), "full_candidate_required")
+
+    def test_media_segment_resolves_to_metadata_only_policy(self) -> None:
+        rows = [
+            {
+                "schema_version": 1,
+                "run_id": "run_media",
+                "event_id": "resp_seg",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:02Z",
+                "trace_id": "trace_media",
+                "span_id": "",
+                "action_id": "action_media",
+                "payload": {
+                    "request_id": "req_seg",
+                    "response_id": "resp_seg",
+                    "phase_id": "playback_probe",
+                    "host_class": "target_playback",
+                    "url": "https://cdn.example.com/v/segment_0001.m4s",
+                    "method": "GET",
+                    "status_code": 200,
+                    "mime_type": "video/mp4",
+                    "headers": {"content-length": "8192"},
+                    "stored_size_bytes": 0,
+                    "capture_truncated": False,
+                },
+            }
+        ]
+        normalized = normalize_runtime_rows(rows)
+        payload = normalized[0]["payload"]
+        self.assertIn(payload.get("body_capture_policy"), {"metadata_only", "skipped_media_segment"})
+        self.assertEqual(payload.get("candidate_relevance"), "non_candidate")
+
+    def test_legacy_4mb_cap_is_always_marked_truncated(self) -> None:
+        rows = [
+            {
+                "schema_version": 1,
+                "run_id": "run_cap",
+                "event_id": "resp_cap",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:03Z",
+                "trace_id": "trace_cap",
+                "span_id": "",
+                "action_id": "action_cap",
+                "payload": {
+                    "request_id": "req_cap",
+                    "response_id": "resp_cap",
+                    "phase_id": "search_probe",
+                    "host_class": "target",
+                    "url": "https://api.example.com/graphql?operationName=Search",
+                    "method": "POST",
+                    "status_code": 200,
+                    "mime_type": "application/json",
+                    "headers": {"content-type": "application/json"},
+                    "stored_size_bytes": 4194304,
+                    "capture_truncated": False,
+                },
+            }
+        ]
+        normalized = normalize_runtime_rows(rows)
+        payload = normalized[0]["payload"]
+        self.assertTrue(payload.get("capture_truncated"))
+        self.assertEqual(int(payload.get("capture_limit_bytes") or 0), 4194304)
+        self.assertEqual(payload.get("truncation_reason"), "body_size_limit")
+
+    def test_truncated_body_is_visible_to_extraction_and_replay(self) -> None:
+        rows = [
+            {
+                "schema_version": 1,
+                "run_id": "run_trunc_visibility",
+                "event_id": "req_trunc",
+                "event_type": "network_request_event",
+                "ts_utc": "2026-04-02T12:00:04Z",
+                "trace_id": "trace_trunc",
+                "span_id": "",
+                "action_id": "action_trunc",
+                "payload": {
+                    "request_id": "req_trunc",
+                    "phase_id": "search_probe",
+                    "host_class": "target",
+                    "url": "https://api.example.com/graphql?operationName=Search",
+                    "method": "POST",
+                    "headers": {"accept": "application/json"},
+                    "request_operation": "search_graphql_query",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_trunc_visibility",
+                "event_id": "resp_trunc",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:05Z",
+                "trace_id": "trace_trunc",
+                "span_id": "",
+                "action_id": "action_trunc",
+                "payload": {
+                    "request_id": "req_trunc",
+                    "response_id": "resp_trunc",
+                    "phase_id": "search_probe",
+                    "host_class": "target",
+                    "url": "https://api.example.com/graphql?operationName=Search",
+                    "method": "POST",
+                    "status_code": 200,
+                    "mime_type": "application/json",
+                    "headers": {"content-length": "9000000"},
+                    "stored_size_bytes": 4194304,
+                    "capture_truncated": False,
+                    "body_preview": "{\"data\":",
+                },
+            },
+        ]
+        normalized = normalize_runtime_rows(rows)
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            paths = ensure_derived(runtime_dir, normalized)
+            field_matrix = json.loads(paths["field_matrix"].read_text(encoding="utf-8"))
+            self.assertGreaterEqual(int(field_matrix.get("skipped_truncated_events") or 0), 1)
+            replay_requirements = json.loads(paths["replay_requirements"].read_text(encoding="utf-8"))
+            self.assertGreaterEqual(int(replay_requirements.get("truncation_summary", {}).get("total_truncated_responses") or 0), 1)
+            truncation_events = read_jsonl(paths["truncation_events"])
+            self.assertGreaterEqual(len(truncation_events), 1)
+
+    def test_duplicate_large_html_body_reuses_body_ref(self) -> None:
+        large_html = "<html><head><title>X</title></head><body>" + ("A" * (600 * 1024)) + "</body></html>"
+        rows = [
+            {
+                "schema_version": 1,
+                "run_id": "run_dedupe_html",
+                "event_id": "resp_html_1",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:06Z",
+                "trace_id": "trace_html",
+                "span_id": "",
+                "action_id": "action_html",
+                "payload": {
+                    "request_id": "req_html_1",
+                    "response_id": "resp_html_1",
+                    "phase_id": "home_probe",
+                    "host_class": "target_document",
+                    "url": "https://www.example.com/a",
+                    "method": "GET",
+                    "status_code": 200,
+                    "mime_type": "text/html",
+                    "headers": {"content-length": str(len(large_html.encode("utf-8")))},
+                    "response_store_path": "resp_html_1.bin",
+                },
+            },
+            {
+                "schema_version": 1,
+                "run_id": "run_dedupe_html",
+                "event_id": "resp_html_2",
+                "event_type": "network_response_event",
+                "ts_utc": "2026-04-02T12:00:07Z",
+                "trace_id": "trace_html",
+                "span_id": "",
+                "action_id": "action_html",
+                "payload": {
+                    "request_id": "req_html_2",
+                    "response_id": "resp_html_2",
+                    "phase_id": "home_probe",
+                    "host_class": "target_document",
+                    "url": "https://www.example.com/b",
+                    "method": "GET",
+                    "status_code": 200,
+                    "mime_type": "text/html",
+                    "headers": {"content-length": str(len(large_html.encode("utf-8")))},
+                    "response_store_path": "resp_html_2.bin",
+                },
+            },
+        ]
+        normalized = normalize_runtime_rows(rows)
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            (runtime_dir / "response_store").mkdir(parents=True, exist_ok=True)
+            (runtime_dir / "response_store" / "resp_html_1.bin").write_text(large_html, encoding="utf-8")
+            (runtime_dir / "response_store" / "resp_html_2.bin").write_text(large_html, encoding="utf-8")
+            payload = build_body_store(normalized, runtime_dir=runtime_dir)
+            index = payload.get("index", {})
+            self.assertEqual(int(index.get("unique_blob_count") or 0), 1)
+            items = {str(item.get("event_id")): item for item in index.get("items", [])}
+            self.assertEqual(items["resp_html_1"].get("body_ref"), items["resp_html_2"].get("body_ref"))
+            self.assertTrue(items["resp_html_2"].get("dedup_reused"))
 
     def test_field_matrix_reads_response_store_payload_when_preview_missing(self) -> None:
         rows = [

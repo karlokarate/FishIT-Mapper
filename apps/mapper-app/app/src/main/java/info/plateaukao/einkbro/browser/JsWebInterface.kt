@@ -261,6 +261,14 @@ class JsWebInterface(private val webView: EBWebView) :
             } else {
                 null
             }
+            val bodyCapturePolicy = resolveBridgeBodyCapturePolicy(url = url, mimeType = mimeType)
+            val candidateRelevance = candidateRelevanceForPolicy(bodyCapturePolicy)
+            val truncationReason = if (bodyPreviewTruncated) "body_size_limit" else ""
+            val captureFailure = if (bodyPreviewTruncated && bodyCapturePolicy == "full_candidate_required") {
+                "required_body_truncated"
+            } else {
+                ""
+            }
 
             val responseId = RuntimeToolkitTelemetry.logNetworkResponse(
                 context = context,
@@ -281,6 +289,11 @@ class JsWebInterface(private val webView: EBWebView) :
                     "capture_limit_bytes" to if (bodyPreviewTruncated) captureLimitBytes else 0,
                     "stored_size_bytes" to captureLimitBytes,
                     "content_length_header" to contentLengthHeader,
+                    "truncation_reason" to truncationReason,
+                    "body_capture_policy" to bodyCapturePolicy,
+                    "candidate_relevance" to candidateRelevance,
+                    "capture_reason" to "js_bridge_capture",
+                    "capture_failure" to captureFailure,
                 ),
             )
 
@@ -414,6 +427,37 @@ class JsWebInterface(private val webView: EBWebView) :
             normalized == "set-cookie" ||
             normalized.contains("token") ||
             normalized.startsWith("x-")
+    }
+
+    private fun resolveBridgeBodyCapturePolicy(url: String, mimeType: String?): String {
+        val lowerUrl = url.lowercase()
+        val lowerMime = (mimeType ?: "").lowercase()
+        val isMediaSegment = lowerUrl.endsWith(".m4s") ||
+            lowerUrl.endsWith(".ts") ||
+            lowerUrl.endsWith(".mp4") ||
+            lowerMime.startsWith("video/") ||
+            lowerMime.startsWith("audio/")
+        if (isMediaSegment) return "skipped_media_segment"
+        if (
+            lowerUrl.contains("graphql") ||
+            lowerUrl.contains(".m3u8") ||
+            lowerUrl.contains(".mpd") ||
+            lowerUrl.contains("manifest") ||
+            lowerUrl.contains("resolver") ||
+            lowerMime.contains("json")
+        ) {
+            return "full_candidate_required"
+        }
+        if (lowerMime.contains("html") || lowerMime.contains("xml")) return "full_candidate"
+        return "metadata_only"
+    }
+
+    private fun candidateRelevanceForPolicy(policy: String): String {
+        return when (policy) {
+            "full_candidate_required" -> "required_candidate"
+            "full_candidate", "truncated_candidate" -> "signal_candidate"
+            else -> "non_candidate"
+        }
     }
 
     private fun playbackActionName(

@@ -147,6 +147,30 @@ class RuntimeDatasetIntegrationSmokeTests(unittest.TestCase):
                 self.assertTrue(path.exists(), name)
                 self.assertGreater(path.stat().st_size, 0, name)
 
+    def test_headers_infer_required_active_includes_truncation_visibility(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            rows = [
+                {
+                    "schema_version": 1,
+                    "run_id": "run_active_headers",
+                    "event_id": "phase_home",
+                    "event_type": "probe_phase_event",
+                    "ts_utc": "2026-04-01T12:00:00Z",
+                    "trace_id": "trace_phase",
+                    "span_id": "",
+                    "action_id": "action_phase",
+                    "payload": {"phase_id": "home_probe", "transition": "start"},
+                }
+            ]
+            write_events(runtime_dir, rows)
+            result = run_cli("headers", "infer-required-active", runtime_dir=runtime_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout or "{}")
+            replay = payload.get("replay_requirements", {})
+            self.assertIn("truncation_summary", replay)
+            self.assertIn("total_truncated_responses", replay.get("truncation_summary", {}))
+
     def test_candidate_body_capture_reads_full_json_html_from_store(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             runtime_dir = Path(tmp)
@@ -245,8 +269,8 @@ class RuntimeDatasetIntegrationSmokeTests(unittest.TestCase):
             items = {str(item.get("event_id") or ""): item for item in index.get("items", [])}
             self.assertGreaterEqual(int(items["resp_json"].get("size_bytes") or 0), len(json_body))
             self.assertGreaterEqual(int(items["resp_html"].get("size_bytes") or 0), len(html_body))
-            self.assertEqual(items["resp_json"].get("body_capture_policy"), "candidate_full")
-            self.assertEqual(items["resp_html"].get("body_capture_policy"), "candidate_full")
+            self.assertEqual(items["resp_json"].get("body_capture_policy"), "full_candidate_required")
+            self.assertIn(items["resp_html"].get("body_capture_policy"), {"full_candidate", "full_candidate_required"})
 
 
 if __name__ == "__main__":

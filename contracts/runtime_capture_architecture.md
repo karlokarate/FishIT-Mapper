@@ -48,14 +48,45 @@
 - All requests/responses keep metadata; heavy body blobs are stored only for candidate responses.
 - Candidate capture policy must persist:
   - `body_capture_policy`
+  - `candidate_relevance`
   - `capture_reason`
   - `capture_truncated`
   - `capture_limit_bytes`
   - `content_length_header`
   - `original_content_length`
   - `stored_size_bytes`
+  - `truncation_reason`
 - Body blobs are content-addressed by SHA-256 and compressed when available.
 - Candidate bodies use an explicit 16 MB cap; any cap hit must set truncation metadata and must never be silent.
+- Resolver output is deterministic and uses:
+  - `STORE_FULL_REQUIRED`
+  - `STORE_FULL`
+  - `STORE_TRUNCATED`
+  - `STORE_METADATA_ONLY`
+  - `SKIP_BODY`
+
+## Truncation Policy Matrix
+- Full-required classes (`STORE_FULL_REQUIRED`):
+  - GraphQL JSON
+  - Candidate REST JSON
+  - Playback manifests (`.m3u8`, `.mpd`)
+  - Playback resolver payloads
+  - Required bootstrap/config JSON
+  - Candidate HTML documents (`candidate_document=true`)
+- Truncation-allowed classes (`STORE_TRUNCATED`):
+  - Large non-candidate HTML
+  - Debug media-segment capture overrides
+- Metadata-only classes (`STORE_METADATA_ONLY`):
+  - Generic playback media segments
+  - Binary/non-signal assets
+  - Analytics/ad/noise payloads
+- Skip classes (`SKIP_BODY`):
+  - Ignored/non-URL noise rows that should never carry body blobs
+- A 4 MB (`4194304`) stored candidate body is treated as a cap signal and must emit:
+  - `capture_truncated=true`
+  - `capture_limit_bytes=4194304`
+  - `truncation_reason=body_size_limit`
+- `truncation_event` rows are emitted for all truncations and required-body failures.
 
 ## Provenance Model
 - Dynamic runtime inputs are persisted in `provenance_registry.json`.

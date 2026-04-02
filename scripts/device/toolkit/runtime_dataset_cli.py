@@ -118,6 +118,31 @@ PROVENANCE_TARGET_NAMES = {
     "origin": ("origin",),
 }
 
+BODY_ACTION_STORE_FULL = "STORE_FULL"
+BODY_ACTION_STORE_FULL_REQUIRED = "STORE_FULL_REQUIRED"
+BODY_ACTION_STORE_TRUNCATED = "STORE_TRUNCATED"
+BODY_ACTION_STORE_METADATA_ONLY = "STORE_METADATA_ONLY"
+BODY_ACTION_SKIP_BODY = "SKIP_BODY"
+
+BODY_CAPTURE_POLICY_FULL_CANDIDATE = "full_candidate"
+BODY_CAPTURE_POLICY_FULL_CANDIDATE_REQUIRED = "full_candidate_required"
+BODY_CAPTURE_POLICY_TRUNCATED_CANDIDATE = "truncated_candidate"
+BODY_CAPTURE_POLICY_METADATA_ONLY = "metadata_only"
+BODY_CAPTURE_POLICY_SKIPPED_MEDIA_SEGMENT = "skipped_media_segment"
+BODY_CAPTURE_POLICY_SKIP_BODY = "skip_body"
+
+CANDIDATE_RELEVANCE_REQUIRED = "required_candidate"
+CANDIDATE_RELEVANCE_SIGNAL = "signal_candidate"
+CANDIDATE_RELEVANCE_NON_CANDIDATE = "non_candidate"
+
+TRUNCATION_REASON_BODY_SIZE_LIMIT = "body_size_limit"
+TRUNCATION_REASON_STREAM_POLICY = "stream_capture_policy"
+TRUNCATION_REASON_MANUAL_CAP = "manual_cap"
+
+FOUR_MB_BYTES = 4 * 1024 * 1024
+SIXTEEN_MB_BYTES = 16 * 1024 * 1024
+LARGE_HTML_DEDUPE_THRESHOLD_BYTES = 512 * 1024
+
 
 def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -1142,24 +1167,46 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
         if phase_id in SPECIALIZED_PHASES:
             seen_special_phase = True
 
-        payload["normalized_scheme"] = scheme
-        payload["normalized_host"] = host
-        payload["normalized_path"] = path
-        payload["normalized_url"] = str(payload.get("normalized_url") or normalized_url_for_parts(scheme, host, path, query))
+        payload_normalized_scheme = str(payload.get("normalized_scheme") or "").strip().lower() or scheme
+        payload_normalized_host = normalize_host(str(payload.get("normalized_host") or "").strip()) or host
+        payload_normalized_path = str(payload.get("normalized_path") or "").strip() or path or "/"
+        if not payload_normalized_path.startswith("/"):
+            payload_normalized_path = f"/{payload_normalized_path}"
+        payload["normalized_scheme"] = payload_normalized_scheme
+        payload["normalized_host"] = payload_normalized_host
+        payload["normalized_path"] = payload_normalized_path
+        payload["normalized_url"] = str(
+            payload.get("normalized_url")
+            or normalized_url_for_parts(payload_normalized_scheme, payload_normalized_host, payload_normalized_path, query)
+        )
         payload["target_site_id"] = target_site_id
 
-        host_class = resolve_host_class(
-            host=host,
-            path=path,
-            url=url,
-            source=event_source(row),
-            target_hosts=target_hosts,
-            target_site_id=target_site_id,
-            original_host_class=event_host_class(row),
-            operation=request_operation,
-            classification=request_classification,
-            mime_type=mime_type,
+        explicit_host_class_raw = payload.get("host_class")
+        if explicit_host_class_raw is None:
+            explicit_host_class_raw = payload.get("hostClass")
+        explicit_host_class = (
+            normalize_host_class_value(explicit_host_class_raw)
+            if str(explicit_host_class_raw or "").strip()
+            else ""
         )
+        preserve_derived_host_class = event_type in {"extraction_event", "truncation_event"} and (
+            explicit_host_class in CANONICAL_HOST_CLASSES
+        )
+        if preserve_derived_host_class:
+            host_class = explicit_host_class
+        else:
+            host_class = resolve_host_class(
+                host=payload_normalized_host,
+                path=payload_normalized_path,
+                url=url,
+                source=event_source(row),
+                target_hosts=target_hosts,
+                target_site_id=target_site_id,
+                original_host_class=event_host_class(row),
+                operation=request_operation,
+                classification=request_classification,
+                mime_type=mime_type,
+            )
         payload["host_class"] = host_class
 
         if event_type == "extraction_event":
@@ -1306,15 +1353,53 @@ def normalize_runtime_rows(rows: List[Dict[str, Any]], runtime_dir: Optional[pat
 
             body_ref = str(payload.get("body_ref") or payload.get("response_store_path") or payload.get("responseStorePath") or "").strip()
             payload["body_ref"] = body_ref
-            capture_truncated = bool(payload.get("capture_truncated"))
+            rel_response_store_path = normalize_response_store_path(body_ref) if body_ref else event_response_store_path(row)
+            if runtime_dir and rel_response_store_path:
+                body_path = runtime_dir / "response_store" / rel_response_store_path
+                if body_path.exists() and body_path.is_file():
+                    try:
+                        stored_size_bytes = int(body_path.stat().st_size)
+                        payload["stored_size_bytes"] = stored_size_bytes
+                    except Exception:
+                        pass
+
+            decision = body_capture_decision(row)
+            payload["body_capture_policy"] = str(payload.get("body_capture_policy") or decision.get("body_capture_policy") or BODY_CAPTURE_POLICY_METADATA_ONLY)
+            payload["capture_reason"] = str(payload.get("capture_reason") or decision.get("capture_reason") or "")
+            payload["candidate_relevance"] = str(payload.get("candidate_relevance") or decision.get("candidate_relevance") or CANDIDATE_RELEVANCE_NON_CANDIDATE)
+
+            capture_truncated = parse_boolish(payload.get("capture_truncated"), default=False)
             capture_limit_bytes = safe_int(payload.get("capture_limit_bytes") or payload.get("captured_body_bytes"), default=0)
             if not capture_truncated and original_content_length > 0 and stored_size_bytes > 0 and stored_size_bytes < original_content_length:
                 capture_truncated = True
+            if (
+                not capture_truncated
+                and stored_size_bytes == FOUR_MB_BYTES
+                and payload.get("candidate_relevance") in {CANDIDATE_RELEVANCE_REQUIRED, CANDIDATE_RELEVANCE_SIGNAL}
+                and payload.get("body_capture_policy")
+                not in {BODY_CAPTURE_POLICY_METADATA_ONLY, BODY_CAPTURE_POLICY_SKIPPED_MEDIA_SEGMENT, BODY_CAPTURE_POLICY_SKIP_BODY}
+            ):
+                capture_truncated = True
             if capture_truncated and capture_limit_bytes <= 0 and stored_size_bytes > 0:
-                capture_limit_bytes = stored_size_bytes
+                capture_limit_bytes = FOUR_MB_BYTES if stored_size_bytes == FOUR_MB_BYTES else stored_size_bytes
+            capture_failure = str(payload.get("capture_failure") or "").strip()
+            if capture_failure in {"required_body_truncated", "required_body_missing"} and not capture_truncated:
+                capture_truncated = True
+                if capture_limit_bytes <= 0 and stored_size_bytes > 0:
+                    capture_limit_bytes = stored_size_bytes
             payload["capture_truncated"] = capture_truncated
-            if capture_truncated:
-                payload["capture_limit_bytes"] = capture_limit_bytes
+            payload["capture_limit_bytes"] = capture_limit_bytes if capture_truncated else 0
+            truncation_reason = str(payload.get("truncation_reason") or "").strip()
+            if capture_truncated and not truncation_reason:
+                if capture_limit_bytes == FOUR_MB_BYTES:
+                    truncation_reason = TRUNCATION_REASON_BODY_SIZE_LIMIT
+                elif payload.get("body_capture_policy") in {BODY_CAPTURE_POLICY_METADATA_ONLY, BODY_CAPTURE_POLICY_SKIPPED_MEDIA_SEGMENT}:
+                    truncation_reason = TRUNCATION_REASON_STREAM_POLICY
+                else:
+                    truncation_reason = TRUNCATION_REASON_BODY_SIZE_LIMIT
+            payload["truncation_reason"] = truncation_reason if capture_truncated else ""
+            if capture_truncated and payload.get("body_capture_policy") == BODY_CAPTURE_POLICY_FULL_CANDIDATE_REQUIRED:
+                payload["capture_failure"] = "required_body_truncated"
             payload["source_channel"] = event_source(row)
             payload["request_operation"] = str(
                 payload.get("request_operation")
@@ -1425,12 +1510,34 @@ def event_stored_size_bytes(row: Dict[str, Any]) -> int:
 
 def event_capture_truncated(row: Dict[str, Any]) -> bool:
     payload = event_payload(row)
-    return bool(payload.get("capture_truncated"))
+    return parse_boolish(payload.get("capture_truncated"), default=False)
 
 
 def event_capture_limit_bytes(row: Dict[str, Any]) -> int:
     payload = event_payload(row)
     return safe_int(payload.get("capture_limit_bytes") or payload.get("captured_body_bytes"), default=0)
+
+
+def event_truncation_reason(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    return str(payload.get("truncation_reason") or "").strip()
+
+
+def event_body_capture_policy(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    return str(payload.get("body_capture_policy") or BODY_CAPTURE_POLICY_METADATA_ONLY).strip() or BODY_CAPTURE_POLICY_METADATA_ONLY
+
+
+def event_candidate_relevance(row: Dict[str, Any]) -> str:
+    payload = event_payload(row)
+    value = str(payload.get("candidate_relevance") or "").strip().lower()
+    if value in {
+        CANDIDATE_RELEVANCE_REQUIRED,
+        CANDIDATE_RELEVANCE_SIGNAL,
+        CANDIDATE_RELEVANCE_NON_CANDIDATE,
+    }:
+        return value
+    return CANDIDATE_RELEVANCE_NON_CANDIDATE
 
 
 def event_source_channel(row: Dict[str, Any]) -> str:
@@ -1559,6 +1666,10 @@ def compact_response(row: Dict[str, Any]) -> Dict[str, Any]:
         "body_ref": str(payload.get("body_ref") or event_response_store_path(row)),
         "capture_truncated": event_capture_truncated(row),
         "capture_limit_bytes": event_capture_limit_bytes(row),
+        "truncation_reason": event_truncation_reason(row),
+        "body_capture_policy": event_body_capture_policy(row),
+        "candidate_relevance": event_candidate_relevance(row),
+        "capture_failure": str(payload.get("capture_failure") or ""),
         "source_channel": event_source_channel(row),
         "request_operation": str(payload.get("request_operation") or event_request_operation(row)),
         "graphql_operation_name": str(payload.get("graphql_operation_name") or ""),
@@ -2470,18 +2581,28 @@ def build_endpoint_candidates(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
             or bool(event_payload(resp).get("body_ref"))
             or bool(event_response_store_path(resp))
         ]
+        full_body_present = [resp for resp in body_present if not event_capture_truncated(resp)]
+        truncated_responses = [resp for resp in successful if event_capture_truncated(resp)]
         graphql_op = str(event_payload(items[0]).get("graphql_operation_name") or "")
         repeated_bonus = min(count, 5) / 5.0
         phase_bonus = 1.0 if phase_id in SCORABLE_PHASES else 0.0
         response_bonus = 1.0 if successful else 0.0
-        body_bonus = 1.0 if body_present else 0.0
+        body_bonus = 1.0 if full_body_present else 0.0
         graphql_bonus = 1.0 if graphql_op else 0.0
+        truncation_penalty = 0.15 if truncated_responses else 0.0
         score = round(
             (0.30 * repeated_bonus)
             + (0.20 * phase_bonus)
             + (0.25 * response_bonus)
             + (0.15 * body_bonus)
             + (0.10 * graphql_bonus),
+            4,
+        )
+        score = round(
+            max(
+                0.0,
+                score - truncation_penalty,
+            ),
             4,
         )
 
@@ -2510,6 +2631,8 @@ def build_endpoint_candidates(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "phase_alignment": phase_id in SCORABLE_PHASES,
                 "response_success_count": len(successful),
                 "response_body_presence": len(body_present),
+                "response_full_body_presence": len(full_body_present),
+                "response_truncated_count": len(truncated_responses),
                 "graphql_operation_stability": bool(graphql_op),
                 "playback_or_auth_linkage": phase_id in {PHASE_PLAYBACK, PHASE_AUTH},
             },
@@ -2606,6 +2729,8 @@ def build_field_matrix(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib
     key_counter: Counter[str] = Counter()
     parsed_events = 0
     skipped_non_target = 0
+    skipped_truncated = 0
+    truncation_warnings: List[Dict[str, Any]] = []
     field_hits: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     search_mapping_samples: List[Dict[str, Any]] = []
     extraction_events: List[Dict[str, Any]] = []
@@ -2655,8 +2780,49 @@ def build_field_matrix(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib
         event_id = str(row.get("event_id") or "")
         source_ref = str(event_payload(row).get("body_ref") or event_response_store_path(row) or event_id)
         phase_id = event_phase_id(row)
+        body_capture_policy = event_body_capture_policy(row)
+        candidate_relevance = event_candidate_relevance(row)
+        capture_truncated = event_capture_truncated(row)
+        truncation_reason = event_truncation_reason(row)
+        capture_failure = str(event_payload(row).get("capture_failure") or "").strip()
         extraction_kind = "unknown"
         extracted_field_count = 0
+        if capture_truncated:
+            skipped_truncated += 1
+            truncation_warnings.append(
+                {
+                    "event_id": event_id,
+                    "request_id": event_request_id(row),
+                    "response_id": event_response_id(row),
+                    "reason": truncation_reason or TRUNCATION_REASON_BODY_SIZE_LIMIT,
+                    "body_capture_policy": body_capture_policy,
+                    "candidate_relevance": candidate_relevance,
+                }
+            )
+            extraction_events.append(
+                {
+                    "source_ref": source_ref,
+                    "phase_id": phase_id,
+                    "host_class": host_class,
+                    "extraction_kind": "truncated_body",
+                    "success": False,
+                    "extracted_field_count": 0,
+                    "confidence_summary": "none",
+                    "event_id": event_id,
+                }
+            )
+            continue
+        if capture_failure:
+            truncation_warnings.append(
+                {
+                    "event_id": event_id,
+                    "request_id": event_request_id(row),
+                    "response_id": event_response_id(row),
+                    "reason": capture_failure,
+                    "body_capture_policy": body_capture_policy,
+                    "candidate_relevance": candidate_relevance,
+                }
+            )
         body = read_response_store_payload(row, runtime_dir)
         if not body:
             body = event_body_preview(row)
@@ -2818,6 +2984,8 @@ def build_field_matrix(rows: List[Dict[str, Any]], runtime_dir: Optional[pathlib
         "parsed_response_events": parsed_events,
         "total_response_events": len(response_events),
         "skipped_non_target_events": skipped_non_target,
+        "skipped_truncated_events": skipped_truncated,
+        "truncation_warnings": truncation_warnings,
         "extraction_event_count": len(extraction_events),
         "extraction_success_count": len([item for item in extraction_events if bool(item.get("success"))]),
         "extraction_events": extraction_events,
@@ -2987,6 +3155,7 @@ def build_replay_requirements(
         )
         replay_payload["active_replay_timeout_ms"] = max(int(timeout_ms or 0), 500)
         replay_payload["allow_unsafe_methods"] = bool(allow_unsafe_methods)
+        replay_payload = annotate_replay_truncation_visibility(replay_payload, rows)
         if replay_payload.get("operations"):
             return replay_payload
 
@@ -2995,7 +3164,63 @@ def build_replay_requirements(
         observed["inference_mode"] = "active_http_replay_fallback_observed"
         observed["active_replay_timeout_ms"] = max(int(timeout_ms or 0), 500)
         observed["allow_unsafe_methods"] = bool(allow_unsafe_methods)
-    return observed
+    return annotate_replay_truncation_visibility(observed, rows)
+
+
+def annotate_replay_truncation_visibility(payload: Dict[str, Any], rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    operations = payload.get("operations")
+    if not isinstance(operations, dict):
+        payload["truncation_summary"] = {"total_truncated_responses": 0, "required_body_failures": 0}
+        return payload
+
+    request_index = {
+        event_request_id(row): row
+        for row in rows
+        if row.get("event_type") == "network_request_event" and event_request_id(row)
+    }
+    endpoint_truncation_counter: Counter[Tuple[str, str, str, str]] = Counter()
+    endpoint_failure_counter: Counter[Tuple[str, str, str, str]] = Counter()
+    total_truncated = 0
+    required_failures = 0
+
+    for response in [row for row in rows if row.get("event_type") == "network_response_event"]:
+        request_id = event_request_id(response)
+        request_row = request_index.get(request_id)
+        operation = replay_operation_for_row(request_row) if request_row is not None else replay_operation_for_row(response)
+        method = event_method(request_row) if request_row is not None else event_method(response)
+        host = event_normalized_host(request_row) if request_row is not None else event_normalized_host(response)
+        path = event_normalized_path(request_row) if request_row is not None else event_normalized_path(response)
+        key = (operation, method or "GET", host or "unknown", path or "/")
+        if event_capture_truncated(response):
+            endpoint_truncation_counter[key] += 1
+            total_truncated += 1
+        if str(event_payload(response).get("capture_failure") or "").strip() == "required_body_truncated":
+            endpoint_failure_counter[key] += 1
+            required_failures += 1
+
+    for operation, endpoints in operations.items():
+        if not isinstance(endpoints, list):
+            continue
+        for endpoint in endpoints:
+            if not isinstance(endpoint, dict):
+                continue
+            key = (
+                str(operation),
+                str(endpoint.get("method") or "GET"),
+                str(endpoint.get("host") or "unknown"),
+                str(endpoint.get("path") or "/"),
+            )
+            truncated_count = int(endpoint_truncation_counter.get(key, 0))
+            failure_count = int(endpoint_failure_counter.get(key, 0))
+            endpoint["truncated_response_count"] = truncated_count
+            endpoint["required_body_truncation_count"] = failure_count
+            endpoint["replay_readiness"] = "degraded_by_truncation" if (truncated_count > 0 or failure_count > 0) else "ready"
+
+    payload["truncation_summary"] = {
+        "total_truncated_responses": total_truncated,
+        "required_body_failures": required_failures,
+    }
+    return payload
 
 
 def build_response_store_index(
@@ -3032,10 +3257,14 @@ def build_response_store_index(
                 "stored_size_bytes": event_stored_size_bytes(row),
                 "capture_truncated": event_capture_truncated(row),
                 "capture_limit_bytes": event_capture_limit_bytes(row),
+                "truncation_reason": event_truncation_reason(row),
+                "body_capture_policy": event_body_capture_policy(row),
+                "candidate_relevance": event_candidate_relevance(row),
+                "capture_failure": str(event_payload(row).get("capture_failure") or ""),
                 "source_channel": event_source_channel(row),
                 "phase_id": event_phase_id(row),
                 "host_class": event_host_class(row),
-                "body_ref": (event_body_refs or {}).get(event_id, ""),
+                "body_ref": str((event_body_refs or {}).get(event_id) or event_payload(row).get("body_ref") or event_response_store_path(row)),
             }
         )
     return {
@@ -3045,42 +3274,173 @@ def build_response_store_index(
     }
 
 
-def body_capture_decision(row: Dict[str, Any]) -> Tuple[bool, str, str]:
-    host_class = event_host_class(row)
-    if host_class in NON_SIGNAL_HOST_CLASSES:
-        return (False, "metadata_only", "non_signal_host_class")
+def is_media_segment_url(url_lower: str) -> bool:
+    return any(ext in url_lower for ext in (".m4s", ".ts", ".mp4", ".m4a", ".webm", ".aac", ".m4v"))
+
+
+def is_manifest_or_playback_payload(url_lower: str, merged: str) -> bool:
+    return any(token in merged for token in (".m3u8", ".mpd", "manifest", "playback", "resolver", "ptmd", "/tmd/"))
+
+
+def body_capture_decision(row: Dict[str, Any]) -> Dict[str, Any]:
+    payload = event_payload(row)
     url = event_url(row).lower()
     mime = event_mime(row).lower()
+    operation = event_request_operation(row).lower()
+    classification = event_request_classification(row).lower()
+    host_class = event_host_class(row)
     phase = event_phase_id(row)
+    source = event_source(row).lower()
+    merged = f"{url} {mime} {operation} {classification} {source}"
+    is_playback_related = parse_boolish(payload.get("is_playback_related"), default=False) or (
+        phase == PHASE_PLAYBACK or any(token in merged for token in ("playback", ".m3u8", ".mpd", "resolver", "stream"))
+    )
+    extraction_relevant_html = parse_boolish(
+        payload.get("candidate_document")
+        if payload.get("candidate_document") is not None
+        else payload.get("candidateDocument"),
+        default=False,
+    )
+    is_candidate_response = host_class in EXTRACTION_ELIGIBLE_HOST_CLASSES and phase in SCORABLE_PHASES
+    candidate_relevance = CANDIDATE_RELEVANCE_SIGNAL if is_candidate_response else CANDIDATE_RELEVANCE_NON_CANDIDATE
 
-    if any(ext in url for ext in (".m4s", ".ts", ".mp4", ".m4a", ".webm")):
-        return (False, "metadata_only", "generic_media_segment")
-    if any(token in url for token in ("analytics", "doubleclick", "googletagmanager", "adservice")):
-        return (False, "metadata_only", "analytics_or_ad_noise")
-    if any(token in url for token in ("graphql",)):
-        return (True, "candidate_full", "graphql_payload")
-    if any(token in url for token in ("manifest", "playback", "resolver")):
-        return (True, "candidate_full", "playback_or_manifest")
-    if any(ext in url for ext in (".m3u8", ".mpd")):
-        return (True, "candidate_full", "manifest_file")
-    if mime.startswith("application/json") or "json" in mime:
-        if phase in {PHASE_HOME, PHASE_SEARCH, PHASE_DETAIL, PHASE_PLAYBACK, PHASE_AUTH}:
-            return (True, "candidate_full", "phase_aligned_json")
-        return (True, "candidate_full", "json_payload")
+    if host_class in NON_SIGNAL_HOST_CLASSES:
+        if is_media_segment_url(url):
+            return {
+                "action": BODY_ACTION_STORE_METADATA_ONLY,
+                "body_capture_policy": BODY_CAPTURE_POLICY_SKIPPED_MEDIA_SEGMENT,
+                "capture_reason": "noise_media_segment",
+                "candidate_relevance": CANDIDATE_RELEVANCE_NON_CANDIDATE,
+            }
+        if host_class == HOST_CLASS_IGNORED:
+            return {
+                "action": BODY_ACTION_SKIP_BODY,
+                "body_capture_policy": BODY_CAPTURE_POLICY_SKIP_BODY,
+                "capture_reason": "ignored_host",
+                "candidate_relevance": CANDIDATE_RELEVANCE_NON_CANDIDATE,
+            }
+        return {
+            "action": BODY_ACTION_STORE_METADATA_ONLY,
+            "body_capture_policy": BODY_CAPTURE_POLICY_METADATA_ONLY,
+            "capture_reason": "non_signal_host_class",
+            "candidate_relevance": CANDIDATE_RELEVANCE_NON_CANDIDATE,
+        }
+
+    if is_media_segment_url(url):
+        debug_force_media = parse_boolish(payload.get("debug_capture_media_segment"), default=False)
+        if debug_force_media:
+            return {
+                "action": BODY_ACTION_STORE_TRUNCATED,
+                "body_capture_policy": BODY_CAPTURE_POLICY_TRUNCATED_CANDIDATE,
+                "capture_reason": "debug_media_segment_capture",
+                "candidate_relevance": CANDIDATE_RELEVANCE_NON_CANDIDATE,
+            }
+        return {
+            "action": BODY_ACTION_STORE_METADATA_ONLY,
+            "body_capture_policy": BODY_CAPTURE_POLICY_SKIPPED_MEDIA_SEGMENT,
+            "capture_reason": "generic_media_segment",
+            "candidate_relevance": CANDIDATE_RELEVANCE_NON_CANDIDATE,
+        }
+
+    if any(token in merged for token in ("analytics", "doubleclick", "googletagmanager", "adservice", "pixel")):
+        return {
+            "action": BODY_ACTION_STORE_METADATA_ONLY,
+            "body_capture_policy": BODY_CAPTURE_POLICY_METADATA_ONLY,
+            "capture_reason": "analytics_or_ad_noise",
+            "candidate_relevance": CANDIDATE_RELEVANCE_NON_CANDIDATE,
+        }
+
+    if "graphql" in merged:
+        return {
+            "action": BODY_ACTION_STORE_FULL_REQUIRED,
+            "body_capture_policy": BODY_CAPTURE_POLICY_FULL_CANDIDATE_REQUIRED,
+            "capture_reason": "graphql_payload_required",
+            "candidate_relevance": CANDIDATE_RELEVANCE_REQUIRED,
+        }
+
+    if is_manifest_or_playback_payload(url, merged):
+        return {
+            "action": BODY_ACTION_STORE_FULL_REQUIRED,
+            "body_capture_policy": BODY_CAPTURE_POLICY_FULL_CANDIDATE_REQUIRED,
+            "capture_reason": "playback_or_manifest_required",
+            "candidate_relevance": CANDIDATE_RELEVANCE_REQUIRED,
+        }
+
+    if "json" in mime:
+        if is_candidate_response or is_playback_related:
+            return {
+                "action": BODY_ACTION_STORE_FULL_REQUIRED,
+                "body_capture_policy": BODY_CAPTURE_POLICY_FULL_CANDIDATE_REQUIRED,
+                "capture_reason": "candidate_json_required",
+                "candidate_relevance": CANDIDATE_RELEVANCE_REQUIRED,
+            }
+        return {
+            "action": BODY_ACTION_STORE_FULL,
+            "body_capture_policy": BODY_CAPTURE_POLICY_FULL_CANDIDATE,
+            "capture_reason": "json_payload",
+            "candidate_relevance": CANDIDATE_RELEVANCE_SIGNAL,
+        }
+
     if "html" in mime:
-        if str(event_payload(row).get("is_main_frame")).lower() in {"true", "1"} or "main_frame" in event_source(row):
-            return (True, "candidate_full", "main_html_document")
-        return (True, "candidate_full", "html_document")
-    if "xml" in mime:
-        return (True, "candidate_full", "xml_payload")
-    if any(token in url for token in ("bootstrap", "config")):
-        return (True, "candidate_full", "bootstrap_or_config")
-    return (False, "metadata_only", "non_candidate_mime")
+        if extraction_relevant_html:
+            return {
+                "action": BODY_ACTION_STORE_FULL_REQUIRED,
+                "body_capture_policy": BODY_CAPTURE_POLICY_FULL_CANDIDATE_REQUIRED,
+                "capture_reason": "candidate_document_required",
+                "candidate_relevance": CANDIDATE_RELEVANCE_REQUIRED,
+            }
+        if is_candidate_response:
+            return {
+                "action": BODY_ACTION_STORE_FULL,
+                "body_capture_policy": BODY_CAPTURE_POLICY_FULL_CANDIDATE,
+                "capture_reason": "candidate_html",
+                "candidate_relevance": CANDIDATE_RELEVANCE_SIGNAL,
+            }
+        return {
+            "action": BODY_ACTION_STORE_TRUNCATED,
+            "body_capture_policy": BODY_CAPTURE_POLICY_TRUNCATED_CANDIDATE,
+            "capture_reason": "non_candidate_html",
+            "candidate_relevance": CANDIDATE_RELEVANCE_NON_CANDIDATE,
+        }
+
+    if "xml" in mime or any(token in merged for token in ("bootstrap", "config", "init")):
+        if is_candidate_response:
+            return {
+                "action": BODY_ACTION_STORE_FULL_REQUIRED,
+                "body_capture_policy": BODY_CAPTURE_POLICY_FULL_CANDIDATE_REQUIRED,
+                "capture_reason": "bootstrap_or_config_required",
+                "candidate_relevance": CANDIDATE_RELEVANCE_REQUIRED,
+            }
+        return {
+            "action": BODY_ACTION_STORE_FULL,
+            "body_capture_policy": BODY_CAPTURE_POLICY_FULL_CANDIDATE,
+            "capture_reason": "xml_or_config",
+            "candidate_relevance": CANDIDATE_RELEVANCE_SIGNAL,
+        }
+
+    if mime.startswith("application/octet-stream"):
+        return {
+            "action": BODY_ACTION_STORE_METADATA_ONLY,
+            "body_capture_policy": BODY_CAPTURE_POLICY_METADATA_ONLY,
+            "capture_reason": "binary_octet_stream",
+            "candidate_relevance": CANDIDATE_RELEVANCE_NON_CANDIDATE,
+        }
+
+    return {
+        "action": BODY_ACTION_SKIP_BODY,
+        "body_capture_policy": BODY_CAPTURE_POLICY_SKIP_BODY,
+        "capture_reason": "non_candidate_mime",
+        "candidate_relevance": candidate_relevance,
+    }
 
 
 def should_capture_candidate_body(row: Dict[str, Any]) -> bool:
-    capture, _, _ = body_capture_decision(row)
-    return capture
+    decision = body_capture_decision(row)
+    return decision.get("action") in {
+        BODY_ACTION_STORE_FULL,
+        BODY_ACTION_STORE_FULL_REQUIRED,
+        BODY_ACTION_STORE_TRUNCATED,
+    }
 
 
 def body_extension_from_payload(text: str) -> str:
@@ -3115,8 +3475,12 @@ def build_body_store(rows: List[Dict[str, Any]], runtime_dir: pathlib.Path) -> D
 
     response_rows = [row for row in rows if row.get("event_type") == "network_response_event"]
     for row in response_rows:
-        capture_body, body_capture_policy, capture_reason = body_capture_decision(row)
-        if not capture_body:
+        decision = body_capture_decision(row)
+        action = str(decision.get("action") or BODY_ACTION_SKIP_BODY)
+        body_capture_policy = str(decision.get("body_capture_policy") or BODY_CAPTURE_POLICY_METADATA_ONLY)
+        capture_reason = str(decision.get("capture_reason") or "policy_resolver")
+        candidate_relevance = str(decision.get("candidate_relevance") or CANDIDATE_RELEVANCE_NON_CANDIDATE)
+        if action in {BODY_ACTION_STORE_METADATA_ONLY, BODY_ACTION_SKIP_BODY}:
             continue
         event_id = str(row.get("event_id") or "")
         if not event_id:
@@ -3126,10 +3490,17 @@ def build_body_store(rows: List[Dict[str, Any]], runtime_dir: pathlib.Path) -> D
         if not text:
             text = event_body_preview(row)
         if not text:
+            if action == BODY_ACTION_STORE_FULL_REQUIRED:
+                event_payload(row)["capture_failure"] = "required_body_missing"
+                event_payload(row)["capture_truncated"] = True
+                if safe_int(event_payload(row).get("capture_limit_bytes"), default=0) <= 0:
+                    event_payload(row)["capture_limit_bytes"] = FOUR_MB_BYTES
+                event_payload(row)["truncation_reason"] = str(event_payload(row).get("truncation_reason") or TRUNCATION_REASON_BODY_SIZE_LIMIT)
             continue
 
         capture_truncated = event_capture_truncated(row)
         capture_limit_bytes = event_capture_limit_bytes(row)
+        truncation_reason = event_truncation_reason(row)
         stored_size_bytes = event_stored_size_bytes(row)
         content_length_header = event_content_length_header(row)
         original_content_length = event_original_content_length(row)
@@ -3138,6 +3509,40 @@ def build_body_store(rows: List[Dict[str, Any]], runtime_dir: pathlib.Path) -> D
             if capture_limit_bytes <= 0:
                 capture_limit_bytes = stored_size_bytes
         payload_bytes = text.encode("utf-8", errors="replace")
+        pre_extension = body_extension_from_payload(text)
+        allow_truncation = True
+        if action == BODY_ACTION_STORE_TRUNCATED and pre_extension == "html" and len(payload_bytes) > LARGE_HTML_DEDUPE_THRESHOLD_BYTES:
+            full_digest = hashlib.sha256(payload_bytes).hexdigest()
+            full_zst = bodies_root / f"{full_digest}.html.zst"
+            full_plain = bodies_root / f"{full_digest}.html"
+            if full_zst.exists() or full_plain.exists():
+                allow_truncation = False
+                capture_reason = "dedup_reused_large_html"
+        if action == BODY_ACTION_STORE_TRUNCATED and allow_truncation and len(payload_bytes) > FOUR_MB_BYTES:
+            payload_bytes = payload_bytes[:FOUR_MB_BYTES]
+            text = payload_bytes.decode("utf-8", errors="replace")
+            capture_truncated = True
+            capture_limit_bytes = FOUR_MB_BYTES
+            if not truncation_reason:
+                truncation_reason = TRUNCATION_REASON_BODY_SIZE_LIMIT
+
+        if capture_truncated and capture_limit_bytes <= 0 and len(payload_bytes) > 0:
+            capture_limit_bytes = FOUR_MB_BYTES if len(payload_bytes) == FOUR_MB_BYTES else len(payload_bytes)
+        if capture_truncated and not truncation_reason:
+            truncation_reason = TRUNCATION_REASON_BODY_SIZE_LIMIT
+        if (
+            action == BODY_ACTION_STORE_FULL_REQUIRED
+            and capture_truncated
+            and not str(event_payload(row).get("capture_failure") or "").strip()
+        ):
+            event_payload(row)["capture_failure"] = "required_body_truncated"
+        if (
+            action == BODY_ACTION_STORE_FULL_REQUIRED
+            and not payload_bytes
+            and not str(event_payload(row).get("capture_failure") or "").strip()
+        ):
+            event_payload(row)["capture_failure"] = "required_body_missing"
+
         digest = hashlib.sha256(payload_bytes).hexdigest()
         extension = body_extension_from_payload(text)
         compressed = zstd_compress(payload_bytes)
@@ -3151,9 +3556,11 @@ def build_body_store(rows: List[Dict[str, Any]], runtime_dir: pathlib.Path) -> D
             to_write = payload_bytes
 
         target = bodies_root / filename
+        dedup_reused = digest in seen_sha or target.exists()
         if digest not in seen_sha and not target.exists():
             target.write_bytes(to_write)
         seen_sha.add(digest)
+        blob_size_bytes = int(target.stat().st_size) if target.exists() else len(to_write)
 
         rel = str(target.relative_to(runtime_dir))
         event_body_refs[event_id] = rel
@@ -3167,7 +3574,8 @@ def build_body_store(rows: List[Dict[str, Any]], runtime_dir: pathlib.Path) -> D
                 "status": event_status(row),
                 "sha256": digest,
                 "size_bytes": len(payload_bytes),
-                "stored_size_bytes": stored_size_bytes,
+                "captured_size_bytes": stored_size_bytes,
+                "stored_size_bytes": blob_size_bytes,
                 "content_length_header": content_length_header,
                 "original_content_length": original_content_length,
                 "compression": compression,
@@ -3179,6 +3587,9 @@ def build_body_store(rows: List[Dict[str, Any]], runtime_dir: pathlib.Path) -> D
                 "capture_reason": capture_reason,
                 "capture_truncated": capture_truncated,
                 "capture_limit_bytes": capture_limit_bytes if capture_truncated else 0,
+                "truncation_reason": truncation_reason if capture_truncated else "",
+                "candidate_relevance": candidate_relevance,
+                "dedup_reused": dedup_reused,
             }
         )
 
@@ -3735,6 +4146,57 @@ def build_extraction_event_rows(rows: List[Dict[str, Any]], field_matrix: Dict[s
     return out
 
 
+def build_truncation_event_rows(rows: List[Dict[str, Any]], event_body_refs: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for row in rows:
+        if row.get("event_type") != "network_response_event":
+            continue
+        payload = event_payload(row)
+        capture_truncated = event_capture_truncated(row)
+        capture_failure = str(payload.get("capture_failure") or "").strip()
+        if not capture_truncated and not capture_failure:
+            continue
+        event_id = str(row.get("event_id") or "")
+        trunc_payload = {
+            "operation": "response_body_truncation",
+            "source_ref": event_id,
+            "request_id": event_request_id(row),
+            "response_id": event_response_id(row) or event_id,
+            "body_ref": str((event_body_refs or {}).get(event_id) or payload.get("body_ref") or event_response_store_path(row)),
+            "normalized_host": event_normalized_host(row),
+            "normalized_path": event_normalized_path(row),
+            "mime_type": str(payload.get("mime_type") or event_mime(row)),
+            "phase_id": event_phase_id(row),
+            "host_class": event_host_class(row),
+            "capture_limit_bytes": event_capture_limit_bytes(row),
+            "stored_size_bytes": event_stored_size_bytes(row),
+            "original_content_length": event_original_content_length(row),
+            "truncation_reason": event_truncation_reason(row) or (TRUNCATION_REASON_BODY_SIZE_LIMIT if capture_truncated else ""),
+            "body_capture_policy": event_body_capture_policy(row),
+            "candidate_relevance": event_candidate_relevance(row),
+            "capture_truncated": capture_truncated,
+            "required_body_failure": capture_failure if capture_failure else "",
+            "target_site_id": event_target_site_id(row),
+        }
+        out.append(
+            {
+                "schema_version": 1,
+                "run_id": str(row.get("run_id") or "derived_run"),
+                "event_id": f"derived_truncation_{len(out)}_{stable_hash([event_id, trunc_payload])[:12]}",
+                "event_type": "truncation_event",
+                "ts_utc": str(row.get("ts_utc") or utc_now()),
+                "ts_mono_ns": int(row.get("ts_mono_ns") or 0),
+                "trace_id": str(row.get("trace_id") or ""),
+                "span_id": str(row.get("span_id") or ""),
+                "action_id": str(row.get("action_id") or ""),
+                "device": row.get("device") if isinstance(row.get("device"), dict) else {},
+                "app": row.get("app") if isinstance(row.get("app"), dict) else {},
+                "payload": trunc_payload,
+            }
+        )
+    return out
+
+
 def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dict[str, pathlib.Path]:
     rows = normalize_runtime_rows(rows, runtime_dir=runtime_dir)
     correlation = build_correlation(rows)
@@ -3758,10 +4220,11 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
     )
     endpoint_candidates = build_endpoint_candidates(rows)
     field_matrix = build_field_matrix(rows, runtime_dir=runtime_dir)
-    extraction_event_rows = build_extraction_event_rows(rows, field_matrix)
     profile_draft = build_profile_draft(rows, endpoint_candidates, required_headers)
     replay_seed = build_replay_seed(rows)
     body_store = build_body_store(rows, runtime_dir=runtime_dir)
+    extraction_event_rows = build_extraction_event_rows(rows, field_matrix)
+    truncation_event_rows = build_truncation_event_rows(rows, event_body_refs=body_store.get("event_body_refs", {}))
     response_store_index = build_response_store_index(
         rows,
         runtime_dir=runtime_dir,
@@ -3772,7 +4235,7 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
     events_ssot = {
         "schema_version": 1,
         "generated_at_utc": utc_now(),
-        "event_count": len(rows) + len(extraction_event_rows),
+        "event_count": len(rows) + len(extraction_event_rows) + len(truncation_event_rows),
         "raw_event_store_ssot": str(events_path(runtime_dir)),
     }
     profile_candidate = dict(profile_draft)
@@ -3784,6 +4247,7 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
     paths = {
         "events_ssot": runtime_dir / "events.jsonl",
         "extraction_events": runtime_dir / "extraction_events.jsonl",
+        "truncation_events": runtime_dir / "truncation_events.jsonl",
         "events_ssot_meta": runtime_dir / "events.meta.json",
         "requests_normalized": runtime_dir / "requests.normalized.jsonl",
         "responses_normalized": runtime_dir / "responses.normalized.jsonl",
@@ -3803,8 +4267,9 @@ def ensure_derived(runtime_dir: pathlib.Path, rows: List[Dict[str, Any]]) -> Dic
         "provenance_registry": runtime_dir / "provenance_registry.json",
     }
 
-    write_jsonl(paths["events_ssot"], list(rows) + extraction_event_rows)
+    write_jsonl(paths["events_ssot"], list(rows) + extraction_event_rows + truncation_event_rows)
     write_jsonl(paths["extraction_events"], extraction_event_rows)
+    write_jsonl(paths["truncation_events"], truncation_event_rows)
     write_json(paths["events_ssot_meta"], events_ssot)
     write_jsonl(paths["requests_normalized"], request_rows)
     write_jsonl(paths["responses_normalized"], response_rows)
@@ -5195,6 +5660,7 @@ def do_headers(action: str, rows: List[Dict[str, Any]], args: argparse.Namespace
             endpoint_sets,
             inference_mode=str(payload.get("inference_mode") or "active_http_replay"),
         )
+        replay_payload = annotate_replay_truncation_visibility(replay_payload, selected_rows)
         cookies_payload = build_required_cookies_report_for_endpoint_sets(
             selected_rows,
             endpoint_sets=endpoint_sets,
@@ -5354,6 +5820,7 @@ def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Name
             "events/runtime_events.jsonl",
             "events.jsonl",
             "extraction_events.jsonl",
+            "truncation_events.jsonl",
             "events.meta.json",
             "requests.normalized.jsonl",
             "responses.normalized.jsonl",
