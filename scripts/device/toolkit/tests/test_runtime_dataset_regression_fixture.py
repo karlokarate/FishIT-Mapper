@@ -7,6 +7,7 @@ import json
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 TOOLKIT_DIR = Path(__file__).resolve().parents[1]
@@ -160,6 +161,22 @@ class RuntimeDatasetRegressionFixtureTests(unittest.TestCase):
                 host = str(item.get("normalized_host") or "")
                 self.assertNotIn("google", host)
                 self.assertNotIn("doubleclick", host)
+
+            source_pipeline_bundle = json.loads(paths["source_pipeline_bundle"].read_text(encoding="utf-8"))
+            self.assertIn("bundleDescriptor", source_pipeline_bundle)
+            self.assertIn("capabilities", source_pipeline_bundle)
+            self.assertIn("endpointTemplates", source_pipeline_bundle)
+            self.assertIn("replayRequirements", source_pipeline_bundle)
+            self.assertIn("sessionAuth", source_pipeline_bundle)
+            self.assertIn("playback", source_pipeline_bundle)
+
+            bundle_zip = paths["source_plugin_bundle_zip"]
+            self.assertTrue(bundle_zip.exists())
+            with zipfile.ZipFile(bundle_zip, "r") as archive:
+                names = set(archive.namelist())
+            self.assertIn("source_pipeline_bundle.json", names)
+            self.assertIn("site_runtime_model.json", names)
+            self.assertIn("manifest.json", names)
 
     def test_provider_export_serialization_is_byte_stable_for_same_fixture(self) -> None:
         rows = self._fixture_rows()

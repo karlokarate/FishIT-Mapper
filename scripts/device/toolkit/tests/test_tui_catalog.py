@@ -138,6 +138,10 @@ class MapperToolkitTuiCatalogTests(unittest.TestCase):
         }
         self.assertTrue(expected.issubset(command_ids))
 
+    def test_mapping_bundle_command_present(self) -> None:
+        command_ids = {cmd.id for cmd in self.catalog.commands}
+        self.assertIn("mapping.source_pipeline_bundle", command_ids)
+
 
 if __name__ == "__main__":
     unittest.main()

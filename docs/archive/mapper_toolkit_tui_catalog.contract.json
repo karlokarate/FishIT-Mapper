@@ -1928,6 +1928,18 @@
       "params": []
     },
     {
+      "id": "mapping.source_pipeline_bundle",
+      "screen": "mapping",
+      "title": "Source Pipeline Bundle",
+      "description": "Generate FishIT-Player source_pipeline_bundle export.",
+      "safety": "normal",
+      "argv": [
+        "mapping",
+        "source-pipeline-bundle"
+      ],
+      "params": []
+    },
+    {
       "id": "mapping.replay_seed",
       "screen": "mapping",
       "title": "Replay Seed",

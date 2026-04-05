@@ -280,6 +280,20 @@
       "supersedes": [],
       "superseded_by": null,
       "summary": "Mission finalization now enforces hard READY gates (required steps, required artifacts, finalized bundle, pipeline quality, provider export schema validation, replay requirements presence, field-matrix minimum coverage) and exposes machine-readable gate_results/failed_gates for deterministic wizard finish blocking."
+    },
+    {
+      "id": "DEC-0021",
+      "aliases": [
+        "ADR-0021",
+        "MAPPER-SOURCE-PIPELINE-BUNDLE-DIRECT-EXPORT",
+        "MAPPER-PLAYER-COMPAT-BUNDLE-ZIP"
+      ],
+      "title": "Mapper exports FishIT-Player source_pipeline_bundle directly with deterministic source_plugin_bundle.zip packaging",
+      "status": "accepted",
+      "date": "2026-04-05",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Derived runtime outputs now include source_pipeline_bundle.json, site_runtime_model.json, manifest.json, and exports/source_plugin_bundle.zip so FishIT-Player can import the runtime contract directly without a separate TUI conversion step."
     }
   ]
 }

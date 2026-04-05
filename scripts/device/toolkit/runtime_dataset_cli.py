@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 import tarfile
+import zipfile
 import urllib.error
 import urllib.request
 from collections import Counter, defaultdict
@@ -187,6 +188,7 @@ MISSION_REQUIRED_FILES: Dict[str, List[str]] = {
     MISSION_FISHIT_PIPELINE: [
         "site_runtime_model",
         "fishit_provider_draft",
+        "source_pipeline_bundle",
         "endpoint_templates",
         "field_matrix",
         "auth_draft",
@@ -225,6 +227,7 @@ MISSION_REQUIRED_FILES: Dict[str, List[str]] = {
 MISSION_ARTIFACT_ALIASES: Dict[str, List[str]] = {
     "site_runtime_model": ["site_profile.draft.json", "site_runtime_model.json"],
     "fishit_provider_draft": ["provider_draft_export.json", "fishit_provider_draft.json"],
+    "source_pipeline_bundle": ["source_pipeline_bundle.json", "exports/source_plugin_bundle.zip"],
     "webapp_runtime_draft": ["webapp_runtime_draft.json", "provider_draft_export.json"],
     "endpoint_templates": ["endpoint_candidates.json", "endpoint_templates.json"],
     "field_matrix": ["field_matrix.json"],
@@ -264,6 +267,60 @@ PROVIDER_ENDPOINT_ROLES = [
     "detail",
     "playback_resolver",
     "auth_or_refresh",
+]
+
+PROVIDER_TO_BUNDLE_ROLE = {
+    "home": "home",
+    "search": "search",
+    "detail": "detail",
+    "playback_resolver": "playbackResolver",
+    "auth_or_refresh": "auth",
+}
+
+PROVIDER_TO_BUNDLE_FIELD = {
+    "title": "title",
+    "subtitle": "subtitle",
+    "description": "description",
+    "image/poster": "poster",
+    "canonical id": "canonicalId",
+    "collection id": "collectionId",
+    "teaser/item type": "itemType",
+    "playback hints": "playbackHint",
+    "section/rail names": "sectionName",
+    "search result mapping": "searchMapping",
+    "detail mapping": "detailMapping",
+}
+
+BUNDLE_FIELD_ORDER = [
+    "title",
+    "subtitle",
+    "description",
+    "poster",
+    "backdrop",
+    "logo",
+    "canonicalId",
+    "collectionId",
+    "itemType",
+    "playbackHint",
+    "sectionName",
+    "searchMapping",
+    "detailMapping",
+]
+
+BUNDLE_ENDPOINT_ROLE_ORDER = [
+    "home",
+    "search",
+    "detail",
+    "playbackResolver",
+    "playback_resolver",
+    "playback_manifest",
+    "auth",
+    "refresh",
+    "config",
+    "document",
+    "home_document",
+    "asset",
+    "helper",
 ]
 
 ROLE_TO_CANDIDATE_TYPE = {
@@ -3460,6 +3517,13 @@ def endpoint_role_rank(role: str) -> int:
         return len(PROVIDER_ENDPOINT_ROLES) + 1
 
 
+def bundle_endpoint_role_rank(role: str) -> int:
+    try:
+        return BUNDLE_ENDPOINT_ROLE_ORDER.index(str(role or ""))
+    except ValueError:
+        return len(BUNDLE_ENDPOINT_ROLE_ORDER) + 1
+
+
 def is_noise_header_name(name: str) -> bool:
     normalized = str(name or "").strip().lower()
     if not normalized:
@@ -4239,6 +4303,970 @@ def build_provider_draft_export(
     export_id = f"provider_export_{stable_hash(export_payload)[:16]}"
     export_payload["export_id"] = export_id
     return export_payload
+
+
+def clamp_confidence(value: Any, default: float = 0.0) -> float:
+    try:
+        number = float(value)
+    except Exception:
+        number = default
+    if number < 0.0:
+        return 0.0
+    if number > 1.0:
+        return 1.0
+    return round(number, 4)
+
+
+def normalize_source_key_component(value: Any) -> str:
+    normalized = re.sub(r"[^a-z0-9._-]+", "_", str(value or "").strip().lower())
+    normalized = re.sub(r"_+", "_", normalized).strip("._-")
+    return normalized or "unknown_target"
+
+
+def normalize_placeholder_name(raw: Any) -> str:
+    text = str(raw or "").strip()
+    if text.startswith("{{") and text.endswith("}}"):
+        text = text[2:-2]
+    if text.startswith("${") and text.endswith("}"):
+        text = text[2:-1]
+    text = text.strip()
+    text = re.sub(r"[^a-zA-Z0-9_]+", "_", text).strip("_")
+    return text or "value"
+
+
+def convert_mustache_tokens(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): convert_mustache_tokens(item) for key, item in value.items()}
+    if isinstance(value, list):
+        items = [convert_mustache_tokens(item) for item in value]
+        if len(items) == 1:
+            return items[0]
+        return items
+    if isinstance(value, str):
+        return re.sub(
+            r"\{\{\s*([^{}]+?)\s*\}\}",
+            lambda match: "${" + normalize_placeholder_name(match.group(1)) + "}",
+            value,
+        )
+    return value
+
+
+def extract_dollar_tokens(value: Any) -> Set[str]:
+    out: Set[str] = set()
+    if isinstance(value, dict):
+        for item in value.values():
+            out.update(extract_dollar_tokens(item))
+        return out
+    if isinstance(value, list):
+        for item in value:
+            out.update(extract_dollar_tokens(item))
+        return out
+    if isinstance(value, str):
+        for token in re.findall(r"\$\{([^}]+)\}", value):
+            normalized = normalize_placeholder_name(token)
+            if normalized:
+                out.add(normalized)
+    return out
+
+
+def guess_placeholder_value_type(name: str) -> str:
+    lowered = str(name or "").strip().lower()
+    if lowered in {"page", "pages", "offset", "limit", "season", "episode", "year", "index", "size"}:
+        return "integer"
+    if lowered in {"enabled", "active", "is_live", "live"}:
+        return "boolean"
+    return "string"
+
+
+def phase_defaults_for_role(role: str) -> List[str]:
+    if role == "home":
+        return [PHASE_HOME]
+    if role == "search":
+        return [PHASE_SEARCH]
+    if role == "detail":
+        return [PHASE_DETAIL]
+    if role in {"playbackResolver", "playback_resolver", "playback_manifest"}:
+        return [PHASE_PLAYBACK]
+    if role in {"auth", "refresh"}:
+        return [PHASE_AUTH]
+    return [PHASE_BACKGROUND]
+
+
+def normalize_phase_relevance(raw: Any, role: str) -> List[str]:
+    if isinstance(raw, list):
+        items = [normalize_phase_id(item) for item in raw]
+    elif isinstance(raw, str):
+        items = [normalize_phase_id(raw)]
+    else:
+        items = []
+    normalized = [item for item in items if item in VALID_PHASES or item == "replay_probe"]
+    if normalized:
+        deduped: List[str] = []
+        seen: Set[str] = set()
+        for item in normalized:
+            if item in seen:
+                continue
+            seen.add(item)
+            deduped.append(item)
+        return deduped
+    return phase_defaults_for_role(role)
+
+
+def provider_role_to_bundle_role(role: str, request_operation: str) -> str:
+    normalized_role = str(role or "").strip()
+    mapped = PROVIDER_TO_BUNDLE_ROLE.get(normalized_role, normalized_role or "helper")
+    if normalized_role == "auth_or_refresh" and "refresh" in str(request_operation or "").lower():
+        return "refresh"
+    return mapped or "helper"
+
+
+def provider_template_kind(role: str, graphql_operation_name: str, request_operation: str, normalized_path: str) -> str:
+    if str(graphql_operation_name or "").strip():
+        return "graphql"
+    lowered_path = str(normalized_path or "").lower()
+    lowered_operation = str(request_operation or "").lower()
+    if lowered_path.endswith(".m3u8") or lowered_path.endswith(".mpd"):
+        return "manifest"
+    if role in {"playbackResolver", "playback_resolver"}:
+        return "resolver"
+    if "config" in lowered_operation:
+        return "config"
+    return "rest_json"
+
+
+def normalize_source_kind(value: str) -> str:
+    lowered = str(value or "").strip().lower()
+    if lowered in {"json", "rest_json", "graphql_json"}:
+        return "rest_json"
+    if lowered in {"html", "document"}:
+        return "html"
+    if lowered in {"manifest"}:
+        return "manifest"
+    if lowered in {"provenance"}:
+        return "provenance"
+    if lowered in {"derived"}:
+        return "derived"
+    return "unknown"
+
+
+def map_field_status_to_derivation(value: str) -> str:
+    lowered = str(value or "").strip().lower()
+    if "missing" in lowered:
+        return "missing"
+    if "derived" in lowered:
+        return "derived"
+    return "direct"
+
+
+def normalize_observed_roles(raw_roles: List[Any]) -> List[str]:
+    out: List[str] = []
+    seen: Set[str] = set()
+    for role in raw_roles:
+        mapped = provider_role_to_bundle_role(str(role or ""), "")
+        if mapped in {"playbackResolver", "playback_resolver"}:
+            mapped = "playbackResolver"
+        if not mapped:
+            continue
+        if mapped in seen:
+            continue
+        seen.add(mapped)
+        out.append(mapped)
+    return out
+
+
+def normalize_provenance_ref_name(raw: str) -> str:
+    token = re.sub(r"[^a-zA-Z0-9._-]+", "_", str(raw or "").strip())
+    token = token.strip("._-")
+    return token or "value"
+
+
+def infer_provenance_name(requirement_name: str, known_provenance_names: Set[str]) -> str:
+    raw = str(requirement_name or "").strip()
+    lowered = raw.lower()
+    candidates: List[str] = []
+    mapped_header = token_header_to_provenance_name(lowered)
+    if mapped_header:
+        candidates.append(mapped_header)
+    mapped_key = provenance_key_name(lowered)
+    if mapped_key and mapped_key not in candidates:
+        candidates.append(mapped_key)
+    if lowered and not lowered.startswith("cookies."):
+        candidates.append(f"cookies.{lowered}")
+    if lowered:
+        candidates.append(lowered)
+    seen: Set[str] = set()
+    unique_candidates = []
+    for candidate in candidates:
+        if candidate in seen or not candidate:
+            continue
+        seen.add(candidate)
+        unique_candidates.append(candidate)
+    for candidate in unique_candidates:
+        if candidate in known_provenance_names:
+            return candidate
+    return unique_candidates[0] if unique_candidates else ""
+
+
+def build_named_requirements(
+    names: List[Any],
+    status: str,
+    known_provenance_names: Set[str],
+    require_provenance_ref: bool = False,
+) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    deduped = sorted({str(name).strip().lower() for name in names if str(name).strip()})
+    for name in deduped:
+        provenance_name = infer_provenance_name(name, known_provenance_names)
+        provenance_ref: Optional[str] = None
+        if status == "required_proven" or require_provenance_ref:
+            reference_name = provenance_name or name
+            provenance_ref = f"prov:{normalize_provenance_ref_name(reference_name)}"
+        out.append(
+            {
+                "name": name,
+                "status": status,
+                "provenanceRef": provenance_ref,
+            }
+        )
+    return out
+
+
+def warning_code_from_text(message: str) -> str:
+    token = re.sub(r"[^A-Za-z0-9]+", "_", str(message or "")).strip("_").upper()
+    if not token:
+        return "MAPPER_WARNING"
+    if len(token) > 64:
+        token = token[:64]
+    return token
+
+
+def map_provider_field_mappings(provider_field_matrix: Dict[str, Any]) -> List[Dict[str, Any]]:
+    by_bundle_name: Dict[str, Dict[str, Any]] = {}
+    for row in list(provider_field_matrix.get("fields") or []):
+        if not isinstance(row, dict):
+            continue
+        provider_name = str(row.get("field") or "")
+        bundle_name = PROVIDER_TO_BUNDLE_FIELD.get(provider_name)
+        if not bundle_name:
+            continue
+        by_bundle_name[bundle_name] = row
+
+    mapped: List[Dict[str, Any]] = []
+    for field_name in BUNDLE_FIELD_ORDER:
+        row = by_bundle_name.get(field_name, {})
+        mapped.append(
+            {
+                "fieldName": field_name,
+                "valueTemplate": row.get("value_or_template") if row else None,
+                "sourceKind": normalize_source_kind(str(row.get("source_kind") or "")) if row else "unknown",
+                "sourceRef": str(row.get("source_ref") or "field_matrix") if row else "field_matrix",
+                "observedInRoles": normalize_observed_roles(list(row.get("observed_in_roles") or [])) if row else [],
+                "derivationKind": map_field_status_to_derivation(str(row.get("status") or "missing")) if row else "missing",
+                "confidence": clamp_confidence(row.get("confidence") if row else 0.0, default=0.0),
+            }
+        )
+    return mapped
+
+
+def normalize_stream_container_hints(values: List[Any]) -> List[str]:
+    mapping = {
+        ".mp4": "mp4",
+        "mp4": "mp4",
+        ".webm": "webm",
+        "webm": "webm",
+        ".ts": "ts",
+        "ts": "ts",
+        ".m4s": "ts",
+        ".aac": "aac",
+        "aac": "aac",
+    }
+    out: List[str] = []
+    seen: Set[str] = set()
+    for raw in values:
+        normalized = mapping.get(str(raw or "").strip().lower(), "unknown")
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        out.append(normalized)
+    if not out:
+        out = ["unknown"]
+    return out
+
+
+def build_source_pipeline_bundle(
+    provider_draft_export: Dict[str, Any],
+    rows: List[Dict[str, Any]],
+    provenance_registry: Dict[str, Any],
+) -> Dict[str, Any]:
+    generated_at = str(provider_draft_export.get("generated_at") or utc_now())
+    source_runtime_export_id = str(provider_draft_export.get("source_runtime_export_id") or "")
+    if not source_runtime_export_id:
+        source_runtime_export_id = f"runtime_export_{stable_hash([row.get('event_id') for row in rows])[:16]}"
+
+    target_site_id_raw = str(provider_draft_export.get("target_site_id") or canonical_target_site_id(discover_primary_host(rows)))
+    safe_target_id = normalize_source_key_component(target_site_id_raw)
+    source_key = f"external_template.{safe_target_id}"
+    source_family_key = "external_template"
+
+    provider_templates = [item for item in list(provider_draft_export.get("endpoint_templates") or []) if isinstance(item, dict)]
+    provider_replay = [item for item in list(provider_draft_export.get("replay_requirements") or []) if isinstance(item, dict)]
+    replay_by_template_ref = {
+        str(item.get("template_ref") or ""): item
+        for item in provider_replay
+        if str(item.get("template_ref") or "")
+    }
+    known_provenance_names = {
+        str(item.get("name") or "")
+        for item in list(provenance_registry.get("entries") or [])
+        if isinstance(item, dict) and str(item.get("name") or "")
+    }
+
+    endpoint_templates: List[Dict[str, Any]] = []
+    replay_requirements: List[Dict[str, Any]] = []
+    endpoint_confidence_by_role: Dict[str, float] = {}
+
+    for template in provider_templates:
+        template_id = str(template.get("template_id") or "")
+        if not template_id:
+            continue
+        replay = replay_by_template_ref.get(template_id, {})
+        provider_role = str(template.get("endpoint_role") or "")
+        request_operation = str(template.get("request_operation") or "")
+        bundle_role = provider_role_to_bundle_role(provider_role, request_operation)
+
+        normalized_host = str(template.get("normalized_host") or "").strip().lower()
+        normalized_path = str(template.get("normalized_path") or "/").strip() or "/"
+        graphql_operation_name = str(template.get("graphql_operation_name") or "").strip() or None
+        template_kind = provider_template_kind(bundle_role, graphql_operation_name or "", request_operation, normalized_path)
+
+        path_template = convert_mustache_tokens(normalized_path)
+        query_template = convert_mustache_tokens(template.get("stable_query_template"))
+        body_template = convert_mustache_tokens(template.get("stable_body_template"))
+
+        provider_placeholder_names = [
+            normalize_placeholder_name(item)
+            for item in list(template.get("variable_placeholders") or [])
+            if normalize_placeholder_name(item)
+        ]
+        path_tokens = extract_dollar_tokens(path_template)
+        query_tokens = extract_dollar_tokens(query_template)
+        body_tokens = extract_dollar_tokens(body_template)
+        all_tokens: List[str] = sorted(set(provider_placeholder_names).union(path_tokens).union(query_tokens).union(body_tokens))
+
+        variable_placeholders: List[Dict[str, Any]] = []
+        for name in all_tokens:
+            if name in path_tokens:
+                location = "path"
+            elif name in body_tokens:
+                location = "body"
+            else:
+                location = "query"
+            default_template: Optional[str] = None
+            if name.lower() == "page":
+                default_template = "1"
+            variable_placeholders.append(
+                {
+                    "name": name,
+                    "location": location,
+                    "required": True,
+                    "valueType": guess_placeholder_value_type(name),
+                    "defaultTemplate": default_template,
+                }
+            )
+
+        phase_relevance = normalize_phase_relevance(template.get("required_phase_relevance"), bundle_role)
+        required_provenance_inputs = sorted(
+            {
+                str(item).strip()
+                for item in list(template.get("required_provenance_inputs") or []) + list(replay.get("required_provenance_inputs") or [])
+                if str(item).strip()
+            }
+        )
+        source_evidence = template.get("source_evidence_refs")
+        source_refs: List[str] = []
+        if isinstance(source_evidence, dict):
+            for request_id in list(source_evidence.get("request_ids") or []):
+                if str(request_id).strip():
+                    source_refs.append(f"request:{request_id}")
+            for response_id in list(source_evidence.get("response_ids") or []):
+                if str(response_id).strip():
+                    source_refs.append(f"response:{response_id}")
+        elif isinstance(source_evidence, list):
+            source_refs.extend([str(item) for item in source_evidence if str(item).strip()])
+        if not source_refs:
+            source_refs = [f"template:{template_id}"]
+
+        confidence = clamp_confidence(template.get("confidence"), default=0.5)
+        endpoint_templates.append(
+            {
+                "endpointId": template_id,
+                "role": bundle_role,
+                "templateKind": template_kind,
+                "method": str(template.get("method") or "GET").upper(),
+                "normalizedHost": normalized_host,
+                "normalizedPath": normalized_path,
+                "graphqlOperationName": graphql_operation_name,
+                "requestOperation": request_operation or bundle_role,
+                "pathTemplate": path_template,
+                "queryTemplate": query_template,
+                "bodyTemplate": body_template,
+                "variablePlaceholders": variable_placeholders,
+                "phaseRelevance": phase_relevance,
+                "requiredProvenanceInputs": required_provenance_inputs,
+                "sourceEvidenceRefs": source_refs[:20],
+                "confidence": confidence,
+                "notes": [],
+            }
+        )
+        endpoint_confidence_by_role[bundle_role] = max(endpoint_confidence_by_role.get(bundle_role, 0.0), confidence)
+
+        required_headers = build_named_requirements(
+            names=list(replay.get("required_headers") or []),
+            status="required_proven",
+            known_provenance_names=known_provenance_names,
+            require_provenance_ref=True,
+        )
+        optional_headers = build_named_requirements(
+            names=list(replay.get("optional_headers") or []) + list(replay.get("observed_only_headers") or []),
+            status="optional_observed",
+            known_provenance_names=known_provenance_names,
+            require_provenance_ref=False,
+        )
+        optional_headers.extend(
+            build_named_requirements(
+                names=list(replay.get("forbidden_noise_headers") or []),
+                status="forbidden_noise",
+                known_provenance_names=known_provenance_names,
+                require_provenance_ref=False,
+            )
+        )
+        required_cookies = build_named_requirements(
+            names=list(replay.get("required_cookies") or []),
+            status="required_proven",
+            known_provenance_names=known_provenance_names,
+            require_provenance_ref=True,
+        )
+        optional_cookies = build_named_requirements(
+            names=list(replay.get("optional_cookies") or []),
+            status="optional_observed",
+            known_provenance_names=known_provenance_names,
+            require_provenance_ref=False,
+        )
+        required_query_params = build_named_requirements(
+            names=list(replay.get("required_query_params") or []),
+            status="required_proven",
+            known_provenance_names=known_provenance_names,
+            require_provenance_ref=True,
+        )
+        required_body_fields = build_named_requirements(
+            names=list(replay.get("required_body_fields") or []),
+            status="required_proven",
+            known_provenance_names=known_provenance_names,
+            require_provenance_ref=True,
+        )
+        minimization = replay.get("minimization_evidence") if isinstance(replay.get("minimization_evidence"), dict) else {}
+        validation_mode = str(minimization.get("validation_mode") or "")
+        elimination_mode = str(minimization.get("elimination_mode") or "")
+        if validation_mode == "active_http_replay":
+            minimization_method = "native_replay"
+            minimization_status = "proven" if elimination_mode else "partial"
+        elif "fixture" in str(minimization.get("inference_mode") or "").lower():
+            minimization_method = "fixture_replay"
+            minimization_status = "partial"
+        else:
+            minimization_method = "captured_only"
+            minimization_status = "unproven"
+        replay_requirements.append(
+            {
+                "endpointRef": template_id,
+                "requiredHeaders": required_headers,
+                "optionalHeaders": optional_headers,
+                "requiredCookies": required_cookies,
+                "optionalCookies": optional_cookies,
+                "requiredQueryParams": required_query_params,
+                "optionalQueryParams": [],
+                "requiredBodyFields": required_body_fields,
+                "optionalBodyFields": [],
+                "requiredReferer": str(replay.get("required_referer") or "") or None,
+                "requiredOrigin": str(replay.get("required_origin") or "") or None,
+                "requiredProvenanceInputs": required_provenance_inputs,
+                "browserAssistanceNeeded": bool(replay.get("required_referer") or replay.get("required_origin")),
+                "minimizationEvidence": {
+                    "method": minimization_method,
+                    "status": minimization_status,
+                    "notes": [
+                        f"validation_mode={validation_mode or 'unknown'}",
+                        f"elimination_mode={elimination_mode or 'unknown'}",
+                    ],
+                },
+            }
+        )
+
+    endpoint_templates.sort(key=lambda item: (bundle_endpoint_role_rank(str(item.get("role") or "")), str(item.get("endpointId") or "")))
+    replay_requirements.sort(key=lambda item: str(item.get("endpointRef") or ""))
+
+    capability_flags = {}
+    external_descriptor = provider_draft_export.get("fishit_player_contract", {}).get("external_provider_descriptor", {})
+    if isinstance(external_descriptor, dict):
+        capability_flags = external_descriptor.get("capability_flags", {}) if isinstance(external_descriptor.get("capability_flags"), dict) else {}
+    supports_home = bool(capability_flags.get("home_template")) or any(item.get("role") == "home" for item in endpoint_templates)
+    supports_search = bool(capability_flags.get("search_template")) or any(item.get("role") == "search" for item in endpoint_templates)
+    supports_detail = bool(capability_flags.get("detail_template")) or any(item.get("role") == "detail" for item in endpoint_templates)
+    supports_playback = bool(capability_flags.get("playback_template")) or any(item.get("role") in {"playbackResolver", "playback_resolver"} for item in endpoint_templates)
+    browser_context_required = bool(capability_flags.get("browser_context_required"))
+
+    auth_draft = provider_draft_export.get("auth_draft") if isinstance(provider_draft_export.get("auth_draft"), dict) else {}
+    playback_draft = provider_draft_export.get("playback_draft") if isinstance(provider_draft_export.get("playback_draft"), dict) else {}
+    auth_mode_raw = str(auth_draft.get("auth_mode") or "")
+    if "browser_context" in auth_mode_raw:
+        auth_mode = "browser_required"
+    elif "hybrid" in auth_mode_raw:
+        auth_mode = "hybrid"
+    elif "cookie" in auth_mode_raw:
+        auth_mode = "cookie"
+    elif "token" in auth_mode_raw or "header" in auth_mode_raw:
+        auth_mode = "token"
+    else:
+        auth_mode = "none"
+
+    auth_session_artifacts = list(auth_draft.get("session_artifacts") or [])
+    session_cookie_names = sorted(
+        {
+            str(item.get("name") or "").strip().lower()
+            for item in auth_session_artifacts
+            if isinstance(item, dict) and str(item.get("kind") or "") == "required_cookie" and str(item.get("name") or "").strip()
+        }
+    )
+    session_header_names = sorted(
+        {
+            str(item.get("name") or "").strip().lower()
+            for item in auth_session_artifacts
+            if isinstance(item, dict) and str(item.get("kind") or "") == "required_header" and str(item.get("name") or "").strip()
+        }
+    )
+    requires_login = auth_mode != "none" or bool(session_cookie_names or session_header_names)
+    requires_browser_session = bool(browser_context_required or auth_draft.get("browser_session_required") or playback_draft.get("browser_context_required"))
+
+    token_input_names = sorted(
+        {
+            str(item).strip()
+            for item in list(auth_draft.get("provenance_backed_token_inputs") or [])
+            + list(playback_draft.get("token_dependencies") or [])
+            + [
+                str(name)
+                for requirement in replay_requirements
+                for name in list(requirement.get("requiredProvenanceInputs") or [])
+            ]
+            if str(item).strip()
+        }
+    )
+    validation_endpoint_ref = str(auth_draft.get("validation_endpoint_ref") or "") or None
+    refresh_endpoint_ref = str(auth_draft.get("refresh_endpoint_ref") or "") or None
+    required_token_inputs = []
+    for token_name in token_input_names:
+        lowered = token_name.lower()
+        confidentiality = "hash_only" if any(marker in lowered for marker in ["auth", "token", "authorization", "session"]) else "non_secret"
+        required_for = []
+        if validation_endpoint_ref:
+            required_for.append(validation_endpoint_ref)
+        if refresh_endpoint_ref and refresh_endpoint_ref not in required_for:
+            required_for.append(refresh_endpoint_ref)
+        required_token_inputs.append(
+            {
+                "inputName": token_name,
+                "requiredFor": required_for,
+                "provenanceRef": f"prov:{normalize_provenance_ref_name(token_name)}",
+                "confidentiality": confidentiality,
+            }
+        )
+    provenance_refs = sorted(
+        {
+            str(item.get("provenanceRef") or "")
+            for item in required_token_inputs
+            if str(item.get("provenanceRef") or "")
+        }
+    )
+
+    playback_manifest_kind = str(playback_draft.get("manifest_kind_detected") or "unknown").lower()
+    if playback_manifest_kind not in {"hls", "dash", "smoothstream", "none"}:
+        playback_manifest_kind = "none"
+    playback_endpoint_ref = str(playback_draft.get("playback_endpoint_template_ref") or "") or None
+    playback_required_provenance = sorted(
+        {
+            str(item).strip()
+            for item in list(playback_draft.get("token_dependencies") or [])
+            if str(item).strip()
+        }
+    )
+    playback_headers = build_named_requirements(
+        names=list(playback_draft.get("manifest_required_headers") or []),
+        status="required_proven",
+        known_provenance_names=known_provenance_names,
+        require_provenance_ref=True,
+    )
+    playback_cookies = build_named_requirements(
+        names=list(playback_draft.get("manifest_required_cookies") or []),
+        status="required_proven",
+        known_provenance_names=known_provenance_names,
+        require_provenance_ref=True,
+    )
+
+    provider_capability_class = str(provider_draft_export.get("capability_class") or "").upper()
+    if provider_capability_class == "NATIVE_READY" and not requires_browser_session:
+        capability_class = "NATIVE_READY"
+        maturity = "NATIVE_READY"
+        plugin_kind = "profile_plugin"
+    elif supports_playback or supports_search or supports_detail:
+        capability_class = "HYBRID"
+        maturity = "HYBRID"
+        plugin_kind = "hybrid_plugin"
+    else:
+        capability_class = "WEB_ONLY"
+        maturity = "EXPERIMENTAL"
+        plugin_kind = "profile_plugin"
+
+    field_mappings = map_provider_field_mappings(provider_draft_export.get("field_matrix") or {})
+    field_confidence = {
+        str(item.get("fieldName") or ""): clamp_confidence(item.get("confidence"), default=0.0)
+        for item in field_mappings
+        if str(item.get("fieldName") or "")
+    }
+
+    provider_warnings = [str(item) for item in list(provider_draft_export.get("warnings") or []) if str(item).strip()]
+    auth_warnings = [str(item) for item in list(auth_draft.get("warnings") or []) if str(item).strip()]
+    playback_warnings = [str(item) for item in list(playback_draft.get("warnings") or []) if str(item).strip()]
+    warning_messages = sorted(set(provider_warnings + auth_warnings + playback_warnings))
+    warnings = []
+    for message in warning_messages:
+        if message.startswith("auth:"):
+            section = "sessionAuth"
+        elif message.startswith("playback:"):
+            section = "playback"
+        elif message.startswith("field-matrix:"):
+            section = "fieldMappings"
+        else:
+            section = "analysis"
+        warnings.append(
+            {
+                "warningCode": warning_code_from_text(message),
+                "severity": "warning",
+                "message": message,
+                "affectedSections": [section],
+                "evidenceRefs": [],
+            }
+        )
+
+    confidence_summary = provider_draft_export.get("confidence_summary") if isinstance(provider_draft_export.get("confidence_summary"), dict) else {}
+    bundle_confidence = clamp_confidence(confidence_summary.get("overall_confidence"), default=0.0)
+    determinism_confidence = clamp_confidence((bundle_confidence + clamp_confidence(confidence_summary.get("endpoint_confidence_avg"), default=0.0)) / 2.0, default=bundle_confidence)
+    playback_confidence = clamp_confidence(playback_draft.get("playback_confidence"), default=0.0)
+    auth_confidence = clamp_confidence(auth_draft.get("auth_confidence"), default=0.0)
+
+    bundle_descriptor = {
+        "bundleId": f"spb.{safe_target_id}.{stable_hash([source_runtime_export_id, provider_draft_export.get('export_id')])[:16]}",
+        "bundleSchemaVersion": 1,
+        "producer": "mapper_toolkit",
+        "producerVersion": "2.0.0",
+        "targetSiteId": target_site_id_raw,
+        "sourceKey": source_key,
+        "sourceFamilyKey": source_family_key,
+        "displayName": f"{safe_target_id.upper()} Web Profile",
+        "pluginKind": plugin_kind,
+        "maturity": maturity,
+        "capabilityClass": capability_class,
+        "generatedAt": generated_at,
+        "sourceRuntimeModelId": f"srm.{safe_target_id}.{stable_hash([target_site_id_raw, generated_at])[:8]}",
+        "sourceRuntimeExportId": source_runtime_export_id,
+        "compatiblePluginApiRange": {
+            "min": "1.0.0",
+            "max": "1.x",
+        },
+        "compatibleRuntimeModelVersion": 1,
+        "compatibleCapabilitySchemaVersion": "1.0.0",
+    }
+
+    bundle: Dict[str, Any] = {
+        "$schema": "contracts/v3/source_pipeline_bundle.schema.json",
+        "bundleDescriptor": bundle_descriptor,
+        "capabilities": {
+            "supportsHomeSync": bool(supports_home),
+            "supportsGlobalSearch": bool(supports_search),
+            "supportsDetailEnrichment": bool(supports_detail),
+            "supportsPlayback": bool(supports_playback),
+            "requiresLogin": bool(requires_login),
+            "requiresBrowserSession": bool(requires_browser_session),
+            "supportsIncrementalSync": bool(supports_home),
+            "supportsBackgroundSync": False,
+            "supportsReplay": True,
+            "standaloneAppBuildCapable": True,
+        },
+        "endpointTemplates": endpoint_templates,
+        "replayRequirements": replay_requirements,
+        "sessionAuth": {
+            "authMode": auth_mode,
+            "requiresLogin": bool(requires_login),
+            "requiresBrowserSession": bool(requires_browser_session),
+            "browserContextRequired": bool(requires_browser_session),
+            "sessionArtifacts": {
+                "cookies": session_cookie_names,
+                "headers": session_header_names,
+                "localStorage": [],
+                "indexedDb": [],
+            },
+            "validationEndpointRef": validation_endpoint_ref,
+            "refreshEndpointRef": refresh_endpoint_ref,
+            "requiredTokenInputs": required_token_inputs,
+            "provenanceRefs": provenance_refs,
+            "authConfidence": auth_confidence,
+            "authWarnings": [
+                {
+                    "warningCode": warning_code_from_text(message),
+                    "severity": "warning",
+                    "message": message,
+                    "affectedSections": ["sessionAuth"],
+                    "evidenceRefs": [],
+                }
+                for message in auth_warnings
+            ],
+        },
+        "playback": {
+            "resolverMode": "resolver_then_manifest" if supports_playback else "unknown",
+            "browserContextRequired": bool(playback_draft.get("browser_context_required") or requires_browser_session),
+            "playbackEndpointRef": playback_endpoint_ref,
+            "manifestEndpointRefs": [],
+            "manifestKinds": [playback_manifest_kind],
+            "streamContainerHints": normalize_stream_container_hints(list(playback_draft.get("stream_container_hints") or [])),
+            "streamMimeHints": sorted({str(item).strip().lower() for item in list(playback_draft.get("stream_mime_hints") or []) if str(item).strip()}),
+            "requiredPlaybackHeaders": playback_headers,
+            "requiredPlaybackCookies": playback_cookies,
+            "requiredPlaybackProvenanceInputs": playback_required_provenance,
+            "tokenDependencies": sorted({str(item).strip() for item in list(playback_draft.get("token_dependencies") or []) if str(item).strip()}),
+            "drmSuspected": bool(playback_draft.get("drm_suspected")),
+            "playbackConfidence": playback_confidence,
+            "playbackWarnings": [
+                {
+                    "warningCode": warning_code_from_text(message),
+                    "severity": "warning",
+                    "message": message,
+                    "affectedSections": ["playback"],
+                    "evidenceRefs": [],
+                }
+                for message in playback_warnings
+            ],
+        },
+        "fieldMappings": field_mappings,
+        "constraintsBudgets": {
+            "defaultTimeoutMs": 75000,
+            "maxRetries": 2,
+            "syncBatchSize": 50,
+            "bodyCaptureBudgetBytes": FOUR_MB_BYTES,
+            "backgroundAllowed": False,
+            "cpuIoProfile": "MIXED",
+            "rateLimitProfile": "PLUGIN_DECLARED",
+            "replayMode": "browser_assisted" if requires_browser_session else "native_preferred",
+            "requiresOrigin": any(bool(item.get("requiredOrigin")) for item in replay_requirements),
+            "requiresReferer": any(bool(item.get("requiredReferer")) for item in replay_requirements),
+            "tokenTtlHints": [],
+        },
+        "warnings": warnings,
+        "confidence": {
+            "bundleConfidence": bundle_confidence,
+            "determinismConfidence": determinism_confidence,
+            "endpointConfidenceByRole": endpoint_confidence_by_role,
+            "playbackConfidence": playback_confidence,
+            "authConfidence": auth_confidence,
+            "fieldConfidence": field_confidence,
+        },
+    }
+
+    if supports_home:
+        home_endpoint_refs = [str(item.get("endpointId") or "") for item in endpoint_templates if str(item.get("role") or "") == "home"]
+        home_endpoint_refs = [item for item in home_endpoint_refs if item]
+        selection_key = "/"
+        bundle["selectionModel"] = {
+            "selectionMode": "route",
+            "selectionEntities": [
+                {
+                    "entityType": "home_route",
+                    "selectionKey": selection_key,
+                    "displayName": "Default Home",
+                    "defaultSelected": True,
+                    "linkedEndpointRefs": home_endpoint_refs[:3],
+                }
+            ],
+            "defaultSelectionKeys": [selection_key],
+            "selectionConfidence": clamp_confidence(endpoint_confidence_by_role.get("home", 0.6), default=0.6),
+        }
+        detail_refs = [str(item.get("endpointId") or "") for item in endpoint_templates if str(item.get("role") or "") == "detail"]
+        bundle["syncModel"] = {
+            "syncMode": "selection_scoped",
+            "supportsFullSync": False,
+            "supportsIncrementalSync": True,
+            "homeEndpointRefs": home_endpoint_refs[:10],
+            "detailEnrichmentEndpointRefs": detail_refs[:10],
+            "defaultSelectionKeys": [selection_key],
+            "syncConfidence": clamp_confidence(endpoint_confidence_by_role.get("home", 0.6), default=0.6),
+        }
+
+    return bundle
+
+
+def build_site_runtime_model(
+    source_pipeline_bundle: Dict[str, Any],
+    provider_draft_export: Dict[str, Any],
+) -> Dict[str, Any]:
+    descriptor = source_pipeline_bundle.get("bundleDescriptor", {}) if isinstance(source_pipeline_bundle.get("bundleDescriptor"), dict) else {}
+    capabilities = source_pipeline_bundle.get("capabilities", {}) if isinstance(source_pipeline_bundle.get("capabilities"), dict) else {}
+    session_auth = source_pipeline_bundle.get("sessionAuth", {}) if isinstance(source_pipeline_bundle.get("sessionAuth"), dict) else {}
+    playback = source_pipeline_bundle.get("playback", {}) if isinstance(source_pipeline_bundle.get("playback"), dict) else {}
+    endpoints = [item for item in list(source_pipeline_bundle.get("endpointTemplates") or []) if isinstance(item, dict)]
+    field_mappings = [item for item in list(source_pipeline_bundle.get("fieldMappings") or []) if isinstance(item, dict)]
+    confidence = source_pipeline_bundle.get("confidence", {}) if isinstance(source_pipeline_bundle.get("confidence"), dict) else {}
+    warnings = [item for item in list(source_pipeline_bundle.get("warnings") or []) if isinstance(item, dict)]
+
+    endpoint_rows = []
+    for endpoint in endpoints:
+        endpoint_rows.append(
+            {
+                "endpointId": str(endpoint.get("endpointId") or ""),
+                "endpointRole": str(endpoint.get("role") or ""),
+                "normalizedHost": str(endpoint.get("normalizedHost") or ""),
+                "normalizedPath": str(endpoint.get("normalizedPath") or ""),
+                "method": str(endpoint.get("method") or "GET"),
+                "requestOperation": str(endpoint.get("requestOperation") or ""),
+                "graphqlOperationName": endpoint.get("graphqlOperationName"),
+                "templateKind": str(endpoint.get("templateKind") or "rest_json"),
+                "phaseRelevance": list(endpoint.get("phaseRelevance") or []),
+                "confidence": clamp_confidence(endpoint.get("confidence"), default=0.0),
+            }
+        )
+    primary_host = ""
+    if endpoint_rows:
+        primary_host = str(endpoint_rows[0].get("normalizedHost") or "").strip().lower()
+
+    return {
+        "modelId": str(descriptor.get("sourceRuntimeModelId") or ""),
+        "modelSchemaVersion": 1,
+        "targetSiteId": str(descriptor.get("targetSiteId") or ""),
+        "baseUrl": f"https://{primary_host}" if primary_host else "",
+        "generatedAt": str(descriptor.get("generatedAt") or utc_now()),
+        "sourceRuntimeExportId": str(descriptor.get("sourceRuntimeExportId") or provider_draft_export.get("source_runtime_export_id") or ""),
+        "capabilityModel": {
+            "capabilityClass": str(descriptor.get("capabilityClass") or ""),
+            "maturity": str(descriptor.get("maturity") or ""),
+            "supports": {
+                "home": bool(capabilities.get("supportsHomeSync")),
+                "search": bool(capabilities.get("supportsGlobalSearch")),
+                "detail": bool(capabilities.get("supportsDetailEnrichment")),
+                "playback": bool(capabilities.get("supportsPlayback")),
+                "auth": bool(capabilities.get("requiresLogin")),
+                "replay": bool(capabilities.get("supportsReplay")),
+                "standalone_app_build": bool(capabilities.get("standaloneAppBuildCapable")),
+            },
+        },
+        "sessionModel": {
+            "authMode": str(session_auth.get("authMode") or "none"),
+            "requiresLogin": bool(session_auth.get("requiresLogin")),
+            "requiresBrowserSession": bool(session_auth.get("requiresBrowserSession")),
+            "sessionArtifacts": session_auth.get("sessionArtifacts") if isinstance(session_auth.get("sessionArtifacts"), dict) else {},
+            "tokenInputs": [str(item.get("inputName") or "") for item in list(session_auth.get("requiredTokenInputs") or []) if isinstance(item, dict)],
+            "sessionConfidence": clamp_confidence(session_auth.get("authConfidence"), default=0.0),
+        },
+        "endpointModel": {
+            "endpointRolesPresent": sorted({str(item.get("endpointRole") or "") for item in endpoint_rows if str(item.get("endpointRole") or "")}),
+            "endpoints": endpoint_rows,
+        },
+        "playbackModel": {
+            "resolverMode": str(playback.get("resolverMode") or "unknown"),
+            "browserContextRequired": bool(playback.get("browserContextRequired")),
+            "playbackEndpointRefs": [str(playback.get("playbackEndpointRef") or "")] if str(playback.get("playbackEndpointRef") or "") else [],
+            "manifestKinds": list(playback.get("manifestKinds") or []),
+            "streamKinds": list(playback.get("streamContainerHints") or []),
+            "streamMimeHints": list(playback.get("streamMimeHints") or []),
+            "requestRequirements": {
+                "tokenDependencies": list(playback.get("tokenDependencies") or []),
+            },
+            "drmModel": {
+                "drmSuspected": bool(playback.get("drmSuspected")),
+                "drmKinds": [],
+                "licenseEndpointRef": None,
+                "browserOnlyRisk": bool(playback.get("browserContextRequired")),
+            },
+            "playbackConfidence": clamp_confidence(playback.get("playbackConfidence"), default=0.0),
+        },
+        "fieldModel": {
+            "fieldCoverage": {
+                str(item.get("fieldName") or ""): str(item.get("derivationKind") or "missing")
+                for item in field_mappings
+                if str(item.get("fieldName") or "")
+            },
+            "fields": {
+                str(item.get("fieldName") or ""): {
+                    "fieldName": str(item.get("fieldName") or ""),
+                    "sourceRef": str(item.get("sourceRef") or ""),
+                    "sourceKind": str(item.get("sourceKind") or ""),
+                    "valuePreview": item.get("valueTemplate"),
+                    "confidence": clamp_confidence(item.get("confidence"), default=0.0),
+                    "observedInRoles": list(item.get("observedInRoles") or []),
+                    "status": str(item.get("derivationKind") or "missing"),
+                }
+                for item in field_mappings
+                if str(item.get("fieldName") or "")
+            },
+        },
+        "confidenceModel": {
+            "exportConfidence": clamp_confidence(confidence.get("bundleConfidence"), default=0.0),
+            "endpointConfidences": dict(confidence.get("endpointConfidenceByRole") or {}),
+            "playbackConfidence": clamp_confidence(confidence.get("playbackConfidence"), default=0.0),
+            "authConfidence": clamp_confidence(confidence.get("authConfidence"), default=0.0),
+            "fieldConfidences": dict(confidence.get("fieldConfidence") or {}),
+            "determinismConfidence": clamp_confidence(confidence.get("determinismConfidence"), default=0.0),
+        },
+        "warningModel": {
+            "warnings": warnings,
+        },
+    }
+
+
+def build_source_plugin_manifest(
+    source_pipeline_bundle: Dict[str, Any],
+    runtime_dir: pathlib.Path,
+) -> Dict[str, Any]:
+    descriptor = source_pipeline_bundle.get("bundleDescriptor", {}) if isinstance(source_pipeline_bundle.get("bundleDescriptor"), dict) else {}
+    return {
+        "bundleType": "source_pipeline_bundle_zip",
+        "bundleVersion": 1,
+        "mainContract": "source_pipeline_bundle.json",
+        "siteRuntimeModel": "site_runtime_model.json",
+        "sourceKey": str(descriptor.get("sourceKey") or ""),
+        "targetSiteId": str(descriptor.get("targetSiteId") or ""),
+        "pluginKind": str(descriptor.get("pluginKind") or ""),
+        "producer": str(descriptor.get("producer") or ""),
+        "producerVersion": str(descriptor.get("producerVersion") or ""),
+        "outputDir": str(runtime_dir / "exports"),
+    }
+
+
+def write_source_plugin_bundle_zip(
+    target_zip_path: pathlib.Path,
+    source_pipeline_bundle_path: pathlib.Path,
+    site_runtime_model_path: pathlib.Path,
+    manifest_path: pathlib.Path,
+) -> pathlib.Path:
+    target_zip_path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(target_zip_path, mode="w") as bundle_zip:
+        for archive_name, source_path in [
+            ("source_pipeline_bundle.json", source_pipeline_bundle_path),
+            ("site_runtime_model.json", site_runtime_model_path),
+            ("manifest.json", manifest_path),
+        ]:
+            file_bytes = source_path.read_bytes()
+            info = zipfile.ZipInfo(filename=archive_name)
+            info.date_time = (1980, 1, 1, 0, 0, 0)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            bundle_zip.writestr(info, file_bytes)
+    return target_zip_path
 
 
 def build_replay_seed(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -5473,6 +6501,19 @@ def ensure_derived(
         provenance_registry=provenance_registry,
         runtime_dir=runtime_dir,
     )
+    source_pipeline_bundle = build_source_pipeline_bundle(
+        provider_draft_export=provider_draft_export,
+        rows=rows,
+        provenance_registry=provenance_registry,
+    )
+    site_runtime_model = build_site_runtime_model(
+        source_pipeline_bundle=source_pipeline_bundle,
+        provider_draft_export=provider_draft_export,
+    )
+    source_plugin_manifest = build_source_plugin_manifest(
+        source_pipeline_bundle=source_pipeline_bundle,
+        runtime_dir=runtime_dir,
+    )
     events_ssot = {
         "schema_version": 1,
         "generated_at_utc": utc_now(),
@@ -5512,6 +6553,8 @@ def ensure_derived(
             "response_index": "response_index.json",
             "replay_bundle": "replay_bundle.json",
             "mission_export_summary": "mission_export_summary.json",
+            "source_pipeline_bundle": "source_pipeline_bundle.json",
+            "source_plugin_bundle_zip": "exports/source_plugin_bundle.zip",
         },
         "integrity": {
             "deterministic_serialization": True,
@@ -5538,6 +6581,10 @@ def ensure_derived(
         "field_matrix": runtime_dir / "field_matrix.json",
         "profile_draft": runtime_dir / "site_profile.draft.json",
         "provider_draft_export": runtime_dir / "provider_draft_export.json",
+        "source_pipeline_bundle": runtime_dir / "source_pipeline_bundle.json",
+        "site_runtime_model": runtime_dir / "site_runtime_model.json",
+        "source_plugin_manifest": runtime_dir / "manifest.json",
+        "source_plugin_bundle_zip": runtime_dir / "exports" / "source_plugin_bundle.zip",
         "webapp_runtime_draft": runtime_dir / "webapp_runtime_draft.json",
         "replay_bundle": runtime_dir / "replay_bundle.json",
         "fixture_manifest": runtime_dir / "fixture_manifest.json",
@@ -5565,9 +6612,18 @@ def ensure_derived(
     write_json(paths["field_matrix"], field_matrix)
     write_json(paths["profile_draft"], profile_draft)
     write_json_canonical(paths["provider_draft_export"], provider_draft_export)
+    write_json_canonical(paths["source_pipeline_bundle"], source_pipeline_bundle)
+    write_json_canonical(paths["site_runtime_model"], site_runtime_model)
+    write_json_canonical(paths["source_plugin_manifest"], source_plugin_manifest)
     write_json_canonical(paths["webapp_runtime_draft"], webapp_runtime_draft)
     write_json_canonical(paths["replay_bundle"], replay_bundle)
     write_json_canonical(paths["fixture_manifest"], fixture_manifest)
+    write_source_plugin_bundle_zip(
+        target_zip_path=paths["source_plugin_bundle_zip"],
+        source_pipeline_bundle_path=paths["source_pipeline_bundle"],
+        site_runtime_model_path=paths["site_runtime_model"],
+        manifest_path=paths["source_plugin_manifest"],
+    )
     write_json(paths["profile_candidate"], profile_candidate)
     write_json(paths["replay_seed"], replay_seed)
     write_mission_export_summary(runtime_dir=runtime_dir, rows=rows, mission_id=mission_id)
@@ -7420,6 +8476,7 @@ def do_mapping(action: str, rows: List[Dict[str, Any]], _args: argparse.Namespac
         "field-matrix": paths["field_matrix"],
         "profile-draft": paths["profile_draft"],
         "provider-draft-export": paths["provider_draft_export"],
+        "source-pipeline-bundle": paths["source_pipeline_bundle"],
         "replay-seed": paths["replay_seed"],
     }
     target = mapping.get(action)
@@ -7525,6 +8582,9 @@ def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Name
             "endpoint_candidates.json",
             "site_profile.draft.json",
             "provider_draft_export.json",
+            "source_pipeline_bundle.json",
+            "site_runtime_model.json",
+            "manifest.json",
             "webapp_runtime_draft.json",
             "replay_bundle.json",
             "fixture_manifest.json",
@@ -7542,6 +8602,7 @@ def do_housekeeping(action: str, rows: List[Dict[str, Any]], args: argparse.Name
             "triage_bookmarks.json",
             "triage_session_state.json",
             "pipeline_ready_report.json",
+            "exports/source_plugin_bundle.zip",
         ]:
             target = runtime_dir / rel
             if target.exists():
@@ -7635,6 +8696,7 @@ def do_triage(action: str, rows: List[Dict[str, Any]], args: argparse.Namespace,
                 "endpoint_candidates": derived["endpoint_candidates"],
                 "site_profile.draft": derived["profile_draft"],
                 "provider_draft_export": derived["provider_draft_export"],
+                "source_pipeline_bundle": derived["source_pipeline_bundle"],
                 "replay_seed": derived["replay_seed"],
             }
             for target in preset_payload.get("target_outputs", []):

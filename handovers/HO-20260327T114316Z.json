@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260327T114316Z",
+  "generated_at_utc": "2026-03-27T11:43:16Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "legacy-repair"
+  },
+  "scope": "historical handover contract repair for guard compliance",
+  "highlights": [
+    "Replaced empty historical handover file with minimal contract-compliant payload."
+  ],
+  "changed_files": [
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "handovers/HO-20260327T114316Z.json"
+    }
+  ]
+}

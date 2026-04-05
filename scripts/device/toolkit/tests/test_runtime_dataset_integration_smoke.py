@@ -142,12 +142,18 @@ class RuntimeDatasetIntegrationSmokeTests(unittest.TestCase):
                 "required_headers_report.json",
                 "replay_requirements.json",
                 "provider_draft_export.json",
+                "source_pipeline_bundle.json",
+                "site_runtime_model.json",
+                "manifest.json",
                 "mission_export_summary.json",
             ]
             for name in required:
                 path = runtime_dir / name
                 self.assertTrue(path.exists(), name)
                 self.assertGreater(path.stat().st_size, 0, name)
+            bundle_zip = runtime_dir / "exports" / "source_plugin_bundle.zip"
+            self.assertTrue(bundle_zip.exists())
+            self.assertGreater(bundle_zip.stat().st_size, 0)
 
     def test_headers_infer_required_active_includes_truncation_visibility(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -172,6 +178,19 @@ class RuntimeDatasetIntegrationSmokeTests(unittest.TestCase):
             replay = payload.get("replay_requirements", {})
             self.assertIn("truncation_summary", replay)
             self.assertIn("total_truncated_responses", replay.get("truncation_summary", {}))
+
+    def test_mapping_source_pipeline_bundle_emits_player_contract_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            write_events(runtime_dir, phase_fixture_rows())
+            result = run_cli("mapping", "source-pipeline-bundle", runtime_dir=runtime_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads(result.stdout or "{}")
+            self.assertIn("bundleDescriptor", payload)
+            self.assertIn("endpointTemplates", payload)
+            self.assertIn("replayRequirements", payload)
+            self.assertIn("sessionAuth", payload)
+            self.assertIn("playback", payload)
 
     def test_reindex_preserves_wizard_and_anchor_events(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

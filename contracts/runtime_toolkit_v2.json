@@ -34,7 +34,7 @@
     "cookies": ["timeline", "set-events", "refresh-events", "domain-view"],
     "headers": ["infer-required", "infer-required-active", "token-deps", "auth-chain"],
     "responses": ["raw", "filter", "grep", "sample"],
-    "mapping": ["candidate-endpoints", "field-matrix", "profile-draft", "provider-draft-export", "replay-seed"],
+    "mapping": ["candidate-endpoints", "field-matrix", "profile-draft", "provider-draft-export", "source-pipeline-bundle", "replay-seed"],
     "housekeeping": ["pack", "compress", "purge", "reindex", "validate", "mission-summary"]
   },
   "event_types": [
@@ -86,6 +86,10 @@
     "endpoint_candidates.json",
     "site_profile.draft.json",
     "provider_draft_export.json",
+    "source_pipeline_bundle.json",
+    "site_runtime_model.json",
+    "manifest.json",
+    "exports/source_plugin_bundle.zip",
     "mission_export_summary.json",
     "profile_candidate.json",
     "provenance_graph.json",

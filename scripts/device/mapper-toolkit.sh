@@ -57,7 +57,7 @@ Usage:
   scripts/device/mapper-toolkit.sh cookies <timeline|set-events|refresh-events|domain-view> [filters...]
   scripts/device/mapper-toolkit.sh headers <infer-required|infer-required-active|token-deps|auth-chain> [filters...]
   scripts/device/mapper-toolkit.sh responses <raw|filter|grep|sample> [filters...]
-  scripts/device/mapper-toolkit.sh mapping <candidate-endpoints|field-matrix|profile-draft|provider-draft-export|replay-seed>
+  scripts/device/mapper-toolkit.sh mapping <candidate-endpoints|field-matrix|profile-draft|provider-draft-export|source-pipeline-bundle|replay-seed>
   scripts/device/mapper-toolkit.sh housekeeping <pack|compress|purge|reindex|validate|mission-summary>
 USAGE
 }
