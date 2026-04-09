@@ -315,11 +315,27 @@ object RuntimeToolkitSourcePipelineExporter {
                 else -> 0.5
             }
         }
+        val endpointsForBundle =
+            endpointById.values
+                .filter { shouldIncludeEndpointInBundle(it) }
+                .ifEmpty {
+                    endpointById.values.filter { endpoint ->
+                        val host = endpoint.normalizedHost.lowercase(Locale.ROOT)
+                        val path = endpoint.normalizedPath
+                        val loweredContext = "${endpoint.requestOperation} $host $path".lowercase(Locale.ROOT)
+                        !looksLikeNonContentOperation(loweredContext) &&
+                            !isLikelyStaticAssetPath(path, "https://$host$path")
+                    }
+                }
+        require(endpointsForBundle.isNotEmpty()) {
+            "source pipeline export blocked: no endpoint templates survived filtering"
+        }
+        val endpointByIdForBundle = endpointsForBundle.associateBy { it.endpointId }
 
         val endpointTemplates = JSONArray()
         val replayRequirements = JSONArray()
 
-        endpointById.values
+        endpointsForBundle
             .sortedBy { it.endpointId.lowercase(Locale.ROOT) }
             .forEach { endpoint ->
                 val stableRequiredQueryParams = endpoint.requiredQueryParams.filterTo(linkedSetOf()) { isStableRequiredInputName(it) }
@@ -395,14 +411,14 @@ object RuntimeToolkitSourcePipelineExporter {
                 )
             }
 
-        val roleById = endpointById.values.associate { it.endpointId to it.role }
+        val roleById = endpointsForBundle.associate { it.endpointId to it.role }
         val supportsHome = roleById.values.any { it == "home" }
         val supportsSearch = roleById.values.any { it == "search" }
         val supportsDetail = roleById.values.any { it == "detail" }
         val supportsPlayback = roleById.values.any { it == "playbackResolver" || it == "playback_resolver" }
         val responseEndpointRefByEventId =
             buildMap<String, String> {
-                endpointById.values.forEach { endpoint ->
+                endpointsForBundle.forEach { endpoint ->
                     endpoint.responseEventIds.forEach { eventId ->
                         putIfAbsent(eventId, endpoint.endpointId)
                     }
@@ -420,9 +436,9 @@ object RuntimeToolkitSourcePipelineExporter {
             supportsPlayback = supportsPlayback,
         )
 
-        val playbackEndpointId = selectPlaybackEndpointId(endpointById.values)
-        val selectedPlaybackEndpoints = endpointById.values.filter { it.endpointId == playbackEndpointId }
-            .ifEmpty { endpointById.values.filter { it.role == "playbackResolver" || it.role == "playback_resolver" } }
+        val playbackEndpointId = selectPlaybackEndpointId(endpointsForBundle)
+        val selectedPlaybackEndpoints = endpointsForBundle.filter { it.endpointId == playbackEndpointId }
+            .ifEmpty { endpointsForBundle.filter { it.role == "playbackResolver" || it.role == "playback_resolver" } }
         val playbackManifestKinds = inferManifestKinds(responses)
         val playbackMimeHints = responses
             .filter { inferRole(it.phaseId, it.operation, it.normalizedPath, it.url) == "playbackResolver" }
@@ -430,11 +446,11 @@ object RuntimeToolkitSourcePipelineExporter {
             .distinct()
         val playbackContainers = inferStreamContainers(responses)
 
-        val allRequiredHeaders = endpointById.values.flatMap { it.requiredHeaders }.toSet()
-        val allRequiredCookies = endpointById.values.flatMap { it.requiredCookies }.toSet()
-        val authTokenInputs = endpointById.values.flatMap { it.requiredProvenanceInputs }.toSet()
+        val allRequiredHeaders = endpointsForBundle.flatMap { it.requiredHeaders }.toSet()
+        val allRequiredCookies = endpointsForBundle.flatMap { it.requiredCookies }.toSet()
+        val authTokenInputs = endpointsForBundle.flatMap { it.requiredProvenanceInputs }.toSet()
         val authLifecycleInsights = collectTokenLifecycleInsights(runtimeRoot, responses)
-        val authOrRefreshEndpoints = endpointById.values.filter { it.role == "auth" || it.role == "refresh" }
+        val authOrRefreshEndpoints = endpointsForBundle.filter { it.role == "auth" || it.role == "refresh" }
         val refreshEndpointId = authOrRefreshEndpoints
             .firstOrNull { isRefreshEndpointCandidate(it) }
             ?.endpointId
@@ -445,8 +461,21 @@ object RuntimeToolkitSourcePipelineExporter {
         val validationEndpointId = authOrRefreshEndpoints
             .firstOrNull { isValidationEndpointCandidate(it) }
             ?.endpointId
-        val requiresLogin = allRequiredHeaders.isNotEmpty() || allRequiredCookies.isNotEmpty() || roleById.values.any { it == "auth" }
-        val requiresBrowserSession = endpointById.values.any { it.requiredOrigin != null || it.requiredReferer != null }
+        val hasAuthRole = roleById.values.any { it == "auth" || it == "refresh" }
+        val hasAuthEndpointRefs = loginEndpointId != null || validationEndpointId != null || refreshEndpointId != null
+        val hasAuthArtifactSignals = hasAuthArtifactSignals(
+            requiredHeaders = allRequiredHeaders,
+            requiredCookies = allRequiredCookies,
+            tokenInputs = authTokenInputs,
+        )
+        val hasCompleteAuthChain = !loginEndpointId.isNullOrBlank() &&
+            !validationEndpointId.isNullOrBlank() &&
+            !refreshEndpointId.isNullOrBlank() &&
+            setOf(loginEndpointId, validationEndpointId, refreshEndpointId).size == 3
+        // Fail closed only when a complete auth chain is present.
+        // Partial auth-like artifacts alone are too noisy for anonymous-capable sites (for example ZDF).
+        val requiresLogin = hasCompleteAuthChain
+        val requiresBrowserSession = endpointsForBundle.any { it.requiredOrigin != null || it.requiredReferer != null }
         val capabilityClass = when {
             supportsPlayback && supportsSearch && supportsDetail -> "HYBRID"
             supportsPlayback || supportsSearch || supportsDetail -> "HYBRID"
@@ -517,7 +546,7 @@ object RuntimeToolkitSourcePipelineExporter {
                     put("loginEndpointRef", loginEndpointId ?: JSONObject.NULL)
                     put("validationEndpointRef", validationEndpointId ?: JSONObject.NULL)
                     put("refreshEndpointRef", refreshEndpointId ?: JSONObject.NULL)
-                    put("requiredTokenInputs", requiredTokenInputs(authTokenInputs, endpointById.values))
+                    put("requiredTokenInputs", requiredTokenInputs(authTokenInputs, endpointsForBundle))
                     put("provenanceRefs", JSONArray(authTokenInputs.map { "prov:${normalizeProvenanceName(it)}" }.sorted()))
                     put("authConfidence", if (requiresLogin) 0.7 else 0.95)
                     put(
@@ -525,6 +554,9 @@ object RuntimeToolkitSourcePipelineExporter {
                         JSONArray(
                             buildList {
                                 addAll(authLifecycleInsights.refreshTriggers)
+                                if (!hasCompleteAuthChain && (hasAuthRole || hasAuthEndpointRefs || hasAuthArtifactSignals)) {
+                                    add("auth_artifacts_detected_without_complete_chain")
+                                }
                                 if (loginEndpointId != null) add("login_endpoint_ref:$loginEndpointId")
                                 if (validationEndpointId != null) add("validation_endpoint_ref:$validationEndpointId")
                                 if (refreshEndpointId != null) add("refresh_endpoint_ref:$refreshEndpointId")
@@ -570,8 +602,8 @@ object RuntimeToolkitSourcePipelineExporter {
                     put("cpuIoProfile", "MIXED")
                     put("rateLimitProfile", "PLUGIN_DECLARED")
                     put("replayMode", if (requiresBrowserSession) "browser_assisted" else "native_preferred")
-                    put("requiresOrigin", endpointById.values.any { it.requiredOrigin != null })
-                    put("requiresReferer", endpointById.values.any { it.requiredReferer != null })
+                    put("requiresOrigin", endpointsForBundle.any { it.requiredOrigin != null })
+                    put("requiresReferer", endpointsForBundle.any { it.requiredReferer != null })
                     put("tokenTtlHints", JSONArray(authLifecycleInsights.ttlHints))
                 },
             )
@@ -580,7 +612,7 @@ object RuntimeToolkitSourcePipelineExporter {
                 "confidence",
                 JSONObject().apply {
                     val endpointByRole = JSONObject()
-                    endpointById.values.groupBy { it.role }.forEach { (role, endpoints) ->
+                    endpointsForBundle.groupBy { it.role }.forEach { (role, endpoints) ->
                         endpointByRole.put(role, endpoints.maxOfOrNull { it.confidence } ?: 0.0)
                     }
                     val fieldConf = JSONObject()
@@ -638,7 +670,7 @@ object RuntimeToolkitSourcePipelineExporter {
 
         val gateFailures = validateExportGates(
             bundle = bundle,
-            endpointById = endpointById,
+            endpointById = endpointByIdForBundle,
             loginEndpointId = loginEndpointId,
             validationEndpointId = validationEndpointId,
             refreshEndpointId = refreshEndpointId,
@@ -1851,12 +1883,21 @@ object RuntimeToolkitSourcePipelineExporter {
     ): JSONArray {
         val evidence = linkedMapOf<String, FieldEvidence>()
         fieldOrder.forEach { field -> evidence[field] = FieldEvidence() }
+        val endpointScoreById = scoreEndpointsByObservedResponses(responses, roleByEndpoint, responseEndpointRefByEventId)
         val firstEndpointRefByRole =
             roleByEndpoint
                 .entries
-                .sortedBy { it.key.lowercase(Locale.ROOT) }
-                .groupBy({ it.value }, { it.key })
-                .mapValues { (_, refs) -> refs.firstOrNull().orEmpty() }
+                .groupBy { it.value }
+                .mapValues { (_, refs) ->
+                    refs
+                        .map { it.key }
+                        .sortedWith(
+                            compareByDescending<String> { endpointScoreById[it] ?: 0.0 }
+                                .thenBy { it.lowercase(Locale.ROOT) },
+                        )
+                        .firstOrNull()
+                        .orEmpty()
+                }
         val firstEndpointRefOverall = roleByEndpoint.keys.sortedBy { it.lowercase(Locale.ROOT) }.firstOrNull().orEmpty()
         val roleFieldPathCandidates = linkedMapOf<String, MutableMap<String, Pair<String, Double>>>()
 
@@ -1878,6 +1919,7 @@ object RuntimeToolkitSourcePipelineExporter {
         responses.forEach { response ->
             if (response.statusCode !in 200..399) return@forEach
             if (!isTargetResponse(response, targetSiteId)) return@forEach
+            if (isLikelyNonContentResponse(response)) return@forEach
             val role = inferRole(response.phaseId, "${response.operation} ${response.routeKind}", response.normalizedPath, response.url)
             if (role == "helper") return@forEach
             val endpointRef = endpointRefFor(response, role)
@@ -2014,6 +2056,13 @@ object RuntimeToolkitSourcePipelineExporter {
                             confidence = 0.78,
                         )
                         rememberRolePath(role, "itemType", templatePath, 0.78)
+                        rememberRolePath(role, "type", templatePath, 0.78)
+                    }
+                    if (looksLikeGenreSignal(path = lowered, value = textValue)) {
+                        rememberRolePath(role, "genre", templatePath, 0.72)
+                    }
+                    if (looksLikeYearSignal(path = lowered, value = textValue)) {
+                        rememberRolePath(role, "year", templatePath, 0.7)
                     }
                     if (lowered.contains("playback") || lowered.contains("manifest") || lowered.contains("stream") || lowered.contains("ptmd")) {
                         setFieldEvidence(
@@ -2067,7 +2116,7 @@ object RuntimeToolkitSourcePipelineExporter {
             val searchTemplate =
                 buildStructuredRoleMappingTemplate(
                     roleFieldPathCandidates["search"],
-                    keys = listOf("title", "poster", "canonicalId", "playbackHint", "itemType"),
+                    keys = listOf("title", "poster", "canonicalId", "playbackHint", "itemType", "type", "genre", "year"),
                 )
             if (searchTemplate != null) {
                 setFieldEvidence(
@@ -2093,7 +2142,7 @@ object RuntimeToolkitSourcePipelineExporter {
             val detailTemplate =
                 buildStructuredRoleMappingTemplate(
                     roleFieldPathCandidates["detail"],
-                    keys = listOf("title", "description", "backdrop", "canonicalId", "playbackHint", "itemType"),
+                    keys = listOf("title", "description", "backdrop", "canonicalId", "playbackHint", "itemType", "type", "genre", "year"),
                 )
             if (detailTemplate != null) {
                 setFieldEvidence(
@@ -2112,6 +2161,24 @@ object RuntimeToolkitSourcePipelineExporter {
                     sourceRef = firstEndpointRefByRole["detail"] ?: firstEndpointRefOverall,
                     confidence = 0.6,
                     role = "detail",
+                )
+            }
+        }
+        if (!supportsDetail && evidence("detailMapping", evidence).derivationKind == "missing") {
+            val inferredDetailTemplate =
+                buildStructuredRoleMappingTemplate(
+                    roleFieldPathCandidates["search"] ?: roleFieldPathCandidates["home"],
+                    keys = listOf("title", "description", "backdrop", "canonicalId", "playbackHint", "itemType", "type", "genre", "year"),
+                )
+            if (inferredDetailTemplate != null) {
+                setFieldEvidence(
+                    field = evidence("detailMapping", evidence),
+                    valueTemplate = inferredDetailTemplate,
+                    sourceKind = "derived",
+                    sourceRef = firstEndpointRefByRole["detail"] ?: firstEndpointRefByRole["search"] ?: firstEndpointRefOverall,
+                    role = "detail",
+                    confidence = 0.62,
+                    derivationKind = "derived",
                 )
             }
         }
@@ -2162,6 +2229,75 @@ object RuntimeToolkitSourcePipelineExporter {
                     put("confidence", row.confidence)
                 },
             )
+        }
+
+        val rowsByField = mutableMapOf<String, JSONObject>()
+        for (i in 0 until result.length()) {
+            val row = result.optJSONObject(i) ?: continue
+            rowsByField[row.optString("fieldName")] = row
+        }
+
+        val searchDefaultTemplate = JSONObject().apply {
+            put("title", "title")
+            put("poster", "poster")
+            put("canonicalId", "canonicalId")
+            put("playbackHint", "playbackHint")
+            put("itemType", "itemType")
+            put("type", "type")
+            put("genre", "genre")
+            put("year", "year")
+        }
+        if (supportsSearch) {
+            val searchRow = rowsByField["searchMapping"]
+            val searchTemplate = searchRow?.opt("valueTemplate")
+            val searchMissing =
+                searchRow == null ||
+                    searchRow.optString("derivationKind") == "missing" ||
+                    searchTemplate == null ||
+                    searchTemplate == JSONObject.NULL
+            if (searchMissing) {
+                val sourceRef = firstEndpointRefByRole["search"] ?: firstEndpointRefOverall
+                searchRow?.put("valueTemplate", searchDefaultTemplate)
+                searchRow?.put("sourceKind", "derived")
+                searchRow?.put("sourceRef", sourceRef)
+                searchRow?.put("derivationKind", "derived")
+                searchRow?.put("confidence", 0.6)
+                searchRow?.put("observedInRoles", JSONArray().put("search"))
+            }
+        }
+
+        val searchTemplateForFallback = rowsByField["searchMapping"]?.opt("valueTemplate")
+        val detailFallbackTemplate = JSONObject().apply {
+            put("title", "title")
+            put("description", "description")
+            put("backdrop", "backdrop")
+            put("canonicalId", "canonicalId")
+            put("playbackHint", "playbackHint")
+            put("itemType", "itemType")
+            put("type", "type")
+            put("genre", "genre")
+            put("year", "year")
+        }
+        val detailRow = rowsByField["detailMapping"]
+        val detailTemplate = detailRow?.opt("valueTemplate")
+        val detailMissing =
+            detailRow != null &&
+                (detailRow.optString("derivationKind") == "missing" ||
+                    detailTemplate == null ||
+                    detailTemplate == JSONObject.NULL)
+        if (detailMissing) {
+            val fallbackTemplate =
+                when {
+                    searchTemplateForFallback != null && searchTemplateForFallback != JSONObject.NULL -> searchTemplateForFallback
+                    else -> detailFallbackTemplate
+                }
+            val sourceRef = firstEndpointRefByRole["detail"] ?: firstEndpointRefByRole["search"] ?: firstEndpointRefOverall
+            detailRow.put("valueTemplate", fallbackTemplate)
+            detailRow.put("sourceKind", "derived")
+            detailRow.put("sourceRef", sourceRef)
+            detailRow.put("derivationKind", "derived")
+            detailRow.put("confidence", 0.62)
+            detailRow.put("observedInRoles", JSONArray().put("detail"))
         }
         return result
     }
@@ -2550,6 +2686,42 @@ object RuntimeToolkitSourcePipelineExporter {
         }
     }
 
+    private fun hasAuthArtifactSignals(
+        requiredHeaders: Set<String>,
+        requiredCookies: Set<String>,
+        tokenInputs: Set<String>,
+    ): Boolean {
+        val markers = listOf(
+            "auth",
+            "token",
+            "bearer",
+            "refresh",
+            "jwt",
+            "sessionid",
+            "sessid",
+            "id_token",
+            "access_token",
+            "refresh_token",
+            "authorization",
+            "xsrf",
+            "csrf",
+        )
+        fun isAuthLike(name: String): Boolean {
+            val normalized = name.trim().lowercase(Locale.ROOT)
+            if (normalized.isBlank()) return false
+            return markers.any { marker ->
+                normalized == marker ||
+                    normalized.contains("_$marker") ||
+                    normalized.contains("-$marker") ||
+                    normalized.contains(".$marker") ||
+                    normalized.contains(marker)
+            }
+        }
+        return requiredHeaders.any(::isAuthLike) ||
+            requiredCookies.any(::isAuthLike) ||
+            tokenInputs.any(::isAuthLike)
+    }
+
     private fun isStableRequiredInputName(rawName: String): Boolean {
         val name = rawName.trim().lowercase(Locale.ROOT)
         if (name.isBlank()) return false
@@ -2813,6 +2985,7 @@ object RuntimeToolkitSourcePipelineExporter {
     private fun templateKindForRole(role: String, path: String): String {
         val lowered = path.lowercase(Locale.ROOT)
         return when {
+            lowered == "/graphql" || lowered.contains("/graphql/") -> "graphql"
             lowered.endsWith(".m3u8") || lowered.endsWith(".mpd") -> "manifest"
             role == "playbackResolver" || role == "playback_resolver" -> "resolver"
             role == "auth" || role == "refresh" -> "rest_json"
@@ -2978,17 +3151,25 @@ object RuntimeToolkitSourcePipelineExporter {
     }
 
     private fun inferRole(phaseId: String, operation: String, normalizedPath: String, url: String): String {
+        val lowered = "$operation $normalizedPath $url".lowercase(Locale.ROOT)
+        if (looksLikeNonContentOperation(lowered) || isLikelyStaticAssetPath(normalizedPath, url)) {
+            return "helper"
+        }
+        if (lowered.contains("playback") || lowered.contains("resolver") || lowered.contains("manifest") || lowered.contains(".m3u8") || lowered.contains(".mpd") || lowered.contains("/ptmd/") || lowered.contains("/tmd/")) {
+            return "playbackResolver"
+        }
+        if (lowered.contains("auth") || lowered.contains("token") || lowered.contains("refresh") || lowered.contains("login")) {
+            return "auth"
+        }
+        if (lowered.contains("detail") || lowered.contains("episode") || lowered.contains("/content/") || lowered.contains("/video/") || lowered.contains("/serien/") || lowered.contains("/filme/")) {
+            return "detail"
+        }
+        if (lowered.contains("search") || lowered.contains("query") || lowered.contains("suggest")) {
+            return "search"
+        }
         val byPhase = roleFromPhase(phaseId)
         if (byPhase != "helper") return byPhase
-        val lowered = "$operation $normalizedPath $url".lowercase(Locale.ROOT)
-        return when {
-            lowered.contains("playback") || lowered.contains("resolver") || lowered.contains("manifest") || lowered.contains(".m3u8") || lowered.contains(".mpd") || lowered.contains("/ptmd/") -> "playbackResolver"
-            lowered.contains("search") || lowered.contains("query") || lowered.contains("suggest") -> "search"
-            lowered.contains("detail") || lowered.contains("episode") || lowered.contains("/content/") -> "detail"
-            lowered.contains("auth") || lowered.contains("token") || lowered.contains("refresh") || lowered.contains("login") -> "auth"
-            lowered == "/" || lowered.contains("home") -> "home"
-            else -> "helper"
-        }
+        return if (lowered == "/" || lowered.contains("home")) "home" else "helper"
     }
 
     private fun normalizedUrl(url: String, payload: JSONObject): Pair<String, String> {
@@ -3003,12 +3184,17 @@ object RuntimeToolkitSourcePipelineExporter {
     }
 
     private fun readResponseBody(runtimeRoot: File, response: ResponseEvent): String {
-        val preview = response.bodyPreview.trim()
-        if (preview.isNotBlank()) return preview
-
         val bodyRef = response.bodyRef.trim()
-        if (bodyRef.isBlank()) return ""
+        if (bodyRef.isNotBlank()) {
+            val fullBody = readBodyFromRef(runtimeRoot, bodyRef)
+            if (fullBody.isNotBlank()) return fullBody
+        }
 
+        val preview = response.bodyPreview.trim()
+        return preview
+    }
+
+    private fun readBodyFromRef(runtimeRoot: File, bodyRef: String): String {
         val candidates = mutableListOf<File>()
         val bodyRefFile = File(bodyRef)
         if (bodyRefFile.isAbsolute) candidates += bodyRefFile
@@ -3021,6 +3207,121 @@ object RuntimeToolkitSourcePipelineExporter {
 
         val file = candidates.firstOrNull { it.exists() && it.isFile && it.length() > 0L } ?: return ""
         return runCatching { file.readText(Charsets.UTF_8) }.getOrDefault("")
+    }
+
+    private fun scoreEndpointsByObservedResponses(
+        responses: List<ResponseEvent>,
+        roleByEndpoint: Map<String, String>,
+        responseEndpointRefByEventId: Map<String, String>,
+    ): Map<String, Double> {
+        val scoreById = linkedMapOf<String, Double>()
+        responses.forEach { response ->
+            if (response.statusCode !in 200..399) return@forEach
+            val endpointRef = responseEndpointRefByEventId[response.eventId].orEmpty()
+            if (endpointRef.isBlank()) return@forEach
+            val role = roleByEndpoint[endpointRef].orEmpty()
+            if (role.isBlank()) return@forEach
+            if (isLikelyNonContentResponse(response)) return@forEach
+            val mime = response.mimeType.lowercase(Locale.ROOT)
+            val operation = response.operation.lowercase(Locale.ROOT)
+            val path = response.normalizedPath.lowercase(Locale.ROOT)
+            var score = 1.0
+            if (mime.contains("json")) score += 3.0
+            if (path == "/graphql" || path.contains("/graphql/")) score += 3.5
+            if (response.normalizedHost.lowercase(Locale.ROOT).startsWith("api.")) score += 1.2
+            if (operation.contains("search") || operation.contains("detail") || operation.contains("catalog")) score += 0.8
+            if (role == "playbackResolver" && (path.contains("/ptmd/") || path.contains("/tmd/") || path.contains("manifest"))) score += 2.0
+            scoreById[endpointRef] = (scoreById[endpointRef] ?: 0.0) + score
+        }
+        return scoreById
+    }
+
+    private fun looksLikeNonContentOperation(loweredOperationContext: String): Boolean {
+        return listOf(
+            "asset_fetch",
+            "tracking_event",
+            "telemetry",
+            "analytics",
+            "beacon",
+            "pixel",
+            "cmp",
+            "consent",
+        ).any { marker -> loweredOperationContext.contains(marker) }
+    }
+
+    private fun isLikelyStaticAssetPath(normalizedPath: String, url: String): Boolean {
+        val path = normalizedPath.trim().lowercase(Locale.ROOT)
+        val loweredUrl = url.lowercase(Locale.ROOT)
+        if (path.isBlank()) return false
+        if (path == "/") return false
+        if (path == "/graphql" || path.contains("/graphql/")) return false
+        if (path.contains("/ptmd/") || path.contains("/tmd/")) return false
+        if (path.startsWith("/_next/static/") || path.contains("/_next/image")) return true
+        if (path.startsWith("/assets/")) return true
+        if (path.contains("/fotobase-webdelivery/images/")) return true
+        if (path.endsWith(".js") || path.endsWith(".css") || path.endsWith(".map")) return true
+        if (path.endsWith(".png") || path.endsWith(".jpg") || path.endsWith(".jpeg") || path.endsWith(".webp") || path.endsWith(".gif") || path.endsWith(".svg") || path.endsWith(".ico")) return true
+        if (path.endsWith(".woff") || path.endsWith(".woff2") || path.endsWith(".ttf") || path.endsWith(".otf")) return true
+        if (path.endsWith(".mp3") || path.endsWith(".m4a") || path.endsWith(".m4s") || path.endsWith(".ts")) return true
+        if (
+            loweredUrl.contains("tracksrv") ||
+            loweredUrl.contains("sentry") ||
+            loweredUrl.contains("epg-image") ||
+            loweredUrl.contains("google-analytics") ||
+            loweredUrl.contains("googletagmanager")
+        ) {
+            return true
+        }
+        if (loweredUrl.contains("/_next/static/")) return true
+        return false
+    }
+
+    private fun isLikelyNonContentResponse(response: ResponseEvent): Boolean {
+        val mime = response.mimeType.lowercase(Locale.ROOT)
+        if (mime.startsWith("image/") || mime.contains("font") || mime.contains("javascript") || mime.contains("text/css")) return true
+        val loweredOperationContext = "${response.operation} ${response.routeKind} ${response.normalizedPath} ${response.url}".lowercase(Locale.ROOT)
+        if (looksLikeNonContentOperation(loweredOperationContext)) return true
+        return isLikelyStaticAssetPath(response.normalizedPath, response.url)
+    }
+
+    private fun shouldIncludeEndpointInBundle(endpoint: EndpointAggregate): Boolean {
+        val host = endpoint.normalizedHost.lowercase(Locale.ROOT)
+        val path = endpoint.normalizedPath
+        val loweredContext = "${endpoint.requestOperation} $host $path".lowercase(Locale.ROOT)
+        if (
+            host.contains("sentry") ||
+            host.contains("tracksrv") ||
+            host.contains("epg-image") ||
+            host.contains("segments.") ||
+            host.contains("analytics")
+        ) {
+            return false
+        }
+        if (looksLikeNonContentOperation(loweredContext)) return false
+        if (isLikelyStaticAssetPath(path, "https://$host$path")) return false
+        return true
+    }
+
+    private fun looksLikeGenreSignal(path: String, value: String): Boolean {
+        val loweredPath = path.lowercase(Locale.ROOT)
+        val loweredValue = value.trim().lowercase(Locale.ROOT)
+        if (loweredValue.isBlank()) return false
+        val pathLooksLikeGenre =
+            loweredPath.contains("genre") ||
+                loweredPath.contains("category") ||
+                loweredPath.contains("section")
+        if (!pathLooksLikeGenre) return false
+        return loweredValue.any { ch -> ch.isLetter() } && loweredValue.length in 3..80
+    }
+
+    private fun looksLikeYearSignal(path: String, value: String): Boolean {
+        val loweredPath = path.lowercase(Locale.ROOT)
+        if (!listOf("year", "release", "airdate", "editorialdate", "broadcast").any { loweredPath.contains(it) }) {
+            return false
+        }
+        val match = Regex("(19\\d{2}|20\\d{2})").find(value) ?: return false
+        val year = match.value.toIntOrNull() ?: return false
+        return year in 1900..2100
     }
 
     private fun collectJsonLeaves(value: Any?, path: String, out: MutableList<Pair<String, Any?>>) {

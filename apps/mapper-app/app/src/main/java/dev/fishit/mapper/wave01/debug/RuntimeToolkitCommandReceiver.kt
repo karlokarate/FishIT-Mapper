@@ -657,7 +657,28 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
 
     private fun handleWizardNextStep(context: Context) {
         val before = RuntimeToolkitTelemetry.missionSessionState(context)
-        val currentState = before.stepStates[before.wizardStepId].orEmpty()
+        val storedCurrentState = before.stepStates[before.wizardStepId].orEmpty()
+        val evaluatedCurrentState = RuntimeToolkitTelemetry.evaluateMissionStepSaturation(
+            context = context,
+            stepId = before.wizardStepId,
+        ).state
+        val currentState = when {
+            storedCurrentState == RuntimeToolkitMissionWizard.SATURATION_SATURATED ->
+                RuntimeToolkitMissionWizard.SATURATION_SATURATED
+            evaluatedCurrentState == RuntimeToolkitMissionWizard.SATURATION_SATURATED ->
+                RuntimeToolkitMissionWizard.SATURATION_SATURATED
+            storedCurrentState.isBlank() -> evaluatedCurrentState
+            else -> storedCurrentState
+        }
+        if (currentState == RuntimeToolkitMissionWizard.SATURATION_SATURATED &&
+            storedCurrentState != RuntimeToolkitMissionWizard.SATURATION_SATURATED
+        ) {
+            RuntimeToolkitTelemetry.setMissionWizardStepState(
+                context = context,
+                stepId = before.wizardStepId,
+                saturationState = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+            )
+        }
         val isOptional = RuntimeToolkitMissionWizard.isOptionalStep(before.missionId, before.wizardStepId, context)
         if (!isOptional && currentState != RuntimeToolkitMissionWizard.SATURATION_SATURATED) {
             RuntimeToolkitTelemetry.logWizardEvent(
@@ -668,7 +689,12 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
                 saturationState = RuntimeToolkitMissionWizard.SATURATION_BLOCKED,
                 phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
                 targetSiteId = before.targetSiteId,
-                payload = mapOf("reason" to "current_step_not_saturated"),
+                payload = mapOf(
+                    "reason" to "current_step_not_saturated",
+                    "stored_state" to storedCurrentState,
+                    "evaluated_state" to evaluatedCurrentState,
+                    "effective_state" to currentState,
+                ),
             )
             RuntimeToolkitTelemetry.emitAck(
                 OP_WIZARD_NEXT_STEP,

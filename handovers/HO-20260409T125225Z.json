@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260409T125225Z",
+  "generated_at_utc": "2026-04-09T12:52:25Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260409T125225Z"
+  },
+  "scope": "runtime exporter: endpoint filtering + mapping fallback",
+  "highlights": [
+    "Export gates now validate filtered endpoint set; detailMapping/searchMapping fail-safe mappings enforced"
+  ],
+  "changed_files": [
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitSourcePipelineExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/activity/BrowserActivity.kt",
+      "old_path": null
+    }
+  ]
+}

@@ -405,10 +405,14 @@ open class BrowserActivity : FragmentActivity(),
         binding.twoPanelLayout.addView(translationPanelView)
 
         swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
-            !ebWebView.wasAtTopOnTouchStart || ebWebView.scrollY > 0 || !ebWebView.isInnerScrollAtTop
+            if (!this::ebWebView.isInitialized) {
+                true
+            } else {
+                !ebWebView.wasAtTopOnTouchStart || ebWebView.scrollY > 0 || !ebWebView.isInnerScrollAtTop
+            }
         }
         swipeRefreshLayout.setOnRefreshListener {
-            if (currentAlbumController != null) {
+            if (currentAlbumController != null && this::ebWebView.isInitialized) {
                 ebWebView.reload()
             } else {
                 swipeRefreshLayout.isRefreshing = false
@@ -1703,10 +1707,9 @@ open class BrowserActivity : FragmentActivity(),
                         if (session.missionId.isBlank()) {
                             showMissionLauncherDialog()
                         } else {
-                            showMissionWizardSetupDialog(session.missionId, session.targetUrl)
+                            // Resume persisted wizard state without reopening blocking setup dialogs.
+                            updateMissionWizardUi()
                         }
-                    } else if (session.missionId.isNotBlank()) {
-                        showMissionWizardPanel()
                     } else {
                         updateMissionWizardUi()
                     }
@@ -2856,7 +2859,7 @@ open class BrowserActivity : FragmentActivity(),
             targetSiteId = state.targetSiteId,
         )
         applyMissionTargetUrl(targetUrl, autoAdvance = true)
-        showMissionWizardPanel()
+        updateMissionWizardUi()
     }
 
     private fun applyMissionTargetUrl(urlInput: String, autoAdvance: Boolean) {
@@ -2926,7 +2929,6 @@ open class BrowserActivity : FragmentActivity(),
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Open") { _, _ ->
                 applyMissionTargetUrl(input.text?.toString().orEmpty(), autoAdvance = true)
-                showMissionWizardPanel()
             }
             .show()
     }
@@ -3114,7 +3116,17 @@ open class BrowserActivity : FragmentActivity(),
 
     private fun moveToNextWizardStep(openWizardPanel: Boolean = true) {
         val state = RuntimeToolkitTelemetry.missionSessionState(this)
-        val current = state.stepStates[state.wizardStepId].orEmpty()
+        val persisted = state.stepStates[state.wizardStepId].orEmpty()
+        val evaluated = RuntimeToolkitTelemetry.evaluateMissionStepSaturation(
+            context = this,
+            stepId = state.wizardStepId,
+        )
+        val current = when {
+            persisted == RuntimeToolkitMissionWizard.SATURATION_SATURATED -> persisted
+            evaluated.state == RuntimeToolkitMissionWizard.SATURATION_SATURATED -> evaluated.state
+            persisted.isNotBlank() -> persisted
+            else -> evaluated.state
+        }
         if (current != RuntimeToolkitMissionWizard.SATURATION_SATURATED) {
             RuntimeToolkitTelemetry.logWizardEvent(
                 context = this,
@@ -3128,6 +3140,13 @@ open class BrowserActivity : FragmentActivity(),
             )
             EBToast.showShort(this, "Current step not saturated")
             return
+        }
+        if (persisted != RuntimeToolkitMissionWizard.SATURATION_SATURATED) {
+            RuntimeToolkitTelemetry.setMissionWizardStepState(
+                context = this,
+                stepId = state.wizardStepId,
+                saturationState = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
+            )
         }
         clearPendingWizardAutoAdvance()
         clearWizardUndoWindow()

@@ -2882,13 +2882,12 @@ object RuntimeToolkitTelemetry {
             observation.routeKind == "home" || path == "/" || path.contains("/home") -> "home_probe"
             observation.routeKind == "search" || operation.contains("search") || path.contains("/search") -> "search_probe"
             observation.routeKind == "detail" || operation.contains("detail") || path.contains("/detail") || path.contains("/content/") -> "detail_probe"
-            observation.routeKind == "playback" ||
-                operation.contains("playback") ||
-                path.endsWith(".m3u8") ||
-                path.endsWith(".mpd") ||
-                path.endsWith(".ts") ||
-                mime.contains("mpegurl") ||
-                mime.contains("dash+xml") -> "playback_probe"
+            isPlaybackSignal(
+                routeKind = observation.routeKind,
+                operation = operation,
+                path = path,
+                mimeType = mime,
+            ) -> "playback_probe"
             observation.routeKind == "auth" ||
                 operation.contains("auth") ||
                 operation.contains("token") ||
@@ -3123,7 +3122,11 @@ object RuntimeToolkitTelemetry {
             }
             RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE -> {
                 val relevant = successfulTargetByPhase["detail_probe"].orEmpty().filter {
-                    it.operation.contains("detail") || it.path.contains("/detail")
+                    it.routeKind == "detail" ||
+                        it.routeKind == "category" ||
+                        it.operation.contains("detail") ||
+                        it.operation.contains("category") ||
+                        it.path.contains("/detail")
                 }
                 val readyHits = readyHitsByStep[RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE] ?: 0
                 val responseCount = relevant.size
@@ -3150,21 +3153,35 @@ object RuntimeToolkitTelemetry {
             }
             RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE -> {
                 val relevant = successfulTargetByPhase["playback_probe"].orEmpty().filter {
-                    it.operation.contains("playback") ||
-                        it.path.endsWith(".m3u8") ||
-                        it.path.endsWith(".mpd") ||
-                        it.mimeType.contains("mpegurl") ||
-                        it.mimeType.contains("dash+xml")
+                    isPlaybackSignal(
+                        routeKind = it.routeKind,
+                        operation = it.operation,
+                        path = it.path,
+                        mimeType = it.mimeType,
+                    )
                 }
                 val readyHits = readyHitsByStep[RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE] ?: 0
                 val responseCount = relevant.size
-                val saturated = responseCount > 0 && (readyHits > 0 || responseCount >= 2)
+                val strongEvidenceCount = relevant.count {
+                    it.path.contains("/ptmd/") ||
+                        it.path.contains("/tmd/") ||
+                        it.path.endsWith(".m3u8") ||
+                        it.path.endsWith(".mpd") ||
+                        it.operation.contains("manifest")
+                }
+                val saturated = when {
+                    responseCount <= 0 -> false
+                    readyHits > 0 -> true
+                    strongEvidenceCount > 0 -> true
+                    else -> responseCount >= 2
+                }
                 if (saturated) {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
                         reason = "playback_probe_evidence_ok",
                         metrics = mapOf(
                             "response_count" to responseCount,
+                            "strong_evidence_count" to strongEvidenceCount,
                             "ready_hits" to readyHits,
                         ),
                     )
@@ -3174,6 +3191,7 @@ object RuntimeToolkitTelemetry {
                         reason = "missing_playback_manifest_or_resolver",
                         metrics = mapOf(
                             "response_count" to responseCount,
+                            "strong_evidence_count" to strongEvidenceCount,
                             "ready_hits" to readyHits,
                         ),
                     )
@@ -3291,8 +3309,9 @@ object RuntimeToolkitTelemetry {
             }
             RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE -> {
                 val count = intPayloadValue(saturation.metrics["response_count"]) ?: 0
+                val strongEvidenceCount = intPayloadValue(saturation.metrics["strong_evidence_count"]) ?: 0
                 val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
-                minOf(95, (count * 55) + if (readyHits > 0) 20 else 0)
+                minOf(95, (count * 40) + (strongEvidenceCount * 20) + if (readyHits > 0) 15 else 0)
             }
             RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL -> {
                 val login = intPayloadValue(saturation.metrics["login_responses"]) ?: 0
@@ -3346,10 +3365,12 @@ object RuntimeToolkitTelemetry {
             }
             RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE -> {
                 val count = intPayloadValue(saturation.metrics["response_count"]) ?: 0
+                val strongEvidenceCount = intPayloadValue(saturation.metrics["strong_evidence_count"]) ?: 0
                 val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
                 buildList {
                     if (count <= 0) add("playback_manifest_or_resolver")
-                    if (readyHits <= 0) add("ready_window_hit")
+                    if (count > 0 && strongEvidenceCount <= 0) add("strong_playback_signal")
+                    if (readyHits <= 0) add("ready_window_hit_recommended")
                 }.ifEmpty { listOf("playback_manifest_or_resolver") }
             }
             RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL -> {
@@ -3416,7 +3437,7 @@ object RuntimeToolkitTelemetry {
             RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE -> listOf(
                 "Zum abspielbaren Video navigieren.",
                 "Ready direkt vor Play druecken.",
-                "Playback starten, bis Manifest/Resolver sichtbar ist.",
+                "Playback starten, bis PTMD/Manifest (.m3u8/.mpd) sichtbar ist.",
             )
             RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL -> listOf(
                 "Ready druecken und anschliessend Login ausloesen.",
@@ -3519,16 +3540,21 @@ object RuntimeToolkitTelemetry {
                 semantic.routeKind == "search" || normalizedOperation.contains("search") || path.contains("/search")
             RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE ->
                 semantic.routeKind == "detail" ||
+                    semantic.routeKind == "category" ||
                     normalizedOperation.contains("detail") ||
+                    normalizedOperation.contains("category") ||
                     path.contains("/detail") ||
-                    path.contains("/content/")
+                    path.contains("/content/") ||
+                    path.contains("/thema/") ||
+                    path.contains("/genre/")
             RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE ->
-                semantic.routeKind == "playback" ||
-                    semantic.playbackRelated ||
-                    normalizedOperation.contains("playback") ||
-                    path.endsWith(".m3u8") ||
-                    path.endsWith(".mpd") ||
-                    path.endsWith(".ts")
+                semantic.playbackRelated ||
+                    isPlaybackSignal(
+                        routeKind = semantic.routeKind,
+                        operation = normalizedOperation,
+                        path = path,
+                        mimeType = "",
+                    )
             RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL ->
                 semantic.routeKind == "auth" ||
                     semantic.authRelated ||
@@ -3539,6 +3565,28 @@ object RuntimeToolkitTelemetry {
                     normalizedOperation.contains("refresh")
             else -> false
         }
+    }
+
+    private fun isPlaybackSignal(
+        routeKind: String,
+        operation: String,
+        path: String,
+        mimeType: String,
+    ): Boolean {
+        val normalizedRoute = routeKind.lowercase(Locale.ROOT)
+        val normalizedOperation = operation.lowercase(Locale.ROOT)
+        val normalizedPath = path.lowercase(Locale.ROOT)
+        val normalizedMime = mimeType.lowercase(Locale.ROOT)
+        if (normalizedRoute == "playback") return true
+        if (normalizedOperation.contains("playback")) return true
+        if (normalizedOperation.contains("manifest")) return true
+        if (normalizedOperation.contains("stream")) return true
+        if (normalizedPath.contains("/ptmd/") || normalizedPath.contains("/tmd/")) return true
+        if (normalizedPath.endsWith(".m3u8") || normalizedPath.endsWith(".mpd")) return true
+        if (normalizedPath.endsWith(".ism/manifest")) return true
+        if (normalizedPath.endsWith(".ts")) return true
+        if (normalizedMime.contains("mpegurl") || normalizedMime.contains("dash+xml")) return true
+        return false
     }
 
     private fun canonicalTargetSiteIdFromHost(host: String): String {
