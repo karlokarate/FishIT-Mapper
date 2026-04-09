@@ -110,14 +110,29 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
             actionId = providedActionId.takeIf { it.isNotBlank() && it != "session_start" } ?: UUID.randomUUID().toString(),
             spanId = UUID.randomUUID().toString(),
         )
+        val sessionAutoCapture = intent.getBooleanExtra(EXTRA_SESSION_AUTO_CAPTURE, false)
 
         RuntimeToolkitTelemetry.setRunAndContext(context, runId, correlation)
-        RuntimeToolkitTelemetry.startCaptureSession(context, source = "adb_receiver")
+        if (sessionAutoCapture) {
+            RuntimeToolkitTelemetry.startCaptureSession(context, source = "adb_receiver_session_auto")
+        } else {
+            RuntimeToolkitTelemetry.setCaptureEnabled(context, false)
+            RuntimeToolkitTelemetry.logMissionEvent(
+                context = context,
+                operation = "capture_armed_waiting_for_target_url",
+                payload = mapOf(
+                    "source" to "adb_receiver",
+                    "capture_enabled" to false,
+                    "session_auto_capture" to false,
+                ),
+            )
+        }
         RuntimeToolkitTelemetry.emitAck(
             OP_SESSION_START,
             "ok",
             mapOf(
                 "run_id" to runId,
+                "session_auto_capture" to sessionAutoCapture,
                 "runtime_settings" to RuntimeToolkitTelemetry.runtimeSettingsSnapshot(context),
             ),
         )
@@ -483,9 +498,10 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
     }
 
     private fun handleWizardSetTargetUrl(context: Context, intent: Intent) {
-        val url = intent.getStringExtra(EXTRA_URL).orEmpty()
-        require(url.isNotBlank()) { "wizard_set_target_url requires url" }
-        val state = RuntimeToolkitTelemetry.setMissionTarget(context, url)
+        val urlInput = intent.getStringExtra(EXTRA_URL).orEmpty()
+        require(urlInput.isNotBlank()) { "wizard_set_target_url requires url" }
+        val normalizedUrl = if (BrowserUnit.isURL(urlInput)) urlInput else "https://$urlInput"
+        val state = RuntimeToolkitTelemetry.setMissionTarget(context, normalizedUrl)
         RuntimeToolkitTelemetry.logMissionEvent(
             context = context,
             operation = "mission_config_applied",
@@ -495,7 +511,7 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
             exportReadiness = "NOT_READY",
             reason = "receiver_target_url_bound",
             payload = mapOf(
-                "target_url" to url,
+                "target_url" to normalizedUrl,
                 "target_site_id" to state.targetSiteId,
                 "target_host_family" to state.targetHostFamily,
             ),
@@ -513,12 +529,16 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
             saturationState = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
             phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
             targetSiteId = state.targetSiteId,
-            payload = mapOf("target_url" to url),
+            payload = mapOf("target_url" to normalizedUrl),
+        )
+        RuntimeToolkitTelemetry.startCaptureSession(
+            context = context,
+            source = "wizard_target_url_input",
         )
         context.startActivity(
             Intent(context, BrowserActivity::class.java)
                 .setAction(Intent.ACTION_VIEW)
-                .setData(Uri.parse(url))
+                .setData(Uri.parse(normalizedUrl))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
         )
         RuntimeToolkitTelemetry.emitAck(
@@ -846,6 +866,7 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
             mapOf(
                 "run_id" to runId,
                 "runtime_settings" to RuntimeToolkitTelemetry.runtimeSettingsSnapshot(context),
+                "mission_session" to RuntimeToolkitTelemetry.missionSessionSnapshot(context),
             ),
         )
     }
@@ -944,6 +965,7 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
         const val EXTRA_DERIVED_FROM = "derivedFrom"
         const val EXTRA_MISSION_ID = "missionId"
         const val EXTRA_SATURATION_STATE = "saturationState"
+        const val EXTRA_SESSION_AUTO_CAPTURE = "sessionAutoCapture"
         const val EXTRA_ANCHOR_ID = "anchorId"
         const val EXTRA_ANCHOR_NAME = "anchorName"
         const val EXTRA_ANCHOR_TYPE = "anchorType"

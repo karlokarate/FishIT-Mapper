@@ -38,6 +38,18 @@ class MainContentLayout(
     val fabCaptureToggle: TextView,
     val fabMissionWizard: TextView,
     val mapperWizardBanner: TextView,
+    val mapperWizardCard: LinearLayout,
+    val mapperWizardStepTitle: TextView,
+    val mapperWizardStepState: TextView,
+    val mapperWizardStepProgress: ProgressBar,
+    val mapperWizardStepMissing: TextView,
+    val mapperWizardStepHints: TextView,
+    val mapperWizardStepStatus: TextView,
+    val mapperWizardActionStart: TextView,
+    val mapperWizardActionReady: TextView,
+    val mapperWizardActionCheck: TextView,
+    val mapperWizardActionPause: TextView,
+    val mapperWizardActionNext: TextView,
     val translationLanguage: TextView,
     val remoteTextSearch: ImageButton,
     val externalSearchClose: ImageButton,
@@ -341,6 +353,169 @@ class MainContentLayout(
             }
             root.addView(mapperWizardBanner)
 
+            val mapperWizardCard = LinearLayout(context).apply {
+                id = R.id.mapper_wizard_card
+                orientation = LinearLayout.VERTICAL
+                layoutParams = ConstraintLayout.LayoutParams(
+                    0, ConstraintLayout.LayoutParams.WRAP_CONTENT
+                )
+                background = ContextCompat.getDrawable(context, R.drawable.background_with_border)
+                setPadding(dpToPx(context, 12), dpToPx(context, 10), dpToPx(context, 12), dpToPx(context, 10))
+                visibility = View.GONE
+            }
+            root.addView(mapperWizardCard)
+
+            val mapperWizardStepTitle = TextView(context).apply {
+                id = R.id.mapper_wizard_step_title
+                textSize = 14f
+                setTextColor(ContextCompat.getColor(context, android.R.color.black))
+                text = "Step"
+            }
+            mapperWizardCard.addView(
+                mapperWizardStepTitle,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+
+            val mapperWizardStepState = TextView(context).apply {
+                id = R.id.mapper_wizard_step_state
+                textSize = 12f
+                text = "INCOMPLETE"
+            }
+            mapperWizardCard.addView(
+                mapperWizardStepState,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+
+            val mapperWizardStepProgress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
+                id = R.id.mapper_wizard_step_progress
+                max = 100
+                progress = 0
+            }
+            mapperWizardCard.addView(
+                mapperWizardStepProgress,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dpToPx(context, 8)
+                ).apply {
+                    topMargin = dpToPx(context, 8)
+                }
+            )
+
+            val mapperWizardStepMissing = TextView(context).apply {
+                id = R.id.mapper_wizard_step_missing
+                textSize = 12f
+                text = ""
+            }
+            mapperWizardCard.addView(
+                mapperWizardStepMissing,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dpToPx(context, 8)
+                }
+            )
+
+            val mapperWizardStepHints = TextView(context).apply {
+                id = R.id.mapper_wizard_step_hints
+                textSize = 12f
+                text = ""
+            }
+            mapperWizardCard.addView(
+                mapperWizardStepHints,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dpToPx(context, 4)
+                }
+            )
+
+            val mapperWizardStepStatus = TextView(context).apply {
+                id = R.id.mapper_wizard_step_status
+                textSize = 11f
+                text = context.getString(R.string.mapper_wizard_overlay_status_idle)
+            }
+            mapperWizardCard.addView(
+                mapperWizardStepStatus,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dpToPx(context, 4)
+                }
+            )
+
+            val wizardActionRow = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            mapperWizardCard.addView(
+                wizardActionRow,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dpToPx(context, 8)
+                }
+            )
+
+            fun createWizardActionButton(id: Int, labelRes: Int): TextView {
+                return TextView(context).apply {
+                    this.id = id
+                    background = ContextCompat.getDrawable(context, R.drawable.roundcorner)
+                    gravity = android.view.Gravity.CENTER
+                    text = context.getString(labelRes)
+                    textSize = 11f
+                    setPadding(dpToPx(context, 8), dpToPx(context, 6), dpToPx(context, 8), dpToPx(context, 6))
+                }
+            }
+
+            val mapperWizardActionStart = createWizardActionButton(
+                id = R.id.mapper_wizard_action_start,
+                labelRes = R.string.mapper_wizard_overlay_start
+            )
+            val mapperWizardActionReady = createWizardActionButton(
+                id = R.id.mapper_wizard_action_ready,
+                labelRes = R.string.mapper_wizard_overlay_ready
+            )
+            val mapperWizardActionCheck = createWizardActionButton(
+                id = R.id.mapper_wizard_action_check,
+                labelRes = R.string.mapper_wizard_overlay_check
+            )
+            val mapperWizardActionPause = createWizardActionButton(
+                id = R.id.mapper_wizard_action_pause,
+                labelRes = R.string.mapper_wizard_overlay_pause
+            )
+            val mapperWizardActionNext = createWizardActionButton(
+                id = R.id.mapper_wizard_action_next,
+                labelRes = R.string.mapper_wizard_overlay_next
+            )
+            val actions = listOf(
+                mapperWizardActionStart,
+                mapperWizardActionReady,
+                mapperWizardActionCheck,
+                mapperWizardActionPause,
+                mapperWizardActionNext
+            )
+            actions.forEachIndexed { index, button ->
+                wizardActionRow.addView(
+                    button,
+                    LinearLayout.LayoutParams(
+                        0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        1f
+                    ).apply {
+                        if (index > 0) marginStart = dpToPx(context, 6)
+                    }
+                )
+            }
+
             // translation_language
             val translationLanguage = TextView(context).apply {
                 id = R.id.translation_language
@@ -494,6 +669,14 @@ class MainContentLayout(
             constraintSet.setMargin(mapperWizardBanner.id, ConstraintSet.END, dpToPx(context, 12))
             constraintSet.setMargin(mapperWizardBanner.id, ConstraintSet.TOP, dpToPx(context, 10))
 
+            // mapper_wizard_card: below banner
+            constraintSet.connect(mapperWizardCard.id, ConstraintSet.TOP, mapperWizardBanner.id, ConstraintSet.BOTTOM)
+            constraintSet.connect(mapperWizardCard.id, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
+            constraintSet.connect(mapperWizardCard.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+            constraintSet.setMargin(mapperWizardCard.id, ConstraintSet.TOP, dpToPx(context, 8))
+            constraintSet.setMargin(mapperWizardCard.id, ConstraintSet.START, dpToPx(context, 12))
+            constraintSet.setMargin(mapperWizardCard.id, ConstraintSet.END, dpToPx(context, 12))
+
             // translation_language: end to parent, bottom to parent
             constraintSet.connect(translationLanguage.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
             constraintSet.connect(translationLanguage.id, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
@@ -531,6 +714,18 @@ class MainContentLayout(
                 fabCaptureToggle = fabCaptureToggle,
                 fabMissionWizard = fabMissionWizard,
                 mapperWizardBanner = mapperWizardBanner,
+                mapperWizardCard = mapperWizardCard,
+                mapperWizardStepTitle = mapperWizardStepTitle,
+                mapperWizardStepState = mapperWizardStepState,
+                mapperWizardStepProgress = mapperWizardStepProgress,
+                mapperWizardStepMissing = mapperWizardStepMissing,
+                mapperWizardStepHints = mapperWizardStepHints,
+                mapperWizardStepStatus = mapperWizardStepStatus,
+                mapperWizardActionStart = mapperWizardActionStart,
+                mapperWizardActionReady = mapperWizardActionReady,
+                mapperWizardActionCheck = mapperWizardActionCheck,
+                mapperWizardActionPause = mapperWizardActionPause,
+                mapperWizardActionNext = mapperWizardActionNext,
                 translationLanguage = translationLanguage,
                 remoteTextSearch = remoteTextSearch,
                 externalSearchClose = externalSearchClose,

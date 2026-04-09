@@ -7,6 +7,18 @@
     <item name="fab_capture_toggle" type="id" />
     <item name="fab_mission_wizard" type="id" />
     <item name="mapper_wizard_banner" type="id" />
+    <item name="mapper_wizard_card" type="id" />
+    <item name="mapper_wizard_step_title" type="id" />
+    <item name="mapper_wizard_step_state" type="id" />
+    <item name="mapper_wizard_step_progress" type="id" />
+    <item name="mapper_wizard_step_missing" type="id" />
+    <item name="mapper_wizard_step_hints" type="id" />
+    <item name="mapper_wizard_step_status" type="id" />
+    <item name="mapper_wizard_action_start" type="id" />
+    <item name="mapper_wizard_action_ready" type="id" />
+    <item name="mapper_wizard_action_check" type="id" />
+    <item name="mapper_wizard_action_pause" type="id" />
+    <item name="mapper_wizard_action_next" type="id" />
     <item name="translation_language" type="id" />
     <item name="remote_text_search" type="id" />
     <item name="external_search_close" type="id" />

@@ -50,6 +50,7 @@ import android.webkit.WebView
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.RelativeLayout
 import android.widget.TextView
@@ -1441,6 +1442,8 @@ open class BrowserActivity : FragmentActivity(),
         }
 
         browserContainer.clear()
+        clearPendingWizardAutoAdvance()
+        clearWizardUndoWindow()
         unregisterReceiver(downloadReceiver)
         wave02Logger.finish("activity_destroyed")
 
@@ -2121,7 +2124,26 @@ open class BrowserActivity : FragmentActivity(),
     private lateinit var captureToggleButton: TextView
     private lateinit var missionWizardButton: TextView
     private lateinit var missionWizardBanner: TextView
+    private lateinit var missionWizardCard: LinearLayout
+    private lateinit var missionWizardStepTitle: TextView
+    private lateinit var missionWizardStepState: TextView
+    private lateinit var missionWizardStepProgress: ProgressBar
+    private lateinit var missionWizardStepMissing: TextView
+    private lateinit var missionWizardStepHints: TextView
+    private lateinit var missionWizardStepStatus: TextView
+    private lateinit var missionWizardActionStart: TextView
+    private lateinit var missionWizardActionReady: TextView
+    private lateinit var missionWizardActionCheck: TextView
+    private lateinit var missionWizardActionPause: TextView
+    private lateinit var missionWizardActionNext: TextView
+    private var pendingWizardAutoAdvanceStepId: String? = null
+    private var pendingWizardAutoAdvanceRunnable: Runnable? = null
+    private var pendingWizardUndoState: RuntimeToolkitTelemetry.MissionSessionState? = null
+    private var pendingWizardUndoRunnable: Runnable? = null
+    private var pendingWizardUndoExpiresAtMs: Long = 0L
     private var pendingMissionBannerUrl: String = ""
+    private val wizardAutoAdvanceDelayMs: Long = 3_000L
+    private val wizardReadyWindowSeconds: Long = 90L
 
     private fun initFAB() {
         fabImageViewController = FabImageViewController(
@@ -2186,6 +2208,18 @@ open class BrowserActivity : FragmentActivity(),
         RuntimeToolkitMissionWizard.ensureRegistryLoaded(this)
         missionWizardButton = findViewById(R.id.fab_mission_wizard)
         missionWizardBanner = findViewById(R.id.mapper_wizard_banner)
+        missionWizardCard = findViewById(R.id.mapper_wizard_card)
+        missionWizardStepTitle = findViewById(R.id.mapper_wizard_step_title)
+        missionWizardStepState = findViewById(R.id.mapper_wizard_step_state)
+        missionWizardStepProgress = findViewById(R.id.mapper_wizard_step_progress)
+        missionWizardStepMissing = findViewById(R.id.mapper_wizard_step_missing)
+        missionWizardStepHints = findViewById(R.id.mapper_wizard_step_hints)
+        missionWizardStepStatus = findViewById(R.id.mapper_wizard_step_status)
+        missionWizardActionStart = findViewById(R.id.mapper_wizard_action_start)
+        missionWizardActionReady = findViewById(R.id.mapper_wizard_action_ready)
+        missionWizardActionCheck = findViewById(R.id.mapper_wizard_action_check)
+        missionWizardActionPause = findViewById(R.id.mapper_wizard_action_pause)
+        missionWizardActionNext = findViewById(R.id.mapper_wizard_action_next)
 
         missionWizardButton.visibility = VISIBLE
         missionWizardButton.text = getString(R.string.mapper_wizard_button_label)
@@ -2220,6 +2254,27 @@ open class BrowserActivity : FragmentActivity(),
             missionWizardBanner.text = getString(R.string.mapper_wizard_banner_label)
             missionWizardBanner.visibility = VISIBLE
         }
+
+        missionWizardActionStart.setOnClickListener { beginCurrentWizardStep() }
+        missionWizardActionReady.setOnClickListener { armCurrentWizardReadyWindow() }
+        missionWizardActionCheck.setOnClickListener { checkCurrentWizardStepSaturation(openWizardPanel = false) }
+        missionWizardActionPause.setOnClickListener {
+            if (!holdPendingWizardAutoAdvance()) {
+                if (RuntimeToolkitTelemetry.isCaptureEnabled(this)) {
+                    RuntimeToolkitTelemetry.stopCaptureSession(this, source = "wizard_overlay_pause")
+                    updateCaptureToggleUi(false)
+                    EBToast.showShort(this, getString(R.string.mapper_capture_stopped))
+                }
+            }
+            updateMissionWizardUi()
+        }
+        missionWizardActionNext.setOnClickListener {
+            if (isWizardUndoWindowActive()) {
+                undoLastWizardAutoAdvance()
+            } else {
+                moveToNextWizardStep(openWizardPanel = false)
+            }
+        }
         updateMissionWizardUi()
     }
 
@@ -2247,6 +2302,217 @@ open class BrowserActivity : FragmentActivity(),
             }
             missionWizardButton.setTextColor(ContextCompat.getColor(this, color))
         }
+        updateMissionWizardCard()
+    }
+
+    private fun updateMissionWizardCard() {
+        if (!this::missionWizardCard.isInitialized) return
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        if (state.missionId.isBlank()) {
+            missionWizardCard.visibility = GONE
+            return
+        }
+        missionWizardCard.visibility = VISIBLE
+        val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, this)
+        val feedback = RuntimeToolkitTelemetry.evaluateMissionStepFeedback(this, state.wizardStepId)
+        val displayName = step?.displayName?.ifBlank { state.wizardStepId } ?: state.wizardStepId
+        missionWizardStepTitle.text = "$displayName (${state.wizardStepId})"
+        missionWizardStepState.text = "${feedback.state} | ${feedback.progressPercent}%"
+        missionWizardStepProgress.progress = feedback.progressPercent
+        val missingSignals = feedback.missingSignals.take(3)
+        val hints = feedback.userHints.take(3)
+        missionWizardStepMissing.text = if (missingSignals.isEmpty()) {
+            getString(R.string.mapper_wizard_overlay_missing_prefix, "-")
+        } else {
+            getString(R.string.mapper_wizard_overlay_missing_prefix, missingSignals.joinToString(", "))
+        }
+        missionWizardStepHints.text = if (hints.isEmpty()) {
+            getString(R.string.mapper_wizard_overlay_hints_prefix, "-")
+        } else {
+            getString(
+                R.string.mapper_wizard_overlay_hints_prefix,
+                hints.joinToString(" | ")
+            )
+        }
+
+        val readyWindow = RuntimeToolkitTelemetry.readyWindowState(this)
+        val now = System.currentTimeMillis()
+        val readySecondsLeft = if (readyWindow.withinWindow) {
+            ((readyWindow.expiresAtEpochMillis - now).coerceAtLeast(0L) / 1000L).toInt()
+        } else {
+            0
+        }
+        val statusText = when {
+            pendingWizardAutoAdvanceStepId != null -> getString(R.string.mapper_wizard_overlay_status_auto_advance)
+            isWizardUndoWindowActive() -> {
+                val secondsLeft = ((pendingWizardUndoExpiresAtMs - now).coerceAtLeast(0L) / 1000L).toInt()
+                getString(R.string.mapper_wizard_overlay_status_undo, secondsLeft)
+            }
+            readyWindow.withinWindow -> getString(
+                R.string.mapper_wizard_overlay_status_ready_window,
+                readySecondsLeft,
+                readyWindow.armedStepId,
+            )
+            else -> getString(R.string.mapper_wizard_overlay_status_idle)
+        }
+        missionWizardStepStatus.text = statusText
+
+        missionWizardActionReady.visibility =
+            if (RuntimeToolkitTelemetry.isReadyActionStep(state.wizardStepId)) VISIBLE else GONE
+        missionWizardActionPause.text = getString(
+            if (pendingWizardAutoAdvanceStepId != null) {
+                R.string.mapper_wizard_overlay_hold
+            } else {
+                R.string.mapper_wizard_overlay_pause
+            }
+        )
+        missionWizardActionNext.text = getString(
+            if (isWizardUndoWindowActive()) {
+                R.string.mapper_wizard_overlay_undo
+            } else {
+                R.string.mapper_wizard_overlay_next
+            }
+        )
+    }
+
+    private fun isWizardUndoWindowActive(nowMs: Long = System.currentTimeMillis()): Boolean {
+        return pendingWizardUndoState != null && nowMs <= pendingWizardUndoExpiresAtMs
+    }
+
+    private fun clearWizardUndoWindow() {
+        pendingWizardUndoRunnable?.let { binding.root.removeCallbacks(it) }
+        pendingWizardUndoRunnable = null
+        pendingWizardUndoState = null
+        pendingWizardUndoExpiresAtMs = 0L
+    }
+
+    private fun armWizardUndoWindow(previousState: RuntimeToolkitTelemetry.MissionSessionState) {
+        clearWizardUndoWindow()
+        val expiresAt = System.currentTimeMillis() + wizardAutoAdvanceDelayMs
+        pendingWizardUndoState = previousState
+        pendingWizardUndoExpiresAtMs = expiresAt
+        val clearRunnable = Runnable {
+            clearWizardUndoWindow()
+            updateMissionWizardUi()
+        }
+        pendingWizardUndoRunnable = clearRunnable
+        binding.root.postDelayed(clearRunnable, wizardAutoAdvanceDelayMs)
+    }
+
+    private fun clearPendingWizardAutoAdvance() {
+        pendingWizardAutoAdvanceRunnable?.let { binding.root.removeCallbacks(it) }
+        pendingWizardAutoAdvanceRunnable = null
+        pendingWizardAutoAdvanceStepId = null
+    }
+
+    private fun holdPendingWizardAutoAdvance(): Boolean {
+        if (pendingWizardAutoAdvanceStepId == null) return false
+        val heldStep = pendingWizardAutoAdvanceStepId.orEmpty()
+        clearPendingWizardAutoAdvance()
+        val session = RuntimeToolkitTelemetry.missionSessionState(this)
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = this,
+            operation = "wizard_auto_advance_held",
+            missionId = session.missionId,
+            wizardStepId = heldStep,
+            saturationState = session.stepStates[heldStep] ?: RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+            targetSiteId = session.targetSiteId,
+        )
+        EBToast.showShort(this, getString(R.string.mapper_wizard_overlay_auto_advance_held))
+        return true
+    }
+
+    private fun scheduleWizardAutoAdvance(stepId: String, reason: String) {
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        val nextStep = RuntimeToolkitMissionWizard.nextStepId(state.missionId, stepId, this)
+        if (nextStep == null) return
+        clearPendingWizardAutoAdvance()
+        val runnable = Runnable {
+            pendingWizardAutoAdvanceStepId = null
+            pendingWizardAutoAdvanceRunnable = null
+            val before = RuntimeToolkitTelemetry.missionSessionState(this)
+            val currentSaturation = before.stepStates[stepId] ?: before.saturationState
+            if (before.wizardStepId != stepId || currentSaturation != RuntimeToolkitMissionWizard.SATURATION_SATURATED) {
+                updateMissionWizardUi()
+                return@Runnable
+            }
+            val after = RuntimeToolkitTelemetry.advanceMissionWizardStep(this)
+            RuntimeToolkitTelemetry.logWizardEvent(
+                context = this,
+                operation = "wizard_auto_advance",
+                missionId = after.missionId,
+                wizardStepId = after.wizardStepId,
+                saturationState = after.saturationState,
+                phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+                targetSiteId = after.targetSiteId,
+                payload = mapOf(
+                    "from_step_id" to stepId,
+                    "reason" to reason,
+                ),
+            )
+            RuntimeToolkitTelemetry.logWizardEvent(
+                context = this,
+                operation = "wizard_step_started",
+                missionId = after.missionId,
+                wizardStepId = after.wizardStepId,
+                saturationState = after.saturationState,
+                phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+                targetSiteId = after.targetSiteId,
+                payload = mapOf("source" to "auto_advance"),
+            )
+            armWizardUndoWindow(before)
+            updateMissionWizardUi()
+        }
+        pendingWizardAutoAdvanceStepId = stepId
+        pendingWizardAutoAdvanceRunnable = runnable
+        binding.root.postDelayed(runnable, wizardAutoAdvanceDelayMs)
+        updateMissionWizardUi()
+    }
+
+    private fun undoLastWizardAutoAdvance() {
+        val undoState = pendingWizardUndoState ?: return
+        if (!isWizardUndoWindowActive()) {
+            clearWizardUndoWindow()
+            updateMissionWizardUi()
+            return
+        }
+        val restoreSaturation = undoState.stepStates[undoState.wizardStepId]
+            ?: RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = this,
+            stepId = undoState.wizardStepId,
+            saturationState = restoreSaturation,
+        )
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = this,
+            operation = "wizard_auto_advance_undo",
+            missionId = undoState.missionId,
+            wizardStepId = undoState.wizardStepId,
+            saturationState = restoreSaturation,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+            targetSiteId = undoState.targetSiteId,
+        )
+        clearWizardUndoWindow()
+        updateMissionWizardUi()
+    }
+
+    private fun armCurrentWizardReadyWindow() {
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        if (!RuntimeToolkitTelemetry.isReadyActionStep(state.wizardStepId)) {
+            EBToast.showShort(this, getString(R.string.mapper_wizard_overlay_ready_not_supported))
+            return
+        }
+        RuntimeToolkitTelemetry.beginWizardReadyWindow(
+            context = this,
+            stepId = state.wizardStepId,
+            source = "wizard_overlay_ready_button",
+        )
+        EBToast.showShort(
+            this,
+            getString(R.string.mapper_wizard_overlay_ready_started, wizardReadyWindowSeconds),
+        )
+        updateMissionWizardUi()
     }
 
     private fun isLauncherMainIntent(intent: Intent): Boolean {
@@ -2527,6 +2793,8 @@ open class BrowserActivity : FragmentActivity(),
             context = this,
             missionId = missionId,
         )
+        RuntimeToolkitTelemetry.setCaptureEnabled(this, false)
+        updateCaptureToggleUi(false)
         RuntimeToolkitTelemetry.logWizardEvent(
             context = this,
             operation = "wizard_started",
@@ -2544,6 +2812,8 @@ open class BrowserActivity : FragmentActivity(),
         val url = urlInput.trim()
         if (url.isBlank()) return
         val normalizedUrl = if (BrowserUnit.isURL(url)) url else "https://$url"
+        clearPendingWizardAutoAdvance()
+        clearWizardUndoWindow()
         val state = RuntimeToolkitTelemetry.setMissionTarget(this, normalizedUrl)
         RuntimeToolkitTelemetry.setMissionWizardStepState(
             context = this,
@@ -2574,13 +2844,21 @@ open class BrowserActivity : FragmentActivity(),
                 "target_host_family" to state.targetHostFamily,
             ),
         )
+        RuntimeToolkitTelemetry.startCaptureSession(
+            context = this,
+            source = "wizard_target_url_input",
+        )
+        updateCaptureToggleUi(true)
         if (currentAlbumController != null && config.isExternalSearchInSameTab) {
             trackedLoadUrl(normalizedUrl, "wizard_target_url_input")
         } else {
             trackedAddAlbum(normalizedUrl, "wizard_target_url_input")
         }
         if (autoAdvance) {
-            RuntimeToolkitTelemetry.advanceMissionWizardStep(this)
+            scheduleWizardAutoAdvance(
+                stepId = RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT,
+                reason = "target_url_bound",
+            )
         }
         updateMissionWizardUi()
     }
@@ -2629,6 +2907,7 @@ open class BrowserActivity : FragmentActivity(),
         }
         val actions = arrayOf(
             "Start step",
+            "Ready (arm 90s)",
             "Check saturation",
             "Next",
             "Retry",
@@ -2646,15 +2925,16 @@ open class BrowserActivity : FragmentActivity(),
             .setItems(actions) { _, which ->
                 when (which) {
                     0 -> beginCurrentWizardStep()
-                    1 -> checkCurrentWizardStepSaturation()
-                    2 -> moveToNextWizardStep()
-                    3 -> retryCurrentWizardStep()
-                    4 -> skipOptionalCurrentWizardStep()
-                    5 -> finishMissionWizard()
-                    6 -> showMissionExportSummaryDialog()
-                    7 -> promptCreateAnchor()
-                    8 -> promptLabelAnchor()
-                    9 -> promptRemoveAnchor()
+                    1 -> armCurrentWizardReadyWindow()
+                    2 -> checkCurrentWizardStepSaturation(openWizardPanel = true)
+                    3 -> moveToNextWizardStep(openWizardPanel = true)
+                    4 -> retryCurrentWizardStep()
+                    5 -> skipOptionalCurrentWizardStep()
+                    6 -> finishMissionWizard()
+                    7 -> showMissionExportSummaryDialog()
+                    8 -> promptCreateAnchor()
+                    9 -> promptLabelAnchor()
+                    10 -> promptRemoveAnchor()
                     else -> Unit
                 }
             }
@@ -2668,6 +2948,9 @@ open class BrowserActivity : FragmentActivity(),
             EBToast.showShort(this, "Unknown wizard step")
             return
         }
+        clearPendingWizardAutoAdvance()
+        clearWizardUndoWindow()
+        RuntimeToolkitTelemetry.clearWizardReadyWindow(this, reason = "step_started")
         RuntimeToolkitTelemetry.setMissionWizardStepState(
             context = this,
             stepId = step.stepId,
@@ -2698,7 +2981,7 @@ open class BrowserActivity : FragmentActivity(),
         updateMissionWizardUi()
     }
 
-    private fun checkCurrentWizardStepSaturation() {
+    private fun checkCurrentWizardStepSaturation(openWizardPanel: Boolean = false) {
         val state = RuntimeToolkitTelemetry.missionSessionState(this)
         val result = RuntimeToolkitTelemetry.evaluateMissionStepSaturation(
             context = this,
@@ -2738,11 +3021,24 @@ open class BrowserActivity : FragmentActivity(),
                 payload = mapOf("reason" to result.reason),
             )
         }
+        if (result.state == RuntimeToolkitMissionWizard.SATURATION_SATURATED &&
+            state.wizardStepId != RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT
+        ) {
+            scheduleWizardAutoAdvance(
+                stepId = state.wizardStepId,
+                reason = result.reason,
+            )
+        } else {
+            clearPendingWizardAutoAdvance()
+        }
         updateMissionWizardUi()
+        if (openWizardPanel) {
+            showMissionWizardPanel()
+        }
         EBToast.showShort(this, "${state.wizardStepId}: ${result.state}")
     }
 
-    private fun moveToNextWizardStep() {
+    private fun moveToNextWizardStep(openWizardPanel: Boolean = true) {
         val state = RuntimeToolkitTelemetry.missionSessionState(this)
         val current = state.stepStates[state.wizardStepId].orEmpty()
         if (current != RuntimeToolkitMissionWizard.SATURATION_SATURATED) {
@@ -2759,6 +3055,8 @@ open class BrowserActivity : FragmentActivity(),
             EBToast.showShort(this, "Current step not saturated")
             return
         }
+        clearPendingWizardAutoAdvance()
+        clearWizardUndoWindow()
         val next = RuntimeToolkitTelemetry.advanceMissionWizardStep(this)
         RuntimeToolkitTelemetry.logWizardEvent(
             context = this,
@@ -2770,10 +3068,15 @@ open class BrowserActivity : FragmentActivity(),
             targetSiteId = next.targetSiteId,
         )
         updateMissionWizardUi()
-        showMissionWizardPanel()
+        if (openWizardPanel) {
+            showMissionWizardPanel()
+        }
     }
 
     private fun retryCurrentWizardStep() {
+        clearPendingWizardAutoAdvance()
+        clearWizardUndoWindow()
+        RuntimeToolkitTelemetry.clearWizardReadyWindow(this, reason = "retry_step")
         val state = RuntimeToolkitTelemetry.retryMissionWizardStep(this)
         RuntimeToolkitTelemetry.logWizardEvent(
             context = this,
@@ -2795,6 +3098,9 @@ open class BrowserActivity : FragmentActivity(),
             EBToast.showShort(this, "Current step is not optional")
             return
         }
+        clearPendingWizardAutoAdvance()
+        clearWizardUndoWindow()
+        RuntimeToolkitTelemetry.clearWizardReadyWindow(this, reason = "skip_optional")
         RuntimeToolkitTelemetry.logWizardEvent(
             context = this,
             operation = "wizard_step_completed",
@@ -2811,6 +3117,9 @@ open class BrowserActivity : FragmentActivity(),
     }
 
     private fun finishMissionWizard() {
+        clearPendingWizardAutoAdvance()
+        clearWizardUndoWindow()
+        RuntimeToolkitTelemetry.clearWizardReadyWindow(this, reason = "wizard_finish")
         val state = RuntimeToolkitTelemetry.missionSessionState(this)
         val result = RuntimeToolkitTelemetry.evaluateMissionStepSaturation(
             context = this,
