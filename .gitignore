@@ -23,3 +23,15 @@ out/
 .cache/
 node_modules/
 artifacts/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local runtime/debug artifacts
+logs/
+handovers/import-session-*.json
+third_party/einkbro/.github/auth.txt
+third_party/einkbro/pipeline_center_tui_portable_wave2_autobuild_dashboard.zip

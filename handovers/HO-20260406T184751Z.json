@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260406T184751Z",
+  "generated_at_utc": "2026-04-06T18:47:51Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260406T184751Z"
+  },
+  "scope": "wave-1 perfect export hardening (source-bundle gate + quality artifacts + app summary artifacts)",
+  "highlights": [
+    "Source pipeline gate now passes with canonical fallback, required artifacts include confidence/warnings, and mapper app auto-derives source/quality artifacts before mission readiness evaluation"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitSourcePipelineExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/test/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitSourcePipelineExporterTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T093628Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T103302Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T103358Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/import-session-8357bd2.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/__pycache__/runtime_dataset_cli.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/tests/__pycache__/test_runtime_dataset_hardening.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/tests/__pycache__/test_runtime_dataset_integration_smoke.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/tests/__pycache__/test_runtime_dataset_regression_fixture.cpython-311.pyc",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/.github/auth.txt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/pipeline_center_tui_portable_wave2_autobuild_dashboard.zip",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/assets/mapper_mission_registry.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitMissionWizard.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitTelemetry.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/test/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitMissionWizardTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/decision_trace.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/mapper_target.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/runtime_capture_architecture.md",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/mapper_target.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/toolkit/runtime_dataset_cli.py",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/toolkit/tests/test_runtime_dataset_hardening.py",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/toolkit/tests/test_runtime_dataset_regression_fixture.py",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/generate.sh",
+      "old_path": null
+    }
+  ]
+}

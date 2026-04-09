@@ -1,0 +1,3959 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260406T200340Z",
+  "generated_at_utc": "2026-04-06T20:03:40Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260406T200340Z"
+  },
+  "scope": "Mapper app runtime export slimming and replay-noise hardening",
+  "highlights": [
+    "runtime_export now ships only contract-relevant artifacts (no response_store/raw capture payloads)",
+    "replay seed generation now excludes non-target host noise and non-GET requests",
+    "validated by exporter + telemetry unit tests and full governance guards"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitSourcePipelineExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/test/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitSourcePipelineExporterTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T093628Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T103302Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T103358Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T184751Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T184815Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T185615Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T190836Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T191945Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T195809Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260406T200056Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/import-session-8357bd2.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/live/device_artifacts/export_20260406T193606Z/manifest.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/live/device_artifacts/export_20260406T193606Z/mission_export_summary.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/live/device_artifacts/export_20260406T193606Z/pipeline_ready_report.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/live/device_artifacts/export_20260406T193606Z/source_pipeline_bundle.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/live/device_artifacts/export_20260406T193606Z/source_plugin_bundle.zip",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/live/device_artifacts/manifest.current.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/live/device_artifacts/mission_export_summary.current.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/live/device_artifacts/source_pipeline_bundle.current.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/live/device_artifacts/source_plugin_bundle.current.zip",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/live/mapper_live_20260406T193113Z.meta",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/live/mapper_live_20260406T193236Z.meta",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/mapper_runtime_export_2026-04-06T19-35-11-238Z.zip",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/auth_draft.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/016228133635e9e0c8f17727ad0abe0389afd4bfa9d6c8b94d54642bf0a1f7d0.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/01b4fdabf7af184139ab410a82a78c8192faa76bdceb3a5149aed32943a52471.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/0275254263766b202792268d06017685393bd4b22ab51b358cb22b07bc06c0e4.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/054cd92f1a4d0be12817bfd77d7205eda51c0d98c1639321f0a875e9cac3a4c1.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/06ffdbea50c30d46f636338f1ff22f8ca76c86368814f10794423e67b72526f7.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/0786271b32eaaa9b9643ba9ee2111a80758d6742753a71f5573a465a4ca868a7.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/07dfe0f41c9ed671fb19fc63286c9289d46b45c54877bc008117929b86ca676d.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/08c1e86d8caf40fbe7d8159b87540a02eeb2f73ad964ca3ce9e9c4bbd17fefa2.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/09895f9c9dc1ca685092fac9c5abb64a8dc19881288061d041b8f7a4d86bd7f9.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/098a44625ce52ddfba60430f73961f9fe68aff3894240655e0d72b3c1c3dddb0.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/0b668d68648f6195c8edcde9338bddbbd7a64a764b282da394490a061ed4adae.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/0b8d70e97a2d90fa819e2aeb51d60eb9378e18724910d9ef2d0be3abcd68ebdf.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/0c15c55fb9cb3b4312e5b186c37967fd3467616f473ba493dd8d0925f3402f89.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/0dba7ec13524425934277e8be9c36174ea993fc7141a8f0053fce3d8aea3ec38.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/0e03500feb21cf07560d720320b0e30a6890785288c47a984adf4f4aa53772d9.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/1106248efd80c7121569ee987163ac0c7254d3fc305e8064bdef259dbc900916.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/13017baed222a6b1375352ea6fc4e733a5f2e8caadcf4521fccd812b554e1eac.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/15bf0435959283094183a643372844951558996b832957a577496c18f01fdd59.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/16cdb00020eb7021859823dffdfa00a0413f5e89f10bb5e6572e5d68218ab2fa.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/188a6d094c8b84cd20e575d1de26e4ba39f2ac5181aedb1fd942000464db9770.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/1c190ea8555854fb6262757b69a431d5c4ab900d7698c052f116836648c53a05.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/1df64c28481500fdd5c536d85ee9e83efcce9ffc5437781af19c5352a4e04138.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/2181ab4718f958782ab0adf0b724523b722700a778e6b892d0ab8a71818332bb.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/21b5ad35bd0063b2617c49a30f3312d38636c58f1f9b368f353ddf4ae76db0d0.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/2277d951e1f0c5d6a9679fc393e6b800b0e713177050b9770043d1436dda58bf.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/23728dfc4281b1a6fd6b2d32ced03d2f054651b44233802b07105565152f48ea.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/23b41834bbef205bddbde651b58da89d4b81cb27e789d413e74182154b17c325.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/24fcb73e79dcc130b9e6d7aec8ea164e121e3b927f254bbd81f7865a0b800722.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/252c78ea467f2f7a752eaca6cc407c32fb16bb507bb12623d900f9d7430405a0.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/26c31d9b1fb36b70deb621caef8be8d86c2a20e35707e2f32d07ff850cfaaae8.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/26ea91cc6fcba936101064bc0625cae6efc9e062d494f1b4e917d60ec20948ea.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/28d0a62d858c01afffd9b5ab562fa71802f0fce44458c8ed9af85dc9d13aa735.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/2a69b274c36d6fc9a938c04adc7b4b00c62aa704f6c5ec349e8a1382a3232e8f.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/2ba275eec31ff5d14008e704439a87a4762f96324e4646d3031ded1d06af094c.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/2dcaf60a5f7194a8e1d7083e849450bbd636c90d9d0407e97295c03795063b95.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/2f1006b4f6718a3632a94a3a1aabb1bffd831ccd70585223e5e1575af600470b.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/2fbb782806e8838fc5d24b0ba8142ce32eb2d8818515e250b63076e8f96d75d4.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/2fe25f0ba697dc35a94abd08b8fa3460785ab918b50657e62c98984643f48e58.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/3197c64fdb1d1ff6622ba8cc0da29f504e6cfb02622cd2a59ce1266d3aaa7156.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/32057beee3e49cb330fd4b63fb94c87086f6595ea34894ea38d8a1fa0457bd55.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/32973755775305dfeabe68579c8243f2449a9f475c5d090d964f929423c902ec.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/35e8c3979a5af11c97f04142c4d763e0349d8552b4c7f26a760a14cbc8eaf08f.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/38e31b75d93d10591b17619af65b68a6b07fc475aa8678746a14c0d752186be4.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/3b5224945adda22a3fb45031e1a142dcf423ee4b0a5170b0fd1b82a5448dcddc.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/3dd17d99d58d684ac37b9e8be51a89eea2b2ecd74cb610b5da8cfddbd0c5a0ef.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/3e2d58fbcf17ae35b1d4f0198c91607d92d4270e6d805d06abd6ff84f8e47407.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/3e8f1a2eb1b7826f351c20fa3ade8543805f4dab26ca0fa995c6fb8e392724ef.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/3f57a9ddd40e415823555ae56daa258c66be17f1cb9fc9b923f0c099f8d99d54.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/3fb76e90c955c801e19841df1e7fffb4c9ecbe0de181a964f02e9487db470ce5.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/406b1d129f349c70542f19a42828ad270930c0efa71a51816be6047b9a02b170.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/40864537112d70628e328dc023b0469f64c6885f0ccd5151fbc4aacf1ea77d71.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/4206f8178f2e73c29e0456d1a05e00a9cdaaff086a482795cd3a301358c65bb6.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/428e923aaab972165bf7aef7d0f9df96a09b27518f6b5c767f71b77ae780a0d8.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/437b88cd19c8f9a9291919c9683770f7647dcea4e82879857a971df26be4250d.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/4531972fc4de1ad66426627e008f011b44afe66620aa76106bba6eaf87d4465e.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/46036ae9f7100d4fa79d79948127a3ba2c8669f30874ba4e39235e9a7df05010.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/49fb22040f3b583d59043a6eee6688f08f93b05a24057e68909d3030f115979d.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/4c8befcb8f99dd9d6c8351580e4ee97e38c5010a06e5e38f2ef46ecfbe2f443b.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/4cee90b87770b85189bdfee018354db272302896c1898b2f5e62680cfa234c05.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/4e2173d61b4c4cb5da0c249dd99248798c9e961b5fb1cdb08529e65581ddf250.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/4fe5955ea58cdc5bd9227e2d5ee7099d6f7f85df00caf433c0c1d36d08068987.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/509b24e505cedc74bc65eaea06a5de0ec3f72f8df48567339c5fc4dbf7ccff9f.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/51187e8a3c48152044d0a444efe656e0b2dd09b1d9f9d17b9fe56cf256712c22.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/52c5791c0ad6075cf5fbaff30eed4ae6ab428af5f9f3fe797343a06fcca96e57.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/53adfc7af155cc3d8dde03ccd371a6991d072b1cbc5156451514dd1211be2271.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/544e63bdb8dc5f5f068de6385c1a63fbb27019f7f60875c256b444d9d801f8f9.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/5467a76504e20687eb8d6dff4eb8b3569eefcbaf96863a77deb8260fe3bed51f.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/54d279a42bf777a3df9fb3b2244696181da50e04e3ae6dcf3d47d5212b627590.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/566e989eb1bfb66b38d326708477f74e85a0b2ae1957846ca0cf7ff1197c0d71.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/56a77cd6b1368eb54711601037e4b2a3ff38aed26aac227c87416d9fa8b25b17.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/56a83004ae9a62d1b67022ffa4c344657c7c814f2706240487fd16e25da01db6.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/56e08ce2949ceab07c1e1b953b79b18b2395f4db9fff2d756cec02add802f16e.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/5961fcd0afc074fadf5159456c0ae58e32da6e85d727f15c9937a7174678c13d.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/59f3998c7ef7c3751df602b4094df607f4f5047ef06763a0ae0b5b78394c7800.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/5bccae9ba1d165bf058e55149691b793a716f9ba9cfeb7d1baabee3ba9565c7e.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/5cf37eedb500616cdfd5cc1a592b2fb129c333751c8347ef6aaf9afc9593aff3.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/5d023266549daaaaae8d1c316738e5184dc602cd03fc1468b8373bbc332da2c7.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/5e7b9a16c965c170a55ab8bd6ade6da63c951b0ae61a8b976f411dc0b0e954fa.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/5f4cc12490cd9f4591bf537bf12177bb14bc79d4d750f0d3c0ae88f646f18ad2.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/5f63006a2dc3bd5c66fead96a57be48283e081f55e5f967b89666aac38ad7e3d.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/6061c9076f06c09fcd5e8a8f46985403b7fc4283276c96fdb4709498a7c9539d.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/620de675e5b0d5839541b7fab0a61c63b1fe7faf8cfde15f303d4539b37c7b70.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/6477581964f025dfc6fc68c99669d3bfd7a8df30065fb7a1cb2530bec5be85f2.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/657cc9ab5c7738cd74da9960dcd4a10eb48e7f9ceaf287e739f9e66d46ea6c99.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/68e6f96170bbdb870b239deed9e8c56b5f7f13f42d0f39659c479e2161f4e229.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/68efd5f00a12f23c12296826fc247a2e11905906b928365093c82de3abfcb3bd.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/69b731dc5b5fd5ac1a23f07453ebf4c07de4d770535e61348e32ba480361ddcd.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/6a5a4505d75d3d7ff4329074d408beb466f65db5212e1f9cc470ee32d7848234.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/6f0c4464a9fb63308448c3fb4fe57cb4f3c73781b5edd5baec7956bcfb0b4a43.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/7275e8477d71b5b50a9059d9e7cf316daa095e1af60ad4a03fc16f0e411357b0.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/752d7d9ddd601ab39292d3cd7aaf88ebe4de3e84b75560bd17115b9cce01de68.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/75d787677239699e57f41844d56cbf056c54e144d93f82e5236ae5660974bbf4.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/77019f9f5bf158d797e6347f20888c19f7e0417405557daffc6ae5d806523a88.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/7795a968652d4a3955ef341545b00823bb61898591707d0b2a9cef312975a1c3.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/780ae0073de516a19aa8e51d21b733fdcc34af580ab9a5deeeb0c8b152ec6495.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/78de8a117a988631a071c5c04cb15ec35c2cf7b61b2ffb2d56d8d2454e1e9486.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/792ce4711f6e816268614b62eccb9f22dc793013429cb17d53f34c519156aa00.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/79f413bc44209bb202a6d9e43b4976035323c2e2a24eae771415cae3902e87db.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/7bcf0b96448f70afc3ca2f1cd8b8c0872e1d47c34c54495523189c2f1c0e2b8d.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/7cbffea13e5aa29fe549c6b6547567f9eb47fec7fcf404fb98a24c3bf8ac8929.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/7d341382db5ed75f00bcf03ddb828af69ad057ba36c7efb44bfca300bd9bf8fd.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/7d5c7b42860ce292c0d9f9542b068955639c6c965a2b57c6a3c28fa8ab59731b.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/7daf8fb6b45c1dbcad7e5bdf841b86f0863386775dce2ca11b49a6b53498d35f.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/7e68bb114030f7c4f70b94b0899d425f931d97f621893d3d5a8f4a3627e88e39.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/805ff48d02f1f60d8dfae9a063b4444b537fa1104cb35aea57b41eceffb42eef.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/80b7e80238d89713f2592353e85d45ae7277996038f792b6b0ef6c16cf0d3b50.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/83371a5711fd00b8452690f6c12cabdf89ad6e5b5b65ce4e85e24d7e16cea0d9.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/84438ab0829631dde51a8e743ed9beb46772b255e5c4f23af4152f11df58ef71.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/84541a4ab8baa8a7b4372da28881b699e98461bacee663354955b35babcbd370.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/846b6c4273a939604ddffdf14f0840d7e7681b6f1d3942e5da589f8fd97448b6.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/86596172019ed15f34eddb2a947920f315668124698c99df45c85afad61618ea.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/86ebf2116a99c82f64a673e7af0623b315dd64f96d37ca29dd5786ae2036f4d3.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/88ae81e2cd97c7e00595d2656f4e404318bc0d5b969e1ed93e07229763a16264.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/9059048c49cd114ee71480f3059a7ed8c3c7fee4deb35c81af6e54d84731a9b5.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/9171735ea64b297388469075db56d52c888b40e47853a192936681066423aeb9.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/92634aabb5321903c776cfb412727754d24ba1aaaf67f6fc1d7af12f8ada7e42.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/9425ef165d3468df3be5e95fee3a2c397042218b8a35e1067f682e3d84ab4b00.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/959534a511ec87a6f47731af9e8bf8b1421c9da95f02e9941745f6f85fc11b15.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/96dfadd3eb736c4319d4430baeb3a59afbe5dae0c0eee4fbdd55b2092e986f14.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/97ebcf908c90e10d88e472df8e560ef1f2e48f9073fe0ae3c2d67e957732dfee.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/9826ffcf88b5fd4e424ade338e87bd3a57987774a9efd6b5b34dda98b8d496d8.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/98c6a565ed4cf44f75b912d19c0ab90b8f76c1d171ec577442f058dc4d0b0f2e.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/99c6be49d383c5a70b85ea8f6b8b71e17512597b51601574f0cdf7652ec5651d.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/9b2c90313beab9ffc351eab9b727bf6b5e7873e97e104fbf698394f8b4634432.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/9bf636d17207d2cd2e3144f1fa652eafcd7ee364d5c434c5213531513e7cfeee.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/9bf95620c377c50c9a1114ea04b5e1aecb6a4fad87bebe7d0be6f7025fc47068.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/9d9bc4216ee933f7d14148b2078eff26ebdd9ab14e4bfb343f4a21aa38f10d63.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/9e3943372c3fc67951849280c14914a1ba7c3aa0fd0c794a6d169da6c6851539.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/9f10586a6ea46e51ec9c94a757f6664df29aa8c6208a7255dfc65b5d044a39c9.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/9ff3beb9dd98191f9a5dc71c3b44791002ddd97009e5f350cb1d05bf5f7f348f.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/a0068b93b877af626615f7f4d945cb2053e13a82314491bbf4e5f67ed51f8d95.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/a0852838d0bfad1d55ef09cf3f995de4572d39e01416fa1e9d3615bc03573890.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/a0cb1f0f636b6aa5794f22ec28dbf1a413857ec1dd2945a9c3fe6887de7e726a.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/a19edf333cdddf348db4364de6b5f52ce0ddc370034372a8768ce8fc25bfd24a.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/a3383fe4bad330a2ac04adced5bfb0c9509b48a09c038f79c98afc38b2c97e04.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/a47404dceb3c5a486de6f3f879c5b3d92faa0868d4e854645f75a0280818e456.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/a6fe6e4817a45dcd4fd9a8166a450e5e8baa85c301576cab89cc1f8216c2b205.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/a7f5e5ba0d47873a5a1241319ac296507189567a4556d2cefa8250200ed62072.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/a9540d112f348159b97f954b1fc84f52551870d130890fc1b016f85230e834c5.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/a95cf066c767ec6c3f103f176215672515d40f1caec672378bfe22da818e14d5.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/a988c31b501843d95795183fe7980af5945d9d683260e3d34286dbbb51e5b4c2.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/a9a492266ed93066a355cd14bd75420a113a0704f15a539c892acf017742daed.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/aa7465267d9020b54f1455a5bb1291053d6bb3fbb21fa9f0e71a32ece8492978.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/ac31c91a11f5ceb0c505d027c619b7073935b5d7ebd5782bca7ca5dc532a0d81.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/ad6b9f3114ab06593332f1a7393fbcb347201720d5aff5cc342fd483d1bda915.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/ae95dec29cbac9a2022e0a68e58c351450cc2754f0c6b7fe299aa431d61b7d88.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/b010f30c7e82d5b6c972d5aa47055ded6dbfe21205be46b47c6077b8f6134d9e.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/b2912e1aeeaf5b080ce4cf4f6808eca5fbab7765be8d18cd1782a4979d08bd96.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/b4e6798073a0b069c3db0c7cc41eefc364e3e9c50494a10b302b16bd329aafcc.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/b59c65f9217428449440d55e177f724ff12c0ef44b45d506b2dab263116e4d3c.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/b7fbc134c89a94d8e269b46e17161137c770cceea6ae7eec99c95944597a9be4.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/b8de6feebe0f7973013edbb3d37c3fa7cc08ba27e475877304128a681335ff41.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/b9b2e759d3e032a4461a93ca78e7070a8a70ba2efceadd3d4415ebfb8ab0638e.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/bba4847942280eeaae73804828223dd92c5961e11c93b9ffc28520210cea34b1.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/bc019692f7531838f8818f04fb8f610edd2163ed0dceace26bd3d6fe47bb99db.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/bc3eb6c66a152268abad58d182813c00338e7ed87f2418bce08b9f211896ba5c.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/bc836539482f3579671ccf41d67d02593bced3c998add8797d1914ed65f6be98.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/bd0fcaa846327eb8426652f633986cde18ea8ab993592ac7b572c4609628f0a6.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/bd3c43a74eeb6b0fc64de941309eaa6b4e5025ee89cb10d8b702f5e8b36d978a.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/c0e68d3584dcf491afe383ea3b8ca7807724073ac00446bb4491ab2e2d4fdbea.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/c10c49fa6f8b26dcac370532aa15b7f2ff3fa51b66ac55930931b652a8229530.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/c2b0325bc7754b4ac25a13567f6fc9ba7946818d1bf9a55edea390e2aa59ef7c.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/c4cec1a89c09d702f355ebb808bdc237560744cf010050b3a288222e754be27c.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/c7139c1a083cee47fadd2966bdcd92b14fefa688e96395a0bf25c713ed182f83.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/c8367781dd57472bff2f98be0f981fe0e7808904678558632697d2cf254a5a2c.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/cd775b3aa7286610f206aa12d781183442dd69a30f34143da3bbafde0fc3d68b.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/ce715cc42ee127ecf2a923dad478c2271c0dff0c6722142a4d602b77afb585d0.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/d061de54c2c3cedc13101198cddb8af7e6996518fd877294ea91988681836c66.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/d07f90a9d85385625b59aaba4f736656344e8b04809e3e529a1cb76a0adaa932.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/d4d6e40db0454d6fd128e5a1bfc98289fdb469e2ef55611ac80ce606415927df.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/d6174ea8437b49b60cedc7a055104f68a7d67cdf547340f74949f5f755a7da27.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/d63bef715617f1b7cafd9d9736f34504fafd8ad10a8d7d371cddaf4125ab8a8f.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/d93890f6e329c14746d31ac869aad0ca2b0d9f4c42a0ad881c380e1752caf727.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/d9a10e4f7ed578f3f7f0624d48963388598711d07295b45fe4114224eaf459b4.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/dad2d85ef849a72e42659ae71bf1f50eaca233ec975496238feae00666d3bd65.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/dbbb11859d4618cdaa9e4b39fcb8ca0dd08ccd75d7db9abaac4be59261aa0876.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/dd0608147f95f35160c67b893c7d4772e1a981e5c70c72a999c2b6391c60984b.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/ddd92300e223906fa485edde8dec78f63b77a6d3896251e1448f2cb094f41240.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/def228fb1baec368c3b1d0fc53f4ae1e67700cf234870db1c70f63e5c0fd6038.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/df605112cd8f4d393e75f10541ed2b1e606fba03a7521234d33acd923fabaebf.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/e0b28a79798be0007dde22544d041acf767b5a50b9530b81a1067d8336b96ad8.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/e3ba63cfefaf8a483ecab67c56aea0180df7908e233097269a59a72dc4ffa03d.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/e50dc16c684ebaff5ca3781024c9c5cfd7f83bf19cd51a719f3ad2ad6c7923c5.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/e86f5093109e21267de415c044ff4a3271cf08c4d92d1b28f5ea1436c3029f2c.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/e8e85e2c3f99bb75616beb67230f6aa1f53acf126ad2c7e4e6f90a24b2c5f18b.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/e9b27c748a57b42d8ecf1240975d178dec17106c3d72c59f3ba53aca89be7368.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/e9cccd7b9416af9ab11a7c6e5cfb2e65ccda2b5d587370bb3e0e0f2f546693d4.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/ec9d5297cc2c7330e801ab806cbc52398683296676d62aa739a152f6cd0f0049.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/ed2125e0303dd364893b79b3f0ac79eafb2d9f3da64d00dcfb4cafbf022c1f38.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/eea078fe08261fcb1a334c5c6060414452109d11c97f4a96ce60ae7c6e8b7ce3.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/eefc99809382eda70409f7f7a40b8183bad39c07858f142d26e60b676771646c.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/f074b15aa3800aca9033c9628966a2905897616c541a5da5e96adeb2cc7273fb.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/f0c237dd237725353dc500fbcbecdfa12fe97e1c5bc571c7f1b4a717c1a5222e.txt.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/f6d29463cc979e2a80a0e89f6250edcbef4dd54c9bf906867f93fa98779a2a88.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/f7251cc3c4281a48aaf053c97ae9d1f6b15af8c8b3da92a05d084cbc7fed1320.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/f7b39fb7fdc7f8846821b6ae6f983c46f934f4f3555431edaa339e240b84a3fa.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/f867220a37013032e8b1fe20b920d5bd8636ddfc34e9139d2d5c1e90e2b8146d.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/fa19b42416933d58099a84e973d4899119aa283524ab306ded36ebf385c02fc8.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/fad4fc24a1b1091f2c1ebc0cca42c253330112c22443569e63c8571e122e07cf.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/fb5b9658738d1072d095a2fb7dea8cea6781dd514c8e1c8381f8c40891db2311.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/fbd8e85d145c45b5022522e363a65cf287bf5692661ac16583bc6c73e9c6cab3.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/fc80eec5c1ff274291a456616e6a33843ddd533677fbf8deb795a7c6f98cca8b.html.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/bodies/fddb9a52de7eb734c71b0bea4e027189e8008b9282e94f371d87d149576f8520.json.zst",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/confidence_report.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/endpoint_candidates.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/endpoint_templates.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/events/runtime_events.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/exports/runtime_export_minimal_plus_replay_and_events_preview.zip",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/exports/runtime_export_minimal_plus_replay_preview.zip",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/exports/runtime_export_minimal_preview.zip",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/exports/source_plugin_bundle.zip",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/field_matrix.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/fishit_provider_draft.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/fixture_manifest.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/manifest.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/mission_export_summary.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/pipeline_ready_report.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/playback_draft.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/provider_draft_export.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/replay_bundle.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/replay_requirements.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/replay_results.jsonl",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/replay_seed.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_index.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_007fa201-4f4e-4ccb-9863-42fede5ba0ca.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_01391733-98af-4299-bdcb-d362902663c6.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_013a64e2-91f0-45ea-a7e2-24dc343b1efc.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_026ea8f7-5a9e-406b-bb19-c86c5e2c6080.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_02866706-cc7e-4068-bebe-ec3949c034da.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_02e5b63a-ef73-4387-934d-810bd31321df.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_0377de14-6dac-482e-b526-1c31ef2a40fe.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_038b1da5-11e2-4716-97e7-7f570c02ec5b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_03974cb0-2e89-46d2-bb39-1fad69f8059b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_04e3175b-a714-47c3-a0eb-2ce6b5cb7d76.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_05632db1-01f0-4059-bd57-7e71fb7a7c96.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_0588ac69-f564-485a-80cf-fcf1cc8c7e43.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_064d2a36-6db6-4e29-9a2a-92c86b585726.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_0930f19a-8baf-4a64-a45b-d75c2c1d750e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_09da1349-aa59-4b50-b2e0-173b3e09e425.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_0a431070-a980-42e2-a1b5-038aff81a23e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_0b70241f-64e1-4373-b51f-7b9bca9c904c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_0be63563-f47a-42d1-9477-afa566a4d22f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_0c7aa6e5-7ec9-4378-9e53-1554e0dba967.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_0cb3343d-6d02-48a3-8a2d-574fd0925831.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_0e570bbb-97b4-40af-97b8-ffd3f5d476ad.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_0fa49ae8-4833-4821-a472-078560daa765.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_10b20516-6d6f-44e7-9e0d-fe7aa373b4a0.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_10ccb2e1-81e3-4dd7-bf7f-29fa11c2428c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_114098e0-a5d4-40bc-b580-400a441bd959.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_11b0e1a2-5344-4be4-aca3-10618818ede7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1432836b-06ba-4743-aff5-0ed9179c1a20.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_16223e50-a93b-42de-9716-79302a3466b4.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_16340dc4-b587-47ae-a1d7-e3222bdd3468.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_17b55157-4aa5-4c94-b81d-240627ca35c2.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_18000219-5e1d-4fc4-b406-a0a9b6219f37.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_185d8700-8f44-47c3-8fcd-a9baa2c481a9.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1922e96f-4950-444c-a6e0-5ad49f165fbd.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_19d1caae-dba5-4756-ab94-870e10d8efd7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_19faa4c2-03d5-4ade-b197-fb125cefab82.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1a506eaa-eb28-4660-aa87-89190df0cc12.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1ae93ee3-95ec-4709-bf91-5735b43c3e3d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1af28094-6942-4471-bf4d-e13c7ee2e0e4.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1af91ff4-67a3-4a94-a5e4-b8a729de5fbb.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1b334b4d-a6ec-4bc0-be3a-7963a2179f07.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1b4b7ca2-690a-4809-9e0c-d24494680c10.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1c14cdbe-e5b4-4e0e-b1b8-ffe3b65e8e4e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1c4d624f-6ac2-453a-80d4-690350801e3e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1c6d940a-7c50-416d-9a7b-20ce0b11efcf.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1d5af5fa-47c1-4682-bae6-13b97d0cdeb2.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1da5f742-8e1d-49c9-9d90-d244741ce8e3.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_1e9db340-c2e3-4975-9e70-a9dc541d7772.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2161bbc8-37ac-4944-831e-119c9aba4bdc.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_21e93f04-dcd1-4860-b331-8eda238ffffb.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_22ce19a0-f845-4809-bb37-22e83f5c8092.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_22fbf61a-d86e-4f6f-a547-01070cae9ff5.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2409f60f-2bd1-43d3-887e-c4f9524fdcef.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_253263b4-b591-4689-9101-0c574d281d3a.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_26bfd1df-b76c-4fa7-a9f0-b636ce079eb7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_26c758c7-f07e-4544-8f6b-7a3fa94baf3f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_26ef1b21-23ea-4530-83fa-848a7751a4b4.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_27347447-6b07-42e8-8a5c-8834b1f0476b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2780461a-77c3-46bc-a0d2-c13be7fd8636.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_284255a1-7404-43f8-aa40-cebbfb408e2f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_288d0017-32a5-499f-9b5f-1c1a8974ea5f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2947c229-6b39-4c35-87c2-17360d68113d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2a436115-1491-4e65-bcec-0fbf8817c1f9.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2b29ca59-43d8-4d6d-94ae-ed096f689f12.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2bab61b2-2852-41c4-a612-3843350188df.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2c2dee76-73c8-4e18-8b73-1a2292b97bf9.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2c4a839a-c179-42e3-a2c5-4dc13190cc77.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2d32d2da-edcd-490f-a11a-75a289608f01.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2d6afd6b-d6f2-469d-bb64-916997c8cc5d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2dc0a6c1-aa66-4da5-b211-ab037063f3f8.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_2fa59f02-2897-4e0f-849e-9a386d3e7991.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_30d49842-11d8-4fd2-9d8d-cc774c14391f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_311b27e8-0c23-4471-97a9-7b92527ee9a6.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_31785dc1-e7ca-4394-9a80-d03dc2cf4d9f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_3256febd-1ad7-4098-9df6-adff1b8630c4.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_33e2d05d-cc8a-40d3-abac-600d6a929f43.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_38397b9a-bd7b-4210-9f7e-e61bd31fa077.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_38aeef99-92a5-424d-9a84-52675a345b63.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_3942946b-1928-41bb-848f-d6083b3c2a45.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_39520f19-9b2a-4566-80e8-b998905cc243.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_3a415b30-9a1a-472c-8e3a-cf69c651d060.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_3af434a1-be24-4ed5-8a4c-6a45bda40dc4.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_3c1e08f4-3cef-4b39-aa34-ff06f88a63e3.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_3dc2c8ad-6fc8-4df4-9a4b-a757fec49ff9.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_3dd79a85-e64a-43aa-942c-e73adbff3bfd.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_3fa43917-29ee-46c1-a3fc-1e510f259c98.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_3ff62bd6-89f2-4461-804f-cabefbd4be78.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_4336a521-a793-46c3-8597-a6367716af85.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_441c8003-9fcf-4b9e-bf22-c3d39edebe37.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_444b3ce2-7c7f-40f3-9da4-f7a6b9863f25.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_44749c1b-b884-4f3c-8be6-dbf1c222426b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_44c90772-aa56-40e9-b740-8ab941c8d5c0.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_44ec3b7e-5892-4aea-8c90-25a86c4751e8.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_45f3f741-6bc1-4a1b-94de-9321386f7209.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_464bd4a7-a572-4eb9-891b-19452f52b784.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_464ecef4-2328-47fd-ac88-a08e4ae2c5e7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_47871c64-d7f3-486e-a943-46094f133527.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_483577dc-e6c6-45ff-99f2-99cbb530ee8f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_48887a82-86e2-4849-b4ea-ee9ffbc6ca46.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_48bce0c3-ccb7-491b-ba2f-446483a49ba3.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_48eb9e36-23a4-4125-9a0e-c7a3b7cf4d7e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_494150ef-b194-474b-9c68-3ccf42afaa45.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_49d3f54e-e517-4bf7-9f1e-904df9e4466d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_49ff60a0-64b1-400e-b0d2-c98e52903fe6.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_4af260fc-efb3-4ec7-a9f6-c1a0c6da3384.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_4c8811ec-2241-4297-b06f-dc6bd5fecf7a.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5005b6df-426a-4a5a-9dee-705b5ada1059.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5045b7ca-1506-49ee-98ec-e4752ce52487.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_51282ae2-1000-4985-b9c8-196cfa20bb7b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5155c26e-4c51-485e-8a3e-ff65285f49aa.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5344c37d-08a5-4379-85ea-59b32bfe41b5.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5537a05b-9cf6-442d-a714-a79ccdad88ee.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_553f35fc-0abd-47e6-91f0-429883fd4270.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5577a904-2b18-4481-af0f-b6e3af2df509.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_558bf75a-0c95-4cd5-b9ef-b97818840f17.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_55b79402-9a27-48f6-8562-4d6d9f1026e8.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_562a7ce6-69e6-4de9-8f04-8c1eea28ed18.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_56f9d182-7346-411b-a2e2-85b33d4a31a8.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_573a15a3-7223-46eb-a8be-2a2d906b49cc.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_575e8783-1ced-4b0c-9a56-2c5f9027c113.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5789d073-8cb0-4b07-970f-5c375476adf5.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_57b29de2-0f11-4bd2-84b0-8027562d03e7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_57c7e2ed-6b84-436b-984f-61c9f4fcaa1d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_59caa629-7f8f-437a-a16a-37e64254146b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5a4823ff-b04c-4f92-9733-801ac9cc61f6.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5ab04ef6-9830-4d5a-ab86-0728d6bf642b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5af2ab76-f698-499b-80c8-ecef95e8e84c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5b566645-5e3d-48ab-a9d7-94f5f5186cd5.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5bdecf7f-1268-4bdb-82aa-db45a8b061d3.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5c18089b-0fc8-46f9-85ca-56f34f69b0f6.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_5e77e177-96a0-4734-877c-a7b0dddaf190.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_60ddfd1b-8135-41fd-b9c7-a6171552478f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6166b703-6b48-42dd-b02a-35807f48f70e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_619d13e0-61c1-41ab-ad4a-8f5bea639c30.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_61ca29cf-f3ff-45a6-b4b8-95d4aca235a1.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_62cfcaef-2684-4e06-b20d-c8c2d92cc901.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_652259d7-62b2-4765-91b2-5c355354ed73.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_676ccbb3-998c-4245-bf17-93f6fadf2851.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_67a2ff08-fcad-48dd-9067-fd9c12e32899.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_67cd84e0-5de8-42d6-9434-5ee949bfc311.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_684aef51-f64e-45d8-b05e-9ff20b3212b0.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_68bdce4b-a716-4c6a-a850-3305f6a4752d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_695146cf-2058-4d7d-8566-0320631993c5.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6980c3cb-b131-46d8-8613-f658818fb360.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_69c07683-1857-4306-b29a-b580d9b9ada6.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6a820c7e-f73c-46ab-bc59-dc0f217077da.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6abc63f6-a96c-40ee-819a-adc09ae21ddd.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6ac234cc-ab66-4e9e-928e-bf6cf985c01f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6b044566-0656-46ba-9b86-76a1a54e058d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6b16b762-fb25-4077-a0e8-f6fc2a36afc1.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6b20e834-948e-4aeb-ac26-647bf6abbd6c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6b240a28-e3b0-464e-8caf-15735da53963.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6b8530b4-61a9-4a35-bc36-5290ecc29cb7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6c30fc7b-d9dc-4563-8970-59c5f11ebd5c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6cbdcf75-4a4d-4d59-b9f9-01fea4558baa.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6d50efd8-0caf-433f-863e-8b62561acf76.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6daa321d-883f-4d78-84e2-ab4e68f44b4f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6df05459-0232-4141-bdf6-f95f39f71c51.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6eb9be6c-9ae9-4a5d-9b91-84650e25a867.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_6fb73555-ab0a-424a-a1c6-2173118154fc.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_700cd5e5-df5d-4a3a-8f35-523f92182777.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_7019a918-3eea-40ed-9cfe-3e5ba17e182e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_7282a754-9755-40c4-ab1c-48fc1cbcc5e2.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_72f5c6c8-8d70-4624-b16c-c34b45ae098d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_731ad4f6-094a-4c3a-8218-57b657a9c999.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_73f0b270-e4f6-47fe-a0dd-f559a44703ea.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_73f2f640-b4fa-4c75-94a4-d1e07387e4f4.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_747042ed-6d5e-4c20-a753-8a6a27574558.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_747dec34-1ac6-4e5f-bb59-dcde573c8b45.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_74d86ca1-4d2d-4c65-a0f9-c04f74acc17b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_74fdc8c8-29b0-497e-bf5e-66ddabe0630a.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_77177759-de31-4bc1-8c5c-21851940bcfc.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_772987e8-158c-438d-8c45-a11046bbcd09.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_790c36eb-7a03-442e-825b-768b3e72386d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_79b0128f-70fb-4782-afb0-d82faf895cf7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_7a648999-7d01-40df-81c6-aa24b0166d7d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_7afa5afa-5d2d-480c-8a0d-72daf5e1243c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_7e712f78-16b2-4edb-bc3f-c50f8f920939.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_7e7b6e21-4497-4e17-8ad2-75a1c5924c6d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_80adf56c-e466-49ef-8d9f-c52cd2841ff8.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_82cf08bf-7235-4574-95ec-96b0caea06dd.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_83838332-de71-4ddf-896a-16f7176a4896.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_83c44e82-a2e5-4022-b302-65255d4077fc.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_84f98efd-99e3-4903-a367-dc932fec4d40.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8634fcd1-b13f-48d0-8482-318708e38d99.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_86634514-ce05-4568-a1bb-bf56890e8c43.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_86b59087-6f94-48eb-8990-ac6807a8248c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_878e72cc-0c3c-4d65-9504-b1cf935261ce.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_88207cde-16bb-4c5a-85a2-027024443aad.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_88212898-d841-4374-975b-1dc5ea040706.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_88332016-acba-4340-80a8-64ddaac5e383.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_88b8517c-7758-4acf-aae3-863f4a454c42.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_88ce4736-c70e-481f-b854-fc1038a85eaf.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8a0319ff-c18d-4216-b94e-a4535242175a.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8ad029b5-b6a4-4a5d-85f1-2816b981fc8c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8af0ebaa-0ac4-4969-8a87-804146a351bf.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8af8364e-fe7d-44d3-8e27-51f521829ffe.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8b1ea24f-919a-4c40-a28a-9f242a9a603f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8c2b2957-21e7-42b4-8243-dafad6b92d0f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8d0ff872-a2f8-47a7-8056-22186e36eb7f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8d3f5dee-5019-4106-bff5-3e544a89ebe8.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8d8ada10-9897-4be4-adca-23debbacfce6.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8d98daf9-6210-419c-bcf7-922a221436d1.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8e1c50d8-9078-4061-bec3-516bbc49e499.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8ef23515-5d66-4852-a226-46f7b41d3cd5.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8f7433dc-8215-4fab-9be6-836d315f8806.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_8fb8ce45-8521-44df-8c8d-530c69162ecd.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_901640f4-8e28-4d1e-98ff-17a2f8111233.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_901d56cc-54eb-44cb-9067-6e30f81861d0.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9164c0cd-9537-4c00-a9ce-bf165e2f48b6.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_93dcf5cc-3148-4575-ba13-c2807a000774.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_93dd5d5b-1ce5-4ba7-90e4-1c96adab5255.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9602fe01-d44c-4859-b22c-6fd83e1cc36d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_963657da-688f-418b-b5f1-c0eb0e223094.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_974f5341-3901-4bea-aa3e-acfaaa0d4799.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_97aa78d7-c45e-4816-8393-3f5a95547013.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_988a385b-63ac-4b6d-9534-df1a3d80d1f0.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9950c3d7-a32c-4121-ada3-c12e19cb53ee.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9ab2ee9f-3e6c-4ac8-8f6b-a807d54de1f7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9acb447a-e4bb-4b82-9848-57322c5f07e3.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9b6f7e27-fb47-4bdf-81ff-7f9f11577821.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9bbc6954-8e3f-48a0-a253-69b48e53a4b7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9c0e28ba-ff9c-435d-a826-0bd7a5a662f1.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9d43c265-d9d3-401c-aaa3-e90436e0fb19.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9d8d7d55-a848-4e69-ad76-6504d040b500.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9d8dfbb8-4cb5-495e-8c5b-6220f1ab118e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9e0ab72e-685a-4b3a-82f6-5447e8f0f5f5.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9e25dd77-62ac-4440-b00d-42d735739265.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9e5139ef-cf76-461b-827e-fd3d6c8713d7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_9f96f38a-a178-41be-ba03-cce227a92d9b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a093c66e-ee3b-48e4-ae6a-1e0dbdbf2cb1.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a09af73c-f006-4691-b804-c2677f158934.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a1f28510-68ae-4225-9767-262b9fad1769.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a22310e6-129e-4e57-ac5b-0b7e256faab4.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a24aad77-ec9d-46bf-a83e-517eafdccc73.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a312ffdb-cc37-41af-b034-e2ad3789bfa7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a3169656-889f-4c58-80d5-f7837215784f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a3877841-a18b-4711-bdc5-a8db4f501e38.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a3b63008-afde-4ec0-b91a-b72bec351821.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a5664b1a-5abe-4dbe-b733-397e672d15af.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a64a3e46-17d6-4a09-93b6-5cc7dea8e819.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a7e2fbb5-501f-4649-bacf-0be03bb5f55a.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a809ba08-4b83-4c89-847c-d9e1e1396030.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_a8f9f8e8-235b-4899-80f3-e364ceddc190.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_aa35607e-7c0a-40d9-b73a-188cb5d8682e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_aafe69ca-1ac5-4828-ba5d-53f8d354af7d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ab5cd3de-239d-4bdb-bfbd-d2644feab625.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ac882321-55fe-4049-88df-f409da43dfdf.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ade41829-ba28-4710-a372-a2b6be39e70f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_afb978b4-15e4-4008-b592-0aa4f1f605ee.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_afe8f040-4ca6-44f7-8444-68a549955c8f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b0b50b04-66dc-4644-abe6-d6846312e486.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b15356c1-0a59-41a2-bc97-500ad8ee0dc8.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b228e207-1b44-4aa6-9275-7444b7b802ed.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b2804d73-5480-4bf9-b1eb-5f2099afc967.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b36f6f2f-42b5-4c2d-bcb4-0884ac1279ef.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b3f7bb96-e1b6-40a0-844a-e042a5d23255.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b42d4533-fe83-4b08-8e30-ee0cfe787026.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b4d8fdd0-3bc7-48ed-9305-139e41f172d2.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b53122e8-94c0-4fc3-8347-aae787865187.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b53e8e52-e2a6-437a-b005-59ac0c485246.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b6121a3e-3a79-4dd1-b104-140aa84e4081.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b6657009-5330-4667-b3bb-6d65315b5e7f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b6efbbfe-36c1-4283-920a-79f237f203f8.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b6f3f1c5-794c-4b64-b8e6-a4fdfddf536d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b90974db-1ba4-4629-8084-eabbdc7cd538.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_b99246af-030f-4877-8449-74eca4690492.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ba8beaab-8de3-4903-8d46-80de93f2971c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_bba4719e-312b-446c-ae59-afd62d47a8c0.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_bc565392-326f-490c-ad68-78b079051ea1.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_bcac74c5-b18f-40f5-8841-077693a58dc5.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_bfaa6a31-c99c-489d-98d4-5ee075c7751f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c02f1ba6-8c94-40b1-9a19-4548f35fb6b7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c09026f6-ba04-4080-a65e-d0ff51ee85b9.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c123b2a6-1e08-4bed-9739-208d93ad1ba0.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c29d3568-fda0-424e-b98c-c94ee810fe05.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c30b0acf-1518-43ff-9894-83566e798ee2.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c30cd626-160d-4b9b-9691-b51dc06b955b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c356f7c8-ba3f-4086-bc7c-884f0c1f8603.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c5a46265-a18a-4ee0-9a0a-85a37fc8ece9.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c673c780-2ecd-49f2-b2bf-842950304c7b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c69f6ec6-278a-4765-ae44-14b2661499c0.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c6d58e6b-fcd3-409e-81ce-bdabe4d493fc.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c77b8c78-9af8-4e32-b9bd-e59f4cf3783c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c79eb60c-6330-4200-8d13-8a88bd1de654.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c92d48ea-e2a9-4346-8765-fee53cb5cf8e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c997b358-1225-405d-ba22-858644df6739.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c9c39f5c-6019-4d73-8579-1fca7c738b36.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_c9f2ff6d-0f59-401b-961c-f175ab0f4bd1.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ca033c69-3ccf-49db-b0ad-3d30fdb0fee7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_cbf7e3b3-041b-4584-a986-4123ff342086.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_cc7b7319-e676-4898-afba-0d7281715140.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_cedce279-d7b9-4cef-b939-fb0de39f2946.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_cf13a531-788b-4cdd-8789-c2f3cf35b658.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_cf89e6c1-f0c4-4e88-9b73-996f1f829557.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_cffadd3f-69e9-4d87-ab26-411aae0a0240.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_d11b82bd-825d-4987-9c60-d1f22587e0b9.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_d1c9e4b4-5a0b-4762-98c2-1113d89e6eac.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_d2eb40a9-9241-4bd0-801e-c555f0ab37c2.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_d2f16dcd-fecb-44fa-8f39-7ab230d5959a.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_d387a794-aea2-4337-98d8-7aca557eb8ee.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_d44e1ad4-72fd-4ece-afaa-1e67b7f07c85.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_d4bdac92-6a62-45cb-9e65-eac6f685c303.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_d529a11d-b854-437e-8c19-1bb8664d0479.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_d5f14c77-4f76-4f8e-ad30-201f1e7f30a2.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_d63d06a4-30c3-4e29-abd1-a9242dc6e42e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_d6d88e15-2781-41d3-9c2a-8927fe6f7519.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_d838bcfd-d9ba-4581-8825-b923484c0b46.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_da7ea909-bc53-4224-96bf-fb8ac1ad35c5.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_db1b07eb-6c04-46bd-b0d9-be6c06f3582a.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_db554883-d1d6-4458-a773-68ea3c21a56a.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_dc09ffbd-78b0-42e5-88e9-16e8f01dca41.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_dc83e23b-28fc-4e16-96ff-1bc836260199.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_dcaceb35-b5a6-4bcc-813f-d119a0296272.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_dce41c0b-f7f0-4544-bf1e-d054dbeef933.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_dd2e45c0-8231-49f8-9da1-73656117e651.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_dd94fbc8-f6f9-42aa-bf01-6b944f1f7ef5.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_de7b8106-4491-4971-a2b5-b7852b192cae.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_def7caa2-c7dc-4e48-884b-8888c6b82414.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_dffe82f7-1605-4eb8-a340-e9fc7b58a16b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e04eb085-d5c2-4b8e-b9bf-923492e56480.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e05b8a14-8dd8-45e6-9b34-ac5403a623a9.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e0b96748-5973-4729-8c43-e2c9d3324a2c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e0e5fc9b-e9c5-464b-b91c-fa73db38bcf4.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e1b633e8-cd71-42ee-a6c2-9ffeeb97ff95.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e2b312fc-78d6-4f40-9cbb-22fefc549f8d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e2c53b12-f92e-465c-ae5b-3b0bafbae6fb.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e47e6f38-6420-4043-9bf9-1e69a92cd6be.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e4bcaa58-3766-488c-8862-5dc7dcec6db9.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e5140957-5394-4d42-b6b9-2eaa362cc0eb.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e5488e7f-3d6c-471b-a80e-11c3c9c127ce.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e550d9a6-5309-43ae-b89e-7004b19680dc.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e5866c68-b5b8-4af4-b7cd-0306496c3ee1.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e64b6146-0284-442b-847f-cc4c4c1b1e8f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e6cdc75e-b863-4ee4-a11b-98555d1c0e51.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e787d21b-8ee3-4f81-8124-c2b6cbf7d6eb.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e7c61106-8d51-4269-8ded-368cc1f19913.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e82222d0-f828-4ee2-8a6d-41c7442448e3.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_e84d4f5f-3b2a-45b6-a850-27a641e52dba.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_eae01c6b-129f-45ac-bcdd-fb197fa1b805.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_eae28c02-80e0-4bd0-a0cb-da99d6be6948.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_eaeba4f2-77a8-4039-927e-8df38fa10037.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_eb5da904-63fe-4a71-9ad4-121c9abc2c99.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ec99220a-b9f7-45be-8360-b8f5489ce3b0.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ec9b9fe0-9f93-4afc-9de5-e9e1c4c6d699.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ed5056e3-42ea-4727-b56f-8a6eebc5b4b6.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ed902f9b-4896-4b12-9957-5fb05a5987ed.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_edbfecae-fc78-43a5-bcd7-ff48e5ef436b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ede5e411-7e9d-4584-969b-b60a07a31b74.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ee903391-2981-45b5-8b73-2d881743d48a.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ef1b3090-dd5e-4fa6-ad03-8780334c6d26.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ef1fd6e2-2aa0-4e1c-93e6-b489f0a4175e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ef97d423-6e6b-4775-9f89-972c7ea96a2f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f035e12a-7a29-439c-bc76-74e8ebe342c9.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f0ce9984-3b14-429c-bd80-5870d11acaa5.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f1061a02-1d7a-41ea-b3a1-54cd524b7393.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f11d072c-111b-4063-b7b6-7464b627069b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f19a6fc8-8273-4089-9748-2a8cb2ead59c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f1a868ff-a1d9-4a6f-b800-966621ef8db2.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f1c73536-0692-409f-b36f-93d632ee17b7.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f2334a63-a9c2-4406-9e4a-936e1c260fb1.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f23448c6-7ceb-49bf-80d5-8ff1e86122c6.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f318316a-f8f8-4c64-9e22-724f34f34f75.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f3b4d83c-6ef5-4655-912c-cea23c971a23.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f3be125c-3a4f-4edc-9e33-43111f61d6e8.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f3cd9aa1-3f53-4f6b-bd5f-ad9d7eacabbd.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f3d1f953-2c2b-4425-af77-8ac7ea5a0267.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f49aac05-e22f-4de4-84c9-7a6ad00200b8.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f501f5ec-f040-4925-9d6b-d398dd8bf74a.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f54d43fc-f62f-408b-b86a-aa7a4e0eec4d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f556971a-4219-4d28-8e0c-c77091ff575f.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f5bec2a2-a054-443b-88ab-a2a5d5193ccb.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f66c005b-976e-4072-9a41-1449f288bc5d.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f73eba1f-7972-4622-88a0-4b13856536ca.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f82f74dd-8e26-4667-b2e1-56e129b04280.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f8ac8810-a4a9-4146-931c-0b839ec7a93c.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_f97d0e1b-2bb6-4254-8db6-57dfee14736b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_fa591711-3e47-4fc0-981c-bdbc972d5aa6.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_faa9efe8-bdf2-4420-bf4f-5d60b25e8025.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_fae70120-2e90-4d21-9791-7ea1afb45362.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_fb2ba9ec-1d2f-4326-af76-8f5dc5900a47.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_fb5897af-4872-4c61-b23b-ab6cd1e718ad.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_fbbbc860-9f2f-4322-81bf-a3793ef61620.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_fc4d89bb-9167-49a8-b030-026fc59aafc0.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_fd5824b2-89f0-4053-8ee5-7904443a489b.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_fe8fd8eb-cbd6-45fb-8bb2-e0876bfd698a.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ff229f87-a742-4f1a-93da-ec6bd80e064e.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/response_store/resp_ff9eef90-7b9c-4b69-987c-f13c776d17e8.bin",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/site_profile.draft.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/site_runtime_model.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/source_pipeline_bundle.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "logs/replay_check_2026-04-06T19-35-11-238Z/warnings.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/.github/auth.txt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "third_party/einkbro/pipeline_center_tui_portable_wave2_autobuild_dashboard.zip",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/assets/mapper_mission_registry.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitMissionWizard.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitTelemetry.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/test/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitMissionWizardTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/test/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitTelemetryReplayBundleTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/decision_trace.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/mapper_target.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/runtime_capture_architecture.md",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/mapper_target.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/toolkit/runtime_dataset_cli.py",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/toolkit/tests/test_runtime_dataset_hardening.py",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/device/toolkit/tests/test_runtime_dataset_regression_fixture.py",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "scripts/generate.sh",
+      "old_path": null
+    }
+  ]
+}

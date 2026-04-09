@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260406T093628Z",
+  "generated_at_utc": "2026-04-06T09:36:28Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260406T093628Z"
+  },
+  "scope": "import exported commit 8357bd2 and run governance gates",
+  "highlights": [
+    "Imported patch commit cleanly; all required guards pass.",
+    "Removed temporary docs import artifacts to satisfy hard-cutover guard."
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/import-session-8357bd2.json",
+      "old_path": null
+    }
+  ]
+}
