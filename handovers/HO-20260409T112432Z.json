@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260409T112432Z",
+  "generated_at_utc": "2026-04-09T11:24:32Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260409T112432Z"
+  },
+  "scope": "wizard runtime capture saturation ux + export auth gates",
+  "highlights": [
+    "Wizard steps are now backend/UI-closable with ready-window correlation and fail-closed export/auth enforcement"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/.session_seed",
+      "old_path": null
+    }
+  ]
+}
