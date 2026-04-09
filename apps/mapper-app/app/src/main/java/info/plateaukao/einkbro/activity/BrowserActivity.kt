@@ -2317,7 +2317,15 @@ open class BrowserActivity : FragmentActivity(),
         val feedback = RuntimeToolkitTelemetry.evaluateMissionStepFeedback(this, state.wizardStepId)
         val displayName = step?.displayName?.ifBlank { state.wizardStepId } ?: state.wizardStepId
         missionWizardStepTitle.text = "$displayName (${state.wizardStepId})"
-        missionWizardStepState.text = "${feedback.state} | ${feedback.progressPercent}%"
+        val optionalSuffix = if (step?.optional == true) " | optional" else ""
+        missionWizardStepState.text = "${feedback.state} | ${feedback.progressPercent}%$optionalSuffix"
+        val stateColor = when (feedback.state) {
+            RuntimeToolkitMissionWizard.SATURATION_SATURATED -> android.R.color.holo_green_dark
+            RuntimeToolkitMissionWizard.SATURATION_BLOCKED -> android.R.color.holo_red_dark
+            RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE -> android.R.color.holo_orange_dark
+            else -> android.R.color.black
+        }
+        missionWizardStepState.setTextColor(ContextCompat.getColor(this, stateColor))
         missionWizardStepProgress.progress = feedback.progressPercent
         val missingSignals = feedback.missingSignals.take(3)
         val hints = feedback.userHints.take(3)
@@ -2336,6 +2344,7 @@ open class BrowserActivity : FragmentActivity(),
         }
 
         val readyWindow = RuntimeToolkitTelemetry.readyWindowState(this)
+        val readyHit = RuntimeToolkitTelemetry.latestReadyHitState(this)
         val now = System.currentTimeMillis()
         val readySecondsLeft = if (readyWindow.withinWindow) {
             ((readyWindow.expiresAtEpochMillis - now).coerceAtLeast(0L) / 1000L).toInt()
@@ -2353,7 +2362,8 @@ open class BrowserActivity : FragmentActivity(),
                 readySecondsLeft,
                 readyWindow.armedStepId,
             )
-            else -> getString(R.string.mapper_wizard_overlay_status_idle)
+            readyHit.recent -> getString(R.string.mapper_wizard_overlay_status_ready_hit)
+            else -> "${getString(R.string.mapper_wizard_overlay_status_idle)} (${wizardReasonLabel(feedback.reason)})"
         }
         missionWizardStepStatus.text = statusText
 
@@ -2437,6 +2447,7 @@ open class BrowserActivity : FragmentActivity(),
                 updateMissionWizardUi()
                 return@Runnable
             }
+            RuntimeToolkitTelemetry.clearWizardReadyWindow(this, reason = "auto_advance_step_change")
             val after = RuntimeToolkitTelemetry.advanceMissionWizardStep(this)
             RuntimeToolkitTelemetry.logWizardEvent(
                 context = this,
@@ -2486,13 +2497,44 @@ open class BrowserActivity : FragmentActivity(),
             updateMissionWizardUi()
             return
         }
+        RuntimeToolkitTelemetry.clearWizardReadyWindow(this, reason = "auto_advance_undo")
+        val currentState = RuntimeToolkitTelemetry.missionSessionState(this)
+        val currentStep = RuntimeToolkitMissionWizard.stepById(
+            missionId = currentState.missionId,
+            stepId = currentState.wizardStepId,
+            context = this,
+        )
+        val currentPhaseId = currentStep?.phaseId.orEmpty()
+        if (currentPhaseId.isNotBlank()) {
+            RuntimeToolkitTelemetry.logProbePhaseEvent(
+                context = this,
+                phaseId = currentPhaseId,
+                transition = "stop",
+                payload = mapOf("source" to "auto_advance_undo"),
+            )
+        }
+        RuntimeToolkitTelemetry.clearActivePhaseId(this)
         val restoreSaturation = undoState.stepStates[undoState.wizardStepId]
             ?: RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE
-        RuntimeToolkitTelemetry.setMissionWizardStepState(
+        val restored = RuntimeToolkitTelemetry.setMissionWizardStepState(
             context = this,
             stepId = undoState.wizardStepId,
             saturationState = restoreSaturation,
         )
+        val restoredStep = RuntimeToolkitMissionWizard.stepById(
+            missionId = restored.missionId,
+            stepId = restored.wizardStepId,
+            context = this,
+        )
+        val restoredPhaseId = restoredStep?.phaseId.orEmpty()
+        if (restoredPhaseId.isNotBlank()) {
+            RuntimeToolkitTelemetry.logProbePhaseEvent(
+                context = this,
+                phaseId = restoredPhaseId,
+                transition = "start",
+                payload = mapOf("source" to "auto_advance_undo"),
+            )
+        }
         RuntimeToolkitTelemetry.logWizardEvent(
             context = this,
             operation = "wizard_auto_advance_undo",
@@ -2908,6 +2950,28 @@ open class BrowserActivity : FragmentActivity(),
         return lines.joinToString("\n")
     }
 
+    private fun wizardReasonLabel(reason: String): String {
+        return when (reason.trim()) {
+            "target_url_bound" -> "target URL confirmed"
+            "target_url_missing" -> "target URL missing"
+            "home_probe_evidence_ok" -> "home evidence captured"
+            "missing_home_target_response" -> "home traffic missing"
+            "search_probe_saturated" -> "search evidence saturated"
+            "search_probe_needs_more_variants" -> "run another search variant"
+            "detail_probe_evidence_ok" -> "detail evidence captured"
+            "missing_detail_target_response" -> "open at least one detail page"
+            "playback_probe_evidence_ok" -> "playback evidence captured"
+            "missing_playback_manifest_or_resolver" -> "playback resolver/manifest missing"
+            "auth_chain_complete" -> "auth chain complete"
+            "auth_chain_incomplete" -> "collect login/validation/refresh"
+            "auth_optional_not_collected" -> "auth optional not collected yet"
+            "mission_ready_for_export" -> "ready for export"
+            "final_validation_incomplete" -> "final validation incomplete"
+            "export_gate_blocked" -> "export blocked by fail-closed gate"
+            else -> reason.ifBlank { "awaiting evidence" }
+        }
+    }
+
     private fun showMissionWizardPanel() {
         val state = RuntimeToolkitTelemetry.missionSessionState(this)
         if (state.missionId.isBlank()) {
@@ -3013,6 +3077,7 @@ open class BrowserActivity : FragmentActivity(),
         )
         val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, this)
         if (result.state == RuntimeToolkitMissionWizard.SATURATION_SATURATED && !step?.phaseId.isNullOrBlank()) {
+            val completedPhaseId = RuntimeToolkitTelemetry.activePhaseId(this)
             RuntimeToolkitTelemetry.logProbePhaseEvent(
                 context = this,
                 phaseId = step?.phaseId ?: "background_noise",
@@ -3025,7 +3090,7 @@ open class BrowserActivity : FragmentActivity(),
                 missionId = state.missionId,
                 wizardStepId = state.wizardStepId,
                 saturationState = result.state,
-                phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
+                phaseId = completedPhaseId,
                 targetSiteId = state.targetSiteId,
                 payload = mapOf("reason" to result.reason),
             )
@@ -3066,6 +3131,7 @@ open class BrowserActivity : FragmentActivity(),
         }
         clearPendingWizardAutoAdvance()
         clearWizardUndoWindow()
+        RuntimeToolkitTelemetry.clearWizardReadyWindow(this, reason = "step_advanced")
         val next = RuntimeToolkitTelemetry.advanceMissionWizardStep(this)
         RuntimeToolkitTelemetry.logWizardEvent(
             context = this,
@@ -3076,6 +3142,16 @@ open class BrowserActivity : FragmentActivity(),
             phaseId = RuntimeToolkitTelemetry.activePhaseId(this),
             targetSiteId = next.targetSiteId,
         )
+        val nextStep = RuntimeToolkitMissionWizard.stepById(next.missionId, next.wizardStepId, this)
+        val nextPhaseId = nextStep?.phaseId.orEmpty()
+        if (nextPhaseId.isNotBlank()) {
+            RuntimeToolkitTelemetry.logProbePhaseEvent(
+                context = this,
+                phaseId = nextPhaseId,
+                transition = "start",
+                payload = mapOf("source" to "manual_next"),
+            )
+        }
         updateMissionWizardUi()
         if (openWizardPanel) {
             showMissionWizardPanel()

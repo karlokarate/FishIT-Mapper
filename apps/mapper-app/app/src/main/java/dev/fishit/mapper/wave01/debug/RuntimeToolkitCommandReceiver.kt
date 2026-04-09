@@ -53,7 +53,9 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
                 OP_MARK_PROVENANCE -> handleMarkProvenance(context, intent)
                 OP_WIZARD_START -> handleWizardStart(context, intent)
                 OP_WIZARD_STATUS -> handleWizardStatus(context)
+                OP_WIZARD_BEGIN_STEP -> handleWizardBeginStep(context)
                 OP_WIZARD_SET_TARGET_URL -> handleWizardSetTargetUrl(context, intent)
+                OP_WIZARD_CHECK_STEP -> handleWizardCheckStep(context)
                 OP_WIZARD_NEXT_STEP -> handleWizardNextStep(context)
                 OP_WIZARD_RETRY_STEP -> handleWizardRetryStep(context)
                 OP_WIZARD_SKIP_OPTIONAL_STEP -> handleWizardSkipOptionalStep(context)
@@ -497,6 +499,51 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
         )
     }
 
+    private fun handleWizardBeginStep(context: Context) {
+        val state = RuntimeToolkitTelemetry.missionSessionState(context)
+        val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, context)
+        if (step == null) {
+            RuntimeToolkitTelemetry.emitAck(
+                OP_WIZARD_BEGIN_STEP,
+                "error",
+                mapOf("reason" to "unknown_step") + RuntimeToolkitTelemetry.missionSessionSnapshot(context),
+            )
+            return
+        }
+        RuntimeToolkitTelemetry.clearWizardReadyWindow(context, reason = "step_started")
+        val updated = RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = context,
+            stepId = state.wizardStepId,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        )
+        if (!step.phaseId.isNullOrBlank()) {
+            RuntimeToolkitTelemetry.logProbePhaseEvent(
+                context = context,
+                phaseId = step.phaseId,
+                transition = "start",
+                payload = mapOf("source" to "adb_receiver"),
+            )
+        }
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = context,
+            operation = "wizard_step_started",
+            missionId = updated.missionId,
+            wizardStepId = updated.wizardStepId,
+            saturationState = updated.saturationState,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
+            targetSiteId = updated.targetSiteId,
+            payload = mapOf(
+                "instruction" to step.browserInstruction,
+                "source" to "adb_receiver",
+            ),
+        )
+        RuntimeToolkitTelemetry.emitAck(
+            OP_WIZARD_BEGIN_STEP,
+            "ok",
+            RuntimeToolkitTelemetry.missionSessionSnapshot(context),
+        )
+    }
+
     private fun handleWizardSetTargetUrl(context: Context, intent: Intent) {
         val urlInput = intent.getStringExtra(EXTRA_URL).orEmpty()
         require(urlInput.isNotBlank()) { "wizard_set_target_url requires url" }
@@ -548,6 +595,66 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
         )
     }
 
+    private fun handleWizardCheckStep(context: Context) {
+        val state = RuntimeToolkitTelemetry.missionSessionState(context)
+        val result = RuntimeToolkitTelemetry.evaluateMissionStepSaturation(
+            context = context,
+            stepId = state.wizardStepId,
+        )
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = context,
+            stepId = state.wizardStepId,
+            saturationState = result.state,
+        )
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = context,
+            operation = "wizard_step_saturation_updated",
+            missionId = state.missionId,
+            wizardStepId = state.wizardStepId,
+            saturationState = result.state,
+            phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
+            targetSiteId = state.targetSiteId,
+            payload = result.metrics + mapOf(
+                "reason" to result.reason,
+                "source" to "adb_receiver",
+            ),
+        )
+        val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, context)
+        val completedStepPhaseId = step?.phaseId.orEmpty()
+        if (result.state == RuntimeToolkitMissionWizard.SATURATION_SATURATED && completedStepPhaseId.isNotBlank()) {
+            val completedPhaseId = RuntimeToolkitTelemetry.activePhaseId(context)
+            RuntimeToolkitTelemetry.logProbePhaseEvent(
+                context = context,
+                phaseId = completedStepPhaseId,
+                transition = "stop",
+                payload = mapOf("source" to "adb_receiver"),
+            )
+            RuntimeToolkitTelemetry.clearActivePhaseId(context)
+            RuntimeToolkitTelemetry.logWizardEvent(
+                context = context,
+                operation = "wizard_step_completed",
+                missionId = state.missionId,
+                wizardStepId = state.wizardStepId,
+                saturationState = result.state,
+                phaseId = completedPhaseId,
+                targetSiteId = state.targetSiteId,
+                payload = mapOf(
+                    "reason" to result.reason,
+                    "source" to "adb_receiver",
+                ),
+            )
+        }
+        RuntimeToolkitTelemetry.emitAck(
+            OP_WIZARD_CHECK_STEP,
+            "ok",
+            RuntimeToolkitTelemetry.missionSessionSnapshot(context) + mapOf(
+                "checked_step_id" to state.wizardStepId,
+                "checked_state" to result.state,
+                "checked_reason" to result.reason,
+            ),
+        )
+    }
+
     private fun handleWizardNextStep(context: Context) {
         val before = RuntimeToolkitTelemetry.missionSessionState(context)
         val currentState = before.stepStates[before.wizardStepId].orEmpty()
@@ -570,6 +677,7 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
             )
             return
         }
+        RuntimeToolkitTelemetry.clearWizardReadyWindow(context, reason = "step_advanced")
         val after = RuntimeToolkitTelemetry.advanceMissionWizardStep(context)
         RuntimeToolkitTelemetry.logWizardEvent(
             context = context,
@@ -580,6 +688,16 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
             phaseId = RuntimeToolkitTelemetry.activePhaseId(context),
             targetSiteId = after.targetSiteId,
         )
+        val step = RuntimeToolkitMissionWizard.stepById(after.missionId, after.wizardStepId, context)
+        val nextPhaseId = step?.phaseId.orEmpty()
+        if (nextPhaseId.isNotBlank()) {
+            RuntimeToolkitTelemetry.logProbePhaseEvent(
+                context = context,
+                phaseId = nextPhaseId,
+                transition = "start",
+                payload = mapOf("source" to "adb_receiver"),
+            )
+        }
         RuntimeToolkitTelemetry.emitAck(
             OP_WIZARD_NEXT_STEP,
             "ok",
@@ -588,7 +706,18 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
     }
 
     private fun handleWizardRetryStep(context: Context) {
+        RuntimeToolkitTelemetry.clearWizardReadyWindow(context, reason = "retry_step")
         val state = RuntimeToolkitTelemetry.retryMissionWizardStep(context)
+        val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, context)
+        val retryPhaseId = step?.phaseId.orEmpty()
+        if (retryPhaseId.isNotBlank()) {
+            RuntimeToolkitTelemetry.logProbePhaseEvent(
+                context = context,
+                phaseId = retryPhaseId,
+                transition = "start",
+                payload = mapOf("source" to "adb_receiver"),
+            )
+        }
         RuntimeToolkitTelemetry.logWizardEvent(
             context = context,
             operation = "wizard_step_started",
@@ -616,6 +745,7 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
             )
             return
         }
+        RuntimeToolkitTelemetry.clearWizardReadyWindow(context, reason = "skip_optional")
         RuntimeToolkitTelemetry.logWizardEvent(
             context = context,
             operation = "wizard_step_completed",
@@ -991,7 +1121,9 @@ class RuntimeToolkitCommandReceiver : BroadcastReceiver() {
         const val OP_MARK_PROVENANCE = "mark_provenance"
         const val OP_WIZARD_START = "wizard_start"
         const val OP_WIZARD_STATUS = "wizard_status"
+        const val OP_WIZARD_BEGIN_STEP = "wizard_begin_step"
         const val OP_WIZARD_SET_TARGET_URL = "wizard_set_target_url"
+        const val OP_WIZARD_CHECK_STEP = "wizard_check_step"
         const val OP_WIZARD_NEXT_STEP = "wizard_next_step"
         const val OP_WIZARD_RETRY_STEP = "wizard_retry_step"
         const val OP_WIZARD_SKIP_OPTIONAL_STEP = "wizard_skip_optional_step"

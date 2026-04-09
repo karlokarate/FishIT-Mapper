@@ -57,6 +57,9 @@ object RuntimeToolkitTelemetry {
     private const val SETTING_WIZARD_ARMED_STARTED_AT_MS = "wizard.armed.started_at_ms"
     private const val SETTING_WIZARD_ARMED_EXPIRES_AT_MS = "wizard.armed.expires_at_ms"
     private const val SETTING_WIZARD_ARMED_HIT_RECORDED = "wizard.armed.hit_recorded"
+    private const val SETTING_WIZARD_READY_LAST_HIT_STEP_ID = "wizard.ready.last_hit_step_id"
+    private const val SETTING_WIZARD_READY_LAST_HIT_AT_MS = "wizard.ready.last_hit_at_ms"
+    private const val SETTING_EXPORT_GATE_ERROR = "mission.export_gate_error"
 
     private const val PREF_COOKIE_SNAPSHOT = "mapper_toolkit_cookie_snapshot"
     private const val MAX_RECENT_REQUEST_IDS = 4096
@@ -134,6 +137,13 @@ object RuntimeToolkitTelemetry {
         val withinWindow: Boolean,
         val expiresAtEpochMillis: Long,
         val hitRecorded: Boolean,
+    )
+
+    data class ReadyHitState(
+        val stepId: String,
+        val hitAt: String,
+        val ageSeconds: Int,
+        val recent: Boolean,
     )
 
     data class StepFeedback(
@@ -1041,6 +1051,7 @@ object RuntimeToolkitTelemetry {
     fun runtimeSettingsSnapshot(context: Context): Map<String, Any?> {
         val prefs = runtimeSettings(context)
         val readyWindow = readyWindowState(context)
+        val readyHit = latestReadyHitState(context)
         return mapOf(
             "scope_mode" to (prefs.getString(SETTING_SCOPE_MODE, DEFAULT_SCOPE_MODE) ?: DEFAULT_SCOPE_MODE),
             "target_host_family" to (prefs.getString(SETTING_TARGET_HOST_FAMILY, "") ?: ""),
@@ -1061,7 +1072,12 @@ object RuntimeToolkitTelemetry {
                 "armed_step_id" to readyWindow.armedStepId,
                 "armed_action_id" to readyWindow.armedActionId,
                 "within_window" to readyWindow.withinWindow,
+                "last_hit_step_id" to readyHit.stepId,
+                "last_hit_at" to readyHit.hitAt,
+                "last_hit_recent" to readyHit.recent,
+                "last_hit_age_seconds" to readyHit.ageSeconds,
             ),
+            "export_gate_error" to latestExportGateError(context),
         )
     }
 
@@ -1211,6 +1227,7 @@ object RuntimeToolkitTelemetry {
         val summary = buildMissionExportSummary(context, state.missionId)
         val feedback = evaluateMissionStepFeedback(context, state.wizardStepId)
         val readyWindow = readyWindowState(context)
+        val readyHit = latestReadyHitState(context)
         return mapOf(
             "mission_id" to state.missionId,
             "wizard_step_id" to state.wizardStepId,
@@ -1248,7 +1265,12 @@ object RuntimeToolkitTelemetry {
                 "expires_at" to readyWindow.armedExpiresAt,
                 "armed_step_id" to readyWindow.armedStepId,
                 "armed_action_id" to readyWindow.armedActionId,
+                "last_hit_step_id" to readyHit.stepId,
+                "last_hit_at" to readyHit.hitAt,
+                "last_hit_recent" to readyHit.recent,
+                "last_hit_age_seconds" to readyHit.ageSeconds,
             ),
+            "export_gate_error" to latestExportGateError(context),
         )
     }
 
@@ -1292,10 +1314,14 @@ object RuntimeToolkitTelemetry {
             missingRequiredArtifacts = missingRequiredArtifacts,
             hasFinalizedExport = hasFinalizedExport,
         )
+        val exportGateError = latestExportGateError(context)
 
         val exportReadiness: String
         val reason: String
-        if (missingRequiredSteps.isNotEmpty()) {
+        if (exportGateError.isNotBlank()) {
+            exportReadiness = EXPORT_READINESS_BLOCKED
+            reason = "export_gate_blocked"
+        } else if (missingRequiredSteps.isNotEmpty()) {
             exportReadiness = EXPORT_READINESS_BLOCKED
             reason = "missing_required_steps"
         } else if (missingRequiredArtifacts.isEmpty() && hasFinalizedExport) {
@@ -1318,6 +1344,9 @@ object RuntimeToolkitTelemetry {
         }
         if (!hasFinalizedExport) {
             warnings += "finalized_export_missing"
+        }
+        if (exportGateError.isNotBlank()) {
+            warnings += "export_gate_blocked:$exportGateError"
         }
 
         return MissionExportSummary(
@@ -1383,7 +1412,13 @@ object RuntimeToolkitTelemetry {
                     runtimeRoot = root,
                     targetSiteHint = state.targetSiteId,
                 )
+            }.onSuccess {
+                setLatestExportGateError(context, null)
+            }.onFailure { throwable ->
+                setLatestExportGateError(context, throwable.message ?: "source_pipeline_export_failed")
             }
+        } else {
+            setLatestExportGateError(context, null)
         }
         writeMissionQualityArtifacts(context, missionId, state)
     }
@@ -1579,6 +1614,8 @@ object RuntimeToolkitTelemetry {
         )
         setCaptureEnabled(context, false)
         clearWizardReadyWindow(context, reason = "mission_started")
+        clearLatestReadyHit(context)
+        setLatestExportGateError(context, null)
         writeMissionSession(context, updated)
         return updated
     }
@@ -1873,6 +1910,57 @@ object RuntimeToolkitTelemetry {
         )
     }
 
+    fun latestReadyHitState(context: Context, recentWindowMs: Long = 8_000L): ReadyHitState {
+        val prefs = runtimeSettings(context)
+        val stepId = prefs.getString(SETTING_WIZARD_READY_LAST_HIT_STEP_ID, "").orEmpty()
+        val hitAtMs = prefs.getLong(SETTING_WIZARD_READY_LAST_HIT_AT_MS, 0L)
+        if (stepId.isBlank() || hitAtMs <= 0L) {
+            return ReadyHitState(
+                stepId = "",
+                hitAt = "",
+                ageSeconds = 0,
+                recent = false,
+            )
+        }
+        val now = System.currentTimeMillis()
+        val ageMs = (now - hitAtMs).coerceAtLeast(0L)
+        return ReadyHitState(
+            stepId = stepId,
+            hitAt = Instant.ofEpochMilli(hitAtMs).toString(),
+            ageSeconds = (ageMs / 1000L).toInt(),
+            recent = ageMs <= recentWindowMs.coerceAtLeast(1_000L),
+        )
+    }
+
+    private fun setLatestReadyHit(context: Context, stepId: String, hitAtMs: Long) {
+        runtimeSettings(context).edit()
+            .putString(SETTING_WIZARD_READY_LAST_HIT_STEP_ID, stepId)
+            .putLong(SETTING_WIZARD_READY_LAST_HIT_AT_MS, hitAtMs)
+            .apply()
+    }
+
+    private fun clearLatestReadyHit(context: Context) {
+        runtimeSettings(context).edit()
+            .remove(SETTING_WIZARD_READY_LAST_HIT_STEP_ID)
+            .remove(SETTING_WIZARD_READY_LAST_HIT_AT_MS)
+            .apply()
+    }
+
+    private fun latestExportGateError(context: Context): String {
+        return runtimeSettings(context).getString(SETTING_EXPORT_GATE_ERROR, "").orEmpty().trim()
+    }
+
+    private fun setLatestExportGateError(context: Context, errorMessage: String?) {
+        val normalized = errorMessage.orEmpty().trim().replace(Regex("\\s+"), " ").take(600)
+        runtimeSettings(context).edit().apply {
+            if (normalized.isBlank()) {
+                remove(SETTING_EXPORT_GATE_ERROR)
+            } else {
+                putString(SETTING_EXPORT_GATE_ERROR, normalized)
+            }
+        }.apply()
+    }
+
     fun beginWizardReadyWindow(
         context: Context,
         stepId: String,
@@ -2070,6 +2158,8 @@ object RuntimeToolkitTelemetry {
 
     fun clearRuntimeArtifacts(context: Context): Boolean {
         clearWizardReadyWindow(context, reason = "runtime_artifacts_cleared")
+        clearLatestReadyHit(context)
+        setLatestExportGateError(context, null)
         setCaptureEnabled(context, false)
         val root = runtimeRoot(context)
         val deleted = root.exists() && root.deleteRecursively()
@@ -2829,11 +2919,145 @@ object RuntimeToolkitTelemetry {
         return count
     }
 
+    private data class AuthChainEvidence(
+        val loginResponses: Int,
+        val validationResponses: Int,
+        val refreshResponses: Int,
+        val authEvents: Int,
+        val refreshTriggers: Int,
+    ) {
+        val totalResponses: Int
+            get() = loginResponses + validationResponses + refreshResponses
+        val hasAnyEvidence: Boolean
+            get() = totalResponses > 0 || authEvents > 0
+        val chainComplete: Boolean
+            get() = loginResponses > 0 && validationResponses > 0 && refreshResponses > 0
+    }
+
+    private fun collectAuthChainEvidence(context: Context): AuthChainEvidence {
+        val file = eventFile(context)
+        if (!file.exists()) {
+            return AuthChainEvidence(
+                loginResponses = 0,
+                validationResponses = 0,
+                refreshResponses = 0,
+                authEvents = 0,
+                refreshTriggers = 0,
+            )
+        }
+        var loginResponses = 0
+        var validationResponses = 0
+        var refreshResponses = 0
+        var authEvents = 0
+        var refreshTriggers = 0
+        runCatching {
+            file.forEachLine { line ->
+                if (line.isBlank()) return@forEachLine
+                val root = runCatching { JSONObject(line) }.getOrNull() ?: return@forEachLine
+                val eventType = root.optString("event_type")
+                val payload = root.optJSONObject("payload") ?: JSONObject()
+                when (eventType) {
+                    "auth_event" -> {
+                        val phaseId = normalizePhaseId(payload.optString("phase_id")) ?: PHASE_BACKGROUND
+                        if (phaseId == "auth_probe") authEvents += 1
+                    }
+                    "network_response_event" -> {
+                        val phaseId = normalizePhaseId(payload.optString("phase_id")) ?: PHASE_BACKGROUND
+                        val statusCode = when {
+                            payload.has("status_code") -> payload.optInt("status_code", 0)
+                            payload.has("status") -> payload.optInt("status", 0)
+                            else -> 0
+                        }
+                        val operation = payload.optString("response_operation")
+                            .ifBlank { payload.optString("request_operation") }
+                            .ifBlank { payload.optString("operation") }
+                            .lowercase(Locale.ROOT)
+                        val path = payload.optString("normalized_path")
+                            .ifBlank { runCatching { normalizedUrlParts(payload.optString("url")).path }.getOrDefault("") }
+                            .lowercase(Locale.ROOT)
+                        val routeKind = payload.optString("route_kind").lowercase(Locale.ROOT)
+                        val authRelated = phaseId == "auth_probe" ||
+                            routeKind == "auth" ||
+                            operation.contains("auth") ||
+                            operation.contains("token") ||
+                            operation.contains("refresh") ||
+                            path.contains("/auth") ||
+                            path.contains("/oauth")
+                        if (statusCode in setOf(401, 403)) {
+                            refreshTriggers += 1
+                        }
+                        if (statusCode !in 200..399 || !authRelated) return@forEachLine
+                        when {
+                            isRefreshOperation(operation = operation, path = path) -> refreshResponses += 1
+                            isValidationOperation(operation = operation, path = path) -> validationResponses += 1
+                            isLoginOperation(operation = operation, path = path) -> loginResponses += 1
+                        }
+                    }
+                }
+            }
+        }
+        return AuthChainEvidence(
+            loginResponses = loginResponses,
+            validationResponses = validationResponses,
+            refreshResponses = refreshResponses,
+            authEvents = authEvents,
+            refreshTriggers = refreshTriggers,
+        )
+    }
+
+    private fun isLoginOperation(operation: String, path: String): Boolean {
+        if (isRefreshOperation(operation, path) || isValidationOperation(operation, path)) return false
+        return operation.contains("login") ||
+            operation.contains("signin") ||
+            operation.contains("authorize") ||
+            path.contains("/login") ||
+            path.contains("/signin") ||
+            path.contains("/authorize")
+    }
+
+    private fun isValidationOperation(operation: String, path: String): Boolean {
+        return operation.contains("validate") ||
+            operation.contains("validation") ||
+            operation.contains("userinfo") ||
+            operation.contains("profile") ||
+            path.contains("/userinfo") ||
+            path.contains("/profile") ||
+            path.endsWith("/me")
+    }
+
+    private fun isRefreshOperation(operation: String, path: String): Boolean {
+        return operation.contains("refresh") ||
+            operation.contains("token_refresh") ||
+            path.contains("/refresh") ||
+            path.endsWith("/token")
+    }
+
+    private fun collectWizardReadyHitsByStep(context: Context): Map<String, Int> {
+        val file = eventFile(context)
+        if (!file.exists()) return emptyMap()
+        val counts = linkedMapOf<String, Int>()
+        runCatching {
+            file.forEachLine { line ->
+                if (line.isBlank()) return@forEachLine
+                val root = runCatching { JSONObject(line) }.getOrNull() ?: return@forEachLine
+                if (root.optString("event_type") != "wizard_event") return@forEachLine
+                val payload = root.optJSONObject("payload") ?: JSONObject()
+                if (payload.optString("operation") != "wizard_ready_window_hit") return@forEachLine
+                val stepId = payload.optString("wizard_step_id").trim()
+                if (stepId.isBlank()) return@forEachLine
+                counts[stepId] = (counts[stepId] ?: 0) + 1
+            }
+        }
+        return counts
+    }
+
     private fun evaluateFishitStepSaturation(
         context: Context,
         stepId: String,
     ): RuntimeToolkitMissionWizard.SaturationResult {
         val responses = collectResponseObservations(context)
+        val readyHitsByStep = collectWizardReadyHitsByStep(context)
+        val authChainEvidence = collectAuthChainEvidence(context)
         val successfulTargetByPhase = responses
             .filter { it.succeeded && it.targetEvidence }
             .groupBy { inferProbePhase(it) }
@@ -2875,17 +3099,25 @@ object RuntimeToolkitTelemetry {
                     it.operation.contains("search") || it.path.contains("/search")
                 }
                 val unique = relevant.map { it.fingerprint }.toSet().size
-                if (unique >= 2) {
+                val readyHits = readyHitsByStep[RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE] ?: 0
+                val saturated = unique >= 2 && (readyHits > 0 || unique >= 3)
+                if (saturated) {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
                         reason = "search_probe_saturated",
-                        metrics = mapOf("unique_request_templates" to unique),
+                        metrics = mapOf(
+                            "unique_request_templates" to unique,
+                            "ready_hits" to readyHits,
+                        ),
                     )
                 } else {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
                         reason = "search_probe_needs_more_variants",
-                        metrics = mapOf("unique_request_templates" to unique),
+                        metrics = mapOf(
+                            "unique_request_templates" to unique,
+                            "ready_hits" to readyHits,
+                        ),
                     )
                 }
             }
@@ -2893,16 +3125,26 @@ object RuntimeToolkitTelemetry {
                 val relevant = successfulTargetByPhase["detail_probe"].orEmpty().filter {
                     it.operation.contains("detail") || it.path.contains("/detail")
                 }
-                if (relevant.isNotEmpty()) {
+                val readyHits = readyHitsByStep[RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE] ?: 0
+                val responseCount = relevant.size
+                val saturated = responseCount > 0 && (readyHits > 0 || responseCount >= 2)
+                if (saturated) {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
                         reason = "detail_probe_evidence_ok",
-                        metrics = mapOf("response_count" to relevant.size),
+                        metrics = mapOf(
+                            "response_count" to responseCount,
+                            "ready_hits" to readyHits,
+                        ),
                     )
                 } else {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
                         reason = "missing_detail_target_response",
+                        metrics = mapOf(
+                            "response_count" to responseCount,
+                            "ready_hits" to readyHits,
+                        ),
                     )
                 }
             }
@@ -2914,33 +3156,74 @@ object RuntimeToolkitTelemetry {
                         it.mimeType.contains("mpegurl") ||
                         it.mimeType.contains("dash+xml")
                 }
-                if (relevant.isNotEmpty()) {
+                val readyHits = readyHitsByStep[RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE] ?: 0
+                val responseCount = relevant.size
+                val saturated = responseCount > 0 && (readyHits > 0 || responseCount >= 2)
+                if (saturated) {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
                         reason = "playback_probe_evidence_ok",
-                        metrics = mapOf("response_count" to relevant.size),
+                        metrics = mapOf(
+                            "response_count" to responseCount,
+                            "ready_hits" to readyHits,
+                        ),
                     )
                 } else {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
                         reason = "missing_playback_manifest_or_resolver",
+                        metrics = mapOf(
+                            "response_count" to responseCount,
+                            "ready_hits" to readyHits,
+                        ),
                     )
                 }
             }
             RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL -> {
-                val authEvents = collectAuthEvidence(context)
-                val authResponses = successfulTargetByPhase["auth_probe"].orEmpty().size
-                if (authEvents > 0 || authResponses > 0) {
+                val readyHits = readyHitsByStep[RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL] ?: 0
+                if (!authChainEvidence.hasAnyEvidence) {
+                    RuntimeToolkitMissionWizard.SaturationResult(
+                        state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
+                        reason = "auth_optional_not_collected",
+                        metrics = mapOf(
+                            "auth_events" to authChainEvidence.authEvents,
+                            "auth_responses" to authChainEvidence.totalResponses,
+                            "login_responses" to authChainEvidence.loginResponses,
+                            "validation_responses" to authChainEvidence.validationResponses,
+                            "refresh_responses" to authChainEvidence.refreshResponses,
+                            "refresh_triggers" to authChainEvidence.refreshTriggers,
+                            "ready_hits" to readyHits,
+                        ),
+                    )
+                } else if (authChainEvidence.chainComplete &&
+                    (readyHits > 0 || authChainEvidence.totalResponses >= 4)
+                ) {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
-                        reason = "auth_evidence_present",
-                        metrics = mapOf("auth_events" to authEvents, "auth_responses" to authResponses),
+                        reason = "auth_chain_complete",
+                        metrics = mapOf(
+                            "auth_events" to authChainEvidence.authEvents,
+                            "auth_responses" to authChainEvidence.totalResponses,
+                            "login_responses" to authChainEvidence.loginResponses,
+                            "validation_responses" to authChainEvidence.validationResponses,
+                            "refresh_responses" to authChainEvidence.refreshResponses,
+                            "refresh_triggers" to authChainEvidence.refreshTriggers,
+                            "ready_hits" to readyHits,
+                        ),
                     )
                 } else {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
-                        reason = "auth_optional_not_collected",
-                        metrics = mapOf("auth_events" to authEvents, "auth_responses" to authResponses),
+                        reason = "auth_chain_incomplete",
+                        metrics = mapOf(
+                            "auth_events" to authChainEvidence.authEvents,
+                            "auth_responses" to authChainEvidence.totalResponses,
+                            "login_responses" to authChainEvidence.loginResponses,
+                            "validation_responses" to authChainEvidence.validationResponses,
+                            "refresh_responses" to authChainEvidence.refreshResponses,
+                            "refresh_triggers" to authChainEvidence.refreshTriggers,
+                            "ready_hits" to readyHits,
+                        ),
                     )
                 }
             }
@@ -2973,6 +3256,7 @@ object RuntimeToolkitTelemetry {
                             "summary_reason" to summary.reason,
                             "missing_required_artifacts" to summary.missingRequiredArtifacts,
                             "missing_required_steps" to summary.missingRequiredSteps,
+                            "export_gate_error" to latestExportGateError(context),
                         ),
                     )
                 }
@@ -2997,32 +3281,40 @@ object RuntimeToolkitTelemetry {
             }
             RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE -> {
                 val variants = intPayloadValue(saturation.metrics["unique_request_templates"]) ?: 0
-                minOf(95, variants * 45)
+                val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
+                minOf(95, (variants * 40) + if (readyHits > 0) 15 else 0)
             }
             RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE -> {
                 val count = intPayloadValue(saturation.metrics["response_count"]) ?: 0
-                minOf(95, count * 70)
+                val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
+                minOf(95, (count * 55) + if (readyHits > 0) 20 else 0)
             }
             RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE -> {
                 val count = intPayloadValue(saturation.metrics["response_count"]) ?: 0
-                minOf(95, count * 70)
+                val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
+                minOf(95, (count * 55) + if (readyHits > 0) 20 else 0)
             }
             RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL -> {
-                val authEvents = intPayloadValue(saturation.metrics["auth_events"]) ?: 0
-                val authResponses = intPayloadValue(saturation.metrics["auth_responses"]) ?: 0
-                minOf(95, (authEvents + authResponses) * 70)
+                val login = intPayloadValue(saturation.metrics["login_responses"]) ?: 0
+                val validation = intPayloadValue(saturation.metrics["validation_responses"]) ?: 0
+                val refresh = intPayloadValue(saturation.metrics["refresh_responses"]) ?: 0
+                val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
+                val chainScore = minOf(75, (if (login > 0) 25 else 0) + (if (validation > 0) 25 else 0) + (if (refresh > 0) 25 else 0))
+                minOf(95, chainScore + if (readyHits > 0) 20 else 0)
             }
             RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT -> {
                 val requiredComplete = boolPayloadValue(saturation.metrics["required_steps_complete"]) == true
                 val missingSteps = (saturation.metrics["missing_required_steps"] as? List<*>)?.size ?: 0
                 val readiness = stringPayloadValue(saturation.metrics["export_readiness"]).orEmpty()
+                val gateBlocked = stringPayloadValue(saturation.metrics["export_gate_error"]).orEmpty().isNotBlank()
                 val readinessBonus = when (readiness) {
                     EXPORT_READINESS_READY -> 40
                     EXPORT_READINESS_PARTIAL -> 20
                     else -> 0
                 }
                 val coveragePenalty = minOf(30, missingSteps * 10)
-                (if (requiredComplete) 60 else 25) + readinessBonus - coveragePenalty
+                val base = (if (requiredComplete) 60 else 25) + readinessBonus - coveragePenalty
+                if (gateBlocked) minOf(45, base) else base
             }
             else -> 0
         }.coerceIn(0, 99)
@@ -3036,17 +3328,51 @@ object RuntimeToolkitTelemetry {
         return when (stepId) {
             RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT -> listOf("target_url_confirmed")
             RuntimeToolkitMissionWizard.STEP_HOME_PROBE -> listOf("home_target_response")
-            RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE -> listOf("search_variants>=2")
-            RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE -> listOf("detail_target_response")
-            RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE -> listOf("playback_manifest_or_resolver")
-            RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL -> listOf("auth_event_or_response")
+            RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE -> {
+                val variants = intPayloadValue(saturation.metrics["unique_request_templates"]) ?: 0
+                val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
+                buildList {
+                    if (variants < 2) add("search_variants>=2")
+                    if (readyHits <= 0) add("ready_window_hit")
+                }.ifEmpty { listOf("search_variants>=2") }
+            }
+            RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE -> {
+                val count = intPayloadValue(saturation.metrics["response_count"]) ?: 0
+                val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
+                buildList {
+                    if (count <= 0) add("detail_target_response")
+                    if (readyHits <= 0) add("ready_window_hit")
+                }.ifEmpty { listOf("detail_target_response") }
+            }
+            RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE -> {
+                val count = intPayloadValue(saturation.metrics["response_count"]) ?: 0
+                val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
+                buildList {
+                    if (count <= 0) add("playback_manifest_or_resolver")
+                    if (readyHits <= 0) add("ready_window_hit")
+                }.ifEmpty { listOf("playback_manifest_or_resolver") }
+            }
+            RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL -> {
+                val login = intPayloadValue(saturation.metrics["login_responses"]) ?: 0
+                val validation = intPayloadValue(saturation.metrics["validation_responses"]) ?: 0
+                val refresh = intPayloadValue(saturation.metrics["refresh_responses"]) ?: 0
+                val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
+                buildList {
+                    if (login <= 0) add("auth_login_response")
+                    if (validation <= 0) add("auth_validation_response")
+                    if (refresh <= 0) add("auth_refresh_response")
+                    if (readyHits <= 0) add("ready_window_hit")
+                }.ifEmpty { listOf("auth_event_or_response") }
+            }
             RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT -> {
                 val metrics = saturation.metrics
                 val missingSteps = (metrics["missing_required_steps"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty()
                 val missingArtifacts = (metrics["missing_required_artifacts"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty()
+                val exportGateError = stringPayloadValue(metrics["export_gate_error"]).orEmpty()
                 val signals = mutableListOf<String>()
                 signals += missingSteps.map { "step:$it" }
                 signals += missingArtifacts.map { "artifact:$it" }
+                if (exportGateError.isNotBlank()) signals += "gate:$exportGateError"
                 if (signals.isEmpty()) signals += "mission_export_ready"
                 signals.take(5)
             }
@@ -3093,14 +3419,26 @@ object RuntimeToolkitTelemetry {
                 "Playback starten, bis Manifest/Resolver sichtbar ist.",
             )
             RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL -> listOf(
-                "Ready druecken, dann Login oder Logout ausloesen.",
-                "Optional Refresh-Flow triggern (z. B. Session erneuern).",
+                "Ready druecken und anschliessend Login ausloesen.",
+                "Danach Validation ausloesen (z. B. /userinfo oder Profilseite).",
+                "Zum Schluss Refresh triggern (Session erneuern oder Token-Refresh).",
             )
-            RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT -> listOf(
-                "Fehlende Steps abschliessen.",
-                "Export Summary pruefen.",
-                "Bundle als ZIP exportieren.",
-            )
+            RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT -> {
+                val exportGateError = stringPayloadValue(saturation.metrics["export_gate_error"]).orEmpty()
+                if (exportGateError.isNotBlank()) {
+                    listOf(
+                        "Export ist fail-closed blockiert.",
+                        "Auth-Flow-Kette (login/validation/refresh) und Placeholder-Usage vervollstaendigen.",
+                        "Danach Step erneut mit Check pruefen und ZIP exportieren.",
+                    )
+                } else {
+                    listOf(
+                        "Fehlende Steps abschliessen.",
+                        "Export Summary pruefen.",
+                        "Bundle als ZIP exportieren.",
+                    )
+                }
+            }
             else -> listOf("Schritt starten und Saettigung pruefen.")
         }
     }
@@ -3132,9 +3470,11 @@ object RuntimeToolkitTelemetry {
             phaseId = phaseId,
         )
         if (matches && !window.hitRecorded) {
+            val hitAtMs = System.currentTimeMillis()
             runtimeSettings(context).edit()
                 .putBoolean(SETTING_WIZARD_ARMED_HIT_RECORDED, true)
                 .apply()
+            setLatestReadyHit(context, window.armedStepId, hitAtMs)
             val session = missionSessionState(context)
             logWizardEvent(
                 context = context,
@@ -3149,6 +3489,7 @@ object RuntimeToolkitTelemetry {
                     "armed_trace_id" to window.armedTraceId,
                     "request_id" to requestId,
                     "event_kind" to eventKind,
+                    "ready_hit_at" to Instant.ofEpochMilli(hitAtMs).toString(),
                     "route_kind" to semantic.routeKind,
                     "operation" to semantic.operation,
                     "normalized_path" to normalizedPath,

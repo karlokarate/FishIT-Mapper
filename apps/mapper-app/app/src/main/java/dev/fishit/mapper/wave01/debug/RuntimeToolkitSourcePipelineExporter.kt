@@ -89,6 +89,7 @@ object RuntimeToolkitSourcePipelineExporter {
     )
 
     private data class EndpointTemplatePayload(
+        val pathTemplate: String,
         val queryTemplate: JSONObject,
         val bodyTemplate: JSONObject,
         val variablePlaceholders: JSONArray,
@@ -324,6 +325,9 @@ object RuntimeToolkitSourcePipelineExporter {
                 val stableRequiredQueryParams = endpoint.requiredQueryParams.filterTo(linkedSetOf()) { isStableRequiredInputName(it) }
                 val stableRequiredBodyFields = endpoint.requiredBodyFields.filterTo(linkedSetOf()) { isStableRequiredInputName(it) }
                 val templatePayload = buildEndpointTemplates(
+                    role = endpoint.role,
+                    normalizedPath = endpoint.normalizedPath,
+                    requestOperation = endpoint.requestOperation,
                     requiredQueryParams = stableRequiredQueryParams,
                     optionalQueryParams = endpoint.optionalQueryParams,
                     requiredBodyFields = stableRequiredBodyFields,
@@ -340,7 +344,7 @@ object RuntimeToolkitSourcePipelineExporter {
                         put("normalizedPath", endpoint.normalizedPath)
                         put("graphqlOperationName", JSONObject.NULL)
                         put("requestOperation", endpoint.requestOperation)
-                        put("pathTemplate", endpoint.normalizedPath)
+                        put("pathTemplate", templatePayload.pathTemplate)
                         put("queryTemplate", templatePayload.queryTemplate)
                         put("bodyTemplate", templatePayload.bodyTemplate)
                         put("variablePlaceholders", templatePayload.variablePlaceholders)
@@ -441,8 +445,6 @@ object RuntimeToolkitSourcePipelineExporter {
         val validationEndpointId = authOrRefreshEndpoints
             .firstOrNull { isValidationEndpointCandidate(it) }
             ?.endpointId
-            ?: loginEndpointId
-            ?: refreshEndpointId
         val requiresLogin = allRequiredHeaders.isNotEmpty() || allRequiredCookies.isNotEmpty() || roleById.values.any { it == "auth" }
         val requiresBrowserSession = endpointById.values.any { it.requiredOrigin != null || it.requiredReferer != null }
         val capabilityClass = when {
@@ -512,6 +514,7 @@ object RuntimeToolkitSourcePipelineExporter {
                             put("indexedDb", JSONArray())
                         },
                     )
+                    put("loginEndpointRef", loginEndpointId ?: JSONObject.NULL)
                     put("validationEndpointRef", validationEndpointId ?: JSONObject.NULL)
                     put("refreshEndpointRef", refreshEndpointId ?: JSONObject.NULL)
                     put("requiredTokenInputs", requiredTokenInputs(authTokenInputs, endpointById.values))
@@ -718,10 +721,22 @@ object RuntimeToolkitSourcePipelineExporter {
         }
 
         val requiresLogin = sessionAuth.optBoolean("requiresLogin")
+        val sessionLoginRef = sessionAuth.optString("loginEndpointRef").trim()
+        val sessionValidationRef = sessionAuth.optString("validationEndpointRef").trim()
+        val sessionRefreshRef = sessionAuth.optString("refreshEndpointRef").trim()
         if (requiresLogin) {
             if (loginEndpointId.isNullOrBlank()) failures += "auth chain incomplete: missing login endpointRef"
             if (validationEndpointId.isNullOrBlank()) failures += "auth chain incomplete: missing validation endpointRef"
             if (refreshEndpointId.isNullOrBlank()) failures += "auth chain incomplete: missing refresh endpointRef"
+            if (sessionLoginRef.isBlank()) failures += "sessionAuth.loginEndpointRef missing while requiresLogin=true"
+            if (sessionValidationRef.isBlank()) failures += "sessionAuth.validationEndpointRef missing while requiresLogin=true"
+            if (sessionRefreshRef.isBlank()) failures += "sessionAuth.refreshEndpointRef missing while requiresLogin=true"
+            val distinctRefs = listOf(sessionLoginRef, sessionValidationRef, sessionRefreshRef)
+                .filter { it.isNotBlank() }
+                .toSet()
+            if (distinctRefs.size != 3) {
+                failures += "auth chain must use distinct endpointRefs for login/validation/refresh"
+            }
         }
 
         listOf(
@@ -859,10 +874,9 @@ object RuntimeToolkitSourcePipelineExporter {
         }
 
         if (capabilities.optBoolean("requiresLogin")) {
-            val validationRef = sessionAuth.optString("validationEndpointRef")
-            val refreshRef = sessionAuth.optString("refreshEndpointRef")
-            if (validationRef.isBlank()) failures += "sessionAuth.validationEndpointRef missing while requiresLogin=true"
-            if (refreshRef.isBlank()) failures += "sessionAuth.refreshEndpointRef missing while requiresLogin=true"
+            if (sessionLoginRef.isBlank()) failures += "sessionAuth.loginEndpointRef missing while requiresLogin=true"
+            if (sessionValidationRef.isBlank()) failures += "sessionAuth.validationEndpointRef missing while requiresLogin=true"
+            if (sessionRefreshRef.isBlank()) failures += "sessionAuth.refreshEndpointRef missing while requiresLogin=true"
         }
 
         // Keep mapper-only gate consistent with generated endpoint map.
@@ -1469,11 +1483,16 @@ object RuntimeToolkitSourcePipelineExporter {
             .distinct()
             .sorted()
         val authWarnings = jsonStrings(sessionAuth.optJSONArray("authWarnings"))
-        val loginEndpointRef = authWarnings
-            .firstOrNull { it.startsWith("login_endpoint_ref:") }
-            ?.substringAfter("login_endpoint_ref:")
+        val loginEndpointRef = sessionAuth.opt("loginEndpointRef")
+            ?.takeIf { it != JSONObject.NULL }
+            ?.toString()
             ?.trim()
-            .orEmpty()
+            ?.takeIf { it.isNotBlank() }
+            ?: authWarnings
+                .firstOrNull { it.startsWith("login_endpoint_ref:") }
+                ?.substringAfter("login_endpoint_ref:")
+                ?.trim()
+                .orEmpty()
         return JSONObject().apply {
             put("auth_mode", sessionAuth.optString("authMode", "none"))
             put("session_artifacts", sessionArtifacts)
@@ -2551,12 +2570,20 @@ object RuntimeToolkitSourcePipelineExporter {
     }
 
     private fun buildEndpointTemplates(
+        role: String,
+        normalizedPath: String,
+        requestOperation: String,
         requiredQueryParams: Set<String>,
         optionalQueryParams: Set<String>,
         requiredBodyFields: Set<String>,
         optionalBodyFields: Set<String>,
         requiredProvenanceInputs: Set<String>,
     ): EndpointTemplatePayload {
+        val pathTemplatePayload = buildPathTemplate(
+            role = role,
+            normalizedPath = normalizedPath,
+            requestOperation = requestOperation,
+        )
         val queryTemplate = JSONObject()
         val bodyTemplate = JSONObject()
         val placeholders = JSONArray()
@@ -2569,6 +2596,21 @@ object RuntimeToolkitSourcePipelineExporter {
             .map { sanitizePlaceholderName(it) }
             .filter { it.isNotBlank() }
             .toSet()
+
+        pathTemplatePayload.pathPlaceholders.forEach { name ->
+            val key = "path:$name"
+            if (seenPlaceholders.add(key)) {
+                placeholders.put(
+                    JSONObject().apply {
+                        put("name", name)
+                        put("location", "path")
+                        put("required", true)
+                        put("valueType", "string")
+                        put("defaultTemplate", JSONObject.NULL)
+                    },
+                )
+            }
+        }
 
         val allQuery = (requiredQueryParams + optionalQueryParams).sortedBy { it.lowercase(Locale.ROOT) }
         allQuery.forEach { name ->
@@ -2613,13 +2655,15 @@ object RuntimeToolkitSourcePipelineExporter {
             .filter { it.isNotBlank() }
             .sortedBy { it.lowercase(Locale.ROOT) }
             .forEach { name ->
+                val pathExists = name in pathTemplatePayload.pathPlaceholders
                 val queryExists = queryTemplate.has(name)
                 val bodyExists = bodyTemplate.has(name)
                 val location = when {
+                    pathExists -> "path"
                     queryExists -> "query"
                     else -> "body"
                 }
-                if (!queryExists && !bodyExists) {
+                if (!pathExists && !queryExists && !bodyExists) {
                     bodyTemplate.put(name, placeholderToken(name))
                 }
                 val key = "$location:$name"
@@ -2637,10 +2681,122 @@ object RuntimeToolkitSourcePipelineExporter {
             }
 
         return EndpointTemplatePayload(
+            pathTemplate = pathTemplatePayload.pathTemplate,
             queryTemplate = queryTemplate,
             bodyTemplate = bodyTemplate,
             variablePlaceholders = placeholders,
         )
+    }
+
+    private data class PathTemplatePayload(
+        val pathTemplate: String,
+        val pathPlaceholders: Set<String>,
+    )
+
+    private fun buildPathTemplate(
+        role: String,
+        normalizedPath: String,
+        requestOperation: String,
+    ): PathTemplatePayload {
+        val segments = normalizedPath.trim().trim('/').split('/')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+        if (segments.isEmpty()) {
+            return PathTemplatePayload(pathTemplate = "/", pathPlaceholders = emptySet())
+        }
+        val placeholders = linkedSetOf<String>()
+        var dynamicCounter = 0
+        val templatedSegments = segments.mapIndexed { index, segment ->
+            if (!shouldTemplatePathSegment(role, requestOperation, segment, index, segments.lastIndex)) {
+                return@mapIndexed segment
+            }
+            val placeholder = inferPathPlaceholderName(
+                role = role,
+                segment = segment,
+                segmentIndex = index,
+                dynamicIndex = dynamicCounter++,
+            )
+            placeholders += placeholder
+            placeholderToken(placeholder)
+        }
+        return PathTemplatePayload(
+            pathTemplate = "/" + templatedSegments.joinToString("/"),
+            pathPlaceholders = placeholders,
+        )
+    }
+
+    private fun shouldTemplatePathSegment(
+        role: String,
+        requestOperation: String,
+        segment: String,
+        segmentIndex: Int,
+        lastIndex: Int,
+    ): Boolean {
+        val normalized = segment.trim().lowercase(Locale.ROOT)
+        if (normalized.isBlank()) return false
+        if (normalized in setOf(
+                "api",
+                "graphql",
+                "home",
+                "search",
+                "detail",
+                "playback",
+                "resolver",
+                "manifest",
+                "auth",
+                "oauth",
+                "login",
+                "refresh",
+                "userinfo",
+                "session",
+                "content",
+                "v1",
+                "v2",
+                "v3",
+            )
+        ) {
+            return false
+        }
+        if (normalized.matches(Regex("^[0-9]+$")) && normalized.length >= 2) return true
+        if (normalized.matches(Regex("^[0-9a-f]{8,}$"))) return true
+        if (normalized.matches(Regex("^[0-9a-f]{8}-[0-9a-f-]{12,}$"))) return true
+        val hasDigit = normalized.any { it.isDigit() }
+        val longToken = normalized.length >= 10 && normalized.any { it.isLetter() }
+        if (hasDigit && longToken) return true
+        val operation = requestOperation.lowercase(Locale.ROOT)
+        val idLikeSlug = (normalized.contains('_') || normalized.contains('-')) && normalized.any { it.isDigit() }
+        if (idLikeSlug && normalized.length >= 4) return true
+        if (role in setOf("detail", "playbackResolver", "playback_resolver") &&
+            segmentIndex == lastIndex &&
+            normalized.length >= 4 &&
+            normalized !in setOf("index", "list")
+        ) {
+            return true
+        }
+        if (operation.contains("detail") && segmentIndex == lastIndex && normalized.length >= 4) {
+            return true
+        }
+        return false
+    }
+
+    private fun inferPathPlaceholderName(
+        role: String,
+        segment: String,
+        segmentIndex: Int,
+        dynamicIndex: Int,
+    ): String {
+        val normalized = segment.trim().lowercase(Locale.ROOT)
+        val roleLower = role.lowercase(Locale.ROOT)
+        val preferred = when {
+            roleLower.contains("detail") || roleLower.contains("playback") -> "canonical"
+            normalized.contains("episode") -> "episodeId"
+            normalized.contains("video") -> "videoId"
+            normalized.contains("asset") -> "assetId"
+            normalized.contains("channel") -> "channelId"
+            normalized.matches(Regex("^[0-9]+$")) -> "id"
+            else -> "pathParam${segmentIndex + 1 + dynamicIndex}"
+        }
+        return sanitizePlaceholderName(preferred).ifBlank { "pathParam${segmentIndex + 1}" }
     }
 
     private fun sanitizePlaceholderName(raw: String): String {

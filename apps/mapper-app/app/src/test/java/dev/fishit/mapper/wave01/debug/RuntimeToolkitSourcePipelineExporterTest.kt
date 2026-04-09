@@ -83,11 +83,15 @@ class RuntimeToolkitSourcePipelineExporterTest {
         val endpointTemplates = bundle.getJSONArray("endpointTemplates")
         val endpointIds = mutableListOf<String>()
         val endpointRoleById = linkedMapOf<String, String>()
+        var detailPathHasPlaceholder = false
         forEachObject(endpointTemplates) { endpoint ->
             val endpointId = endpoint.optString("endpointId")
             if (endpointId.isNotBlank()) {
                 endpointIds += endpointId
                 endpointRoleById[endpointId] = endpoint.optString("role")
+            }
+            if (endpoint.optString("role") == "detail" && endpoint.optString("pathTemplate").contains("\${")) {
+                detailPathHasPlaceholder = true
             }
         }
         val sortedEndpointIds = endpointIds.sortedBy { it.lowercase() }
@@ -96,6 +100,7 @@ class RuntimeToolkitSourcePipelineExporterTest {
         assertTrue(endpointRoleById.values.any { it == "search" })
         assertTrue(endpointRoleById.values.any { it == "detail" })
         assertTrue(endpointRoleById.values.any { it == "playbackResolver" || it == "playback_resolver" })
+        assertTrue(detailPathHasPlaceholder)
 
         val replayRequirements = bundle.getJSONArray("replayRequirements")
         val replayEndpointRefs = mutableSetOf<String>()
@@ -254,10 +259,15 @@ class RuntimeToolkitSourcePipelineExporterTest {
         )
         val bundle = JSONObject(artifacts.sourcePipelineBundlePath.readText(Charsets.UTF_8))
         val sessionAuth = bundle.getJSONObject("sessionAuth")
+        val loginEndpointRef = sessionAuth.optString("loginEndpointRef")
+        assertTrue(loginEndpointRef.isNotBlank())
         val refreshEndpointRef = sessionAuth.optString("refreshEndpointRef")
         assertTrue(refreshEndpointRef.isNotBlank())
         val validationEndpointRef = sessionAuth.optString("validationEndpointRef")
         assertTrue(validationEndpointRef.isNotBlank())
+        assertTrue(loginEndpointRef != validationEndpointRef)
+        assertTrue(loginEndpointRef != refreshEndpointRef)
+        assertTrue(validationEndpointRef != refreshEndpointRef)
 
         val replayByEndpointRef = linkedMapOf<String, JSONObject>()
         forEachObject(bundle.getJSONArray("replayRequirements")) { replay ->
