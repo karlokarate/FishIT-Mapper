@@ -281,7 +281,7 @@ class RuntimeToolkitSourcePipelineExporterTest {
             val name = field.optString("name")
             if (name.isNotBlank()) requiredBodyFields += name
         }
-        assertTrue("refreshToken" in requiredBodyFields)
+        assertTrue("refreshToken" in requiredBodyFields || "refresh_token" in requiredBodyFields)
         assertTrue("grant_type" in requiredBodyFields)
 
         val requiredHeaders = mutableSetOf<String>()
@@ -407,6 +407,65 @@ class RuntimeToolkitSourcePipelineExporterTest {
                     normalizedHost = "www.google.com",
                     hostClass = "background_noise",
                 ),
+                requestEvent(
+                    eventId = "evt_req_auth_login_chain",
+                    requestId = "req_auth_login_chain",
+                    phaseId = "auth_probe",
+                    url = "https://www.zdf.de/api/auth/login?client_id=mapper-app",
+                    normalizedPath = "/api/auth/login",
+                    operation = "auth_login",
+                    method = "POST",
+                    headers = mapOf("accept" to "application/json"),
+                    extraPayload = JSONObject().apply {
+                        put("body_preview", """{"username":"demo","password":"secret"}""")
+                    },
+                ),
+                responseEvent(
+                    eventId = "evt_res_auth_login_chain",
+                    requestId = "req_auth_login_chain",
+                    phaseId = "auth_probe",
+                    url = "https://www.zdf.de/api/auth/login?client_id=mapper-app",
+                    normalizedPath = "/api/auth/login",
+                    bodyPreview = """{"ok":true}""",
+                ),
+                requestEvent(
+                    eventId = "evt_req_auth_validation_chain",
+                    requestId = "req_auth_validation_chain",
+                    phaseId = "auth_probe",
+                    url = "https://www.zdf.de/api/auth/userinfo",
+                    normalizedPath = "/api/auth/userinfo",
+                    operation = "auth_userinfo",
+                    headers = mapOf("authorization" to "Bearer at-1"),
+                ),
+                responseEvent(
+                    eventId = "evt_res_auth_validation_chain",
+                    requestId = "req_auth_validation_chain",
+                    phaseId = "auth_probe",
+                    url = "https://www.zdf.de/api/auth/userinfo",
+                    normalizedPath = "/api/auth/userinfo",
+                    bodyPreview = """{"id":"u-1"}""",
+                ),
+                requestEvent(
+                    eventId = "evt_req_auth_refresh_chain",
+                    requestId = "req_auth_refresh_chain",
+                    phaseId = "auth_probe",
+                    url = "https://www.zdf.de/api/auth/refresh?device=android",
+                    normalizedPath = "/api/auth/refresh",
+                    operation = "auth_token_refresh",
+                    method = "POST",
+                    headers = mapOf("authorization" to "Bearer at-1"),
+                    extraPayload = JSONObject().apply {
+                        put("body_preview", """{"refresh_token":"rt-1"}""")
+                    },
+                ),
+                responseEvent(
+                    eventId = "evt_res_auth_refresh_chain",
+                    requestId = "req_auth_refresh_chain",
+                    phaseId = "auth_probe",
+                    url = "https://www.zdf.de/api/auth/refresh?device=android",
+                    normalizedPath = "/api/auth/refresh",
+                    bodyPreview = """{"access_token":"at-2","expires_in":1800}""",
+                ),
             )
             writeText(lines.joinToString(separator = "\n", postfix = "\n"), Charsets.UTF_8)
         }
@@ -466,6 +525,54 @@ class RuntimeToolkitSourcePipelineExporterTest {
                     url = "https://auth.example.com/oauth/token?client_id=app-123&code=abc123&state=s1",
                     normalizedPath = "/oauth/token",
                     bodyPreview = """{"access_token":"at-1","id_token":"id-1","refresh_token":"rt-1"}""",
+                    normalizedHost = "auth.example.com",
+                    hostClass = "target_primary",
+                ),
+                requestEvent(
+                    eventId = "evt_req_oidc_validation",
+                    requestId = "req_oidc_validation",
+                    phaseId = "auth_probe",
+                    url = "https://auth.example.com/oauth/userinfo",
+                    normalizedPath = "/oauth/userinfo",
+                    operation = "auth_userinfo",
+                    headers = mapOf(
+                        "authorization" to "Bearer at-1",
+                        "accept" to "application/json",
+                    ),
+                ),
+                responseEvent(
+                    eventId = "evt_res_oidc_validation",
+                    requestId = "req_oidc_validation",
+                    phaseId = "auth_probe",
+                    url = "https://auth.example.com/oauth/userinfo",
+                    normalizedPath = "/oauth/userinfo",
+                    bodyPreview = """{"sub":"user-1"}""",
+                    normalizedHost = "auth.example.com",
+                    hostClass = "target_primary",
+                ),
+                requestEvent(
+                    eventId = "evt_req_oidc_refresh",
+                    requestId = "req_oidc_refresh",
+                    phaseId = "auth_probe",
+                    url = "https://auth.example.com/oauth/refresh",
+                    normalizedPath = "/oauth/refresh",
+                    operation = "auth_token_refresh",
+                    method = "POST",
+                    headers = mapOf(
+                        "accept" to "application/json",
+                        "content-type" to "application/json",
+                    ),
+                    extraPayload = JSONObject().apply {
+                        put("body_preview", """{"refresh_token":"rt-1"}""")
+                    },
+                ),
+                responseEvent(
+                    eventId = "evt_res_oidc_refresh",
+                    requestId = "req_oidc_refresh",
+                    phaseId = "auth_probe",
+                    url = "https://auth.example.com/oauth/refresh",
+                    normalizedPath = "/oauth/refresh",
+                    bodyPreview = """{"access_token":"at-2","expires_in":3600}""",
                     normalizedHost = "auth.example.com",
                     hostClass = "target_primary",
                 ),
@@ -602,6 +709,76 @@ class RuntimeToolkitSourcePipelineExporterTest {
                 url = "https://www.zdf.de/api/playback/resolver?canonical=cid_1",
                 normalizedPath = "/api/playback/resolver",
                 bodyPreview = """{"manifestUrl":"https://cdn.zdf.de/live/master.m3u8","streamUrl":"https://cdn.zdf.de/live/master.m3u8"}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_auth_login",
+                requestId = "req_auth_login",
+                phaseId = "auth_probe",
+                url = "https://www.zdf.de/api/auth/login?client_id=mapper-app",
+                normalizedPath = "/api/auth/login",
+                operation = "auth_login",
+                method = "POST",
+                headers = mapOf(
+                    "accept" to "application/json",
+                    "content-type" to "application/json",
+                ),
+                extraPayload = JSONObject().apply {
+                    put("body_preview", """{"username":"demo@example.org","password":"secret"}""")
+                },
+            ),
+            responseEvent(
+                eventId = "evt_res_auth_login",
+                requestId = "req_auth_login",
+                phaseId = "auth_probe",
+                url = "https://www.zdf.de/api/auth/login?client_id=mapper-app",
+                normalizedPath = "/api/auth/login",
+                bodyPreview = """{"session":"ok","expires_in":3600}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_auth_validation",
+                requestId = "req_auth_validation",
+                phaseId = "auth_probe",
+                url = "https://www.zdf.de/api/auth/userinfo",
+                normalizedPath = "/api/auth/userinfo",
+                operation = "auth_userinfo",
+                headers = mapOf(
+                    "accept" to "application/json",
+                    "authorization" to "Bearer at-1",
+                ),
+            ),
+            responseEvent(
+                eventId = "evt_res_auth_validation",
+                requestId = "req_auth_validation",
+                phaseId = "auth_probe",
+                url = "https://www.zdf.de/api/auth/userinfo",
+                normalizedPath = "/api/auth/userinfo",
+                bodyPreview = """{"id":"u1","profile":"ok"}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_auth_refresh",
+                requestId = "req_auth_refresh_base",
+                phaseId = "auth_probe",
+                url = "https://www.zdf.de/api/auth/refresh?device=android",
+                normalizedPath = "/api/auth/refresh",
+                operation = "auth_token_refresh",
+                method = "POST",
+                headers = mapOf(
+                    "accept" to "application/json",
+                    "authorization" to "Bearer at-1",
+                    "cookie" to "sid=abc",
+                    "content-type" to "application/json",
+                ),
+                extraPayload = JSONObject().apply {
+                    put("body_preview", """{"refreshToken":"rt-1","grant_type":"refresh_token"}""")
+                },
+            ),
+            responseEvent(
+                eventId = "evt_res_auth_refresh",
+                requestId = "req_auth_refresh_base",
+                phaseId = "auth_probe",
+                url = "https://www.zdf.de/api/auth/refresh?device=android",
+                normalizedPath = "/api/auth/refresh",
+                bodyPreview = """{"access_token":"at-2","refresh_token":"rt-2","expires_in":3600}""",
             ),
         )
         return lines.joinToString(separator = "\n", postfix = "\n")

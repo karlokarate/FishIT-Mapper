@@ -2461,6 +2461,15 @@ open class BrowserActivity : FragmentActivity(),
                 targetSiteId = after.targetSiteId,
                 payload = mapOf("source" to "auto_advance"),
             )
+            val step = RuntimeToolkitMissionWizard.stepById(after.missionId, after.wizardStepId, this)
+            if (!step?.phaseId.isNullOrBlank()) {
+                RuntimeToolkitTelemetry.logProbePhaseEvent(
+                    context = this,
+                    phaseId = step?.phaseId ?: "background_noise",
+                    transition = "start",
+                    payload = mapOf("source" to "auto_advance"),
+                )
+            }
             armWizardUndoWindow(before)
             updateMissionWizardUi()
         }

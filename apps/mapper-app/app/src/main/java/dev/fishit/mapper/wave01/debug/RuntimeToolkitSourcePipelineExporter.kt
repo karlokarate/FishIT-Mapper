@@ -67,6 +67,7 @@ object RuntimeToolkitSourcePipelineExporter {
         val requiredHeaders: MutableSet<String> = linkedSetOf(),
         val optionalHeaders: MutableSet<String> = linkedSetOf(),
         val requiredCookies: MutableSet<String> = linkedSetOf(),
+        val optionalCookies: MutableSet<String> = linkedSetOf(),
         val requiredProvenanceInputs: MutableSet<String> = linkedSetOf(),
         val requiredQueryParams: MutableSet<String> = linkedSetOf(),
         val optionalQueryParams: MutableSet<String> = linkedSetOf(),
@@ -81,10 +82,16 @@ object RuntimeToolkitSourcePipelineExporter {
     private data class FieldEvidence(
         var valueTemplate: Any? = null,
         var sourceKind: String = "unknown",
-        var sourceRef: String = "runtime_events",
+        var sourceRef: String = "",
         var derivationKind: String = "missing",
         var confidence: Double = 0.0,
         val observedInRoles: MutableSet<String> = linkedSetOf(),
+    )
+
+    private data class EndpointTemplatePayload(
+        val queryTemplate: JSONObject,
+        val bodyTemplate: JSONObject,
+        val variablePlaceholders: JSONArray,
     )
 
     private val fieldOrder = listOf(
@@ -239,16 +246,42 @@ object RuntimeToolkitSourcePipelineExporter {
                 )
             endpoint.requiredProvenanceInputs += provenanceInputs
 
+            val observedRequiredHeaders = linkedSetOf<String>()
+            val observedCookieNames = linkedSetOf<String>()
+            var observedOrigin: String? = null
+            var observedReferer: String? = null
             request.headers.forEach { (name, value) ->
                 val lowered = name.lowercase(Locale.ROOT)
                 when {
-                    lowered in setOf("authorization", "api-auth", "x-api-auth", "x-auth-token") -> endpoint.requiredHeaders += lowered
-                    lowered == "cookie" -> endpoint.requiredCookies += parseCookieNames(value)
-                    lowered == "origin" -> endpoint.requiredOrigin = value.takeIf { it.isNotBlank() }
-                    lowered == "referer" || lowered == "referrer" -> endpoint.requiredReferer = value.takeIf { it.isNotBlank() }
+                    lowered in setOf("authorization", "api-auth", "x-api-auth", "x-auth-token") -> observedRequiredHeaders += lowered
+                    lowered == "cookie" -> observedCookieNames += parseCookieNames(value)
+                    lowered == "origin" -> {
+                        val origin = value.takeIf { it.isNotBlank() }
+                        observedOrigin = origin
+                    }
+                    lowered == "referer" || lowered == "referrer" -> {
+                        val referer = value.takeIf { it.isNotBlank() }
+                        observedReferer = referer
+                    }
                     lowered.isNotBlank() && lowered !in setOf("accept-encoding", "connection", "pragma", "cache-control") -> endpoint.optionalHeaders += lowered
                 }
             }
+            if (endpoint.requestEvidenceCount == 0) {
+                endpoint.requiredHeaders += observedRequiredHeaders
+                endpoint.requiredCookies += observedCookieNames
+                endpoint.requiredOrigin = observedOrigin
+                endpoint.requiredReferer = observedReferer
+            } else {
+                endpoint.requiredHeaders.retainAll(observedRequiredHeaders)
+                endpoint.requiredCookies.retainAll(observedCookieNames)
+                if (endpoint.requiredOrigin != null && observedOrigin != endpoint.requiredOrigin) {
+                    endpoint.requiredOrigin = null
+                }
+                if (endpoint.requiredReferer != null && observedReferer != endpoint.requiredReferer) {
+                    endpoint.requiredReferer = null
+                }
+            }
+            endpoint.optionalCookies += observedCookieNames
 
             val queryNames = request.queryParamNames
             if (endpoint.requestEvidenceCount == 0) {
@@ -288,6 +321,15 @@ object RuntimeToolkitSourcePipelineExporter {
         endpointById.values
             .sortedBy { it.endpointId.lowercase(Locale.ROOT) }
             .forEach { endpoint ->
+                val stableRequiredQueryParams = endpoint.requiredQueryParams.filterTo(linkedSetOf()) { isStableRequiredInputName(it) }
+                val stableRequiredBodyFields = endpoint.requiredBodyFields.filterTo(linkedSetOf()) { isStableRequiredInputName(it) }
+                val templatePayload = buildEndpointTemplates(
+                    requiredQueryParams = stableRequiredQueryParams,
+                    optionalQueryParams = endpoint.optionalQueryParams,
+                    requiredBodyFields = stableRequiredBodyFields,
+                    optionalBodyFields = endpoint.optionalBodyFields,
+                    requiredProvenanceInputs = endpoint.requiredProvenanceInputs,
+                )
                 endpointTemplates.put(
                     JSONObject().apply {
                         put("endpointId", endpoint.endpointId)
@@ -299,9 +341,9 @@ object RuntimeToolkitSourcePipelineExporter {
                         put("graphqlOperationName", JSONObject.NULL)
                         put("requestOperation", endpoint.requestOperation)
                         put("pathTemplate", endpoint.normalizedPath)
-                        put("queryTemplate", JSONObject.NULL)
-                        put("bodyTemplate", JSONObject.NULL)
-                        put("variablePlaceholders", variablePlaceholdersForEndpoint(endpoint.role))
+                        put("queryTemplate", templatePayload.queryTemplate)
+                        put("bodyTemplate", templatePayload.bodyTemplate)
+                        put("variablePlaceholders", templatePayload.variablePlaceholders)
                         put("phaseRelevance", JSONArray(endpoint.phaseRelevance.toList()))
                         put("requiredProvenanceInputs", JSONArray(endpoint.requiredProvenanceInputs.toList()))
                         put("sourceEvidenceRefs", JSONArray((endpoint.requestEventIds.map { "request:$it" } + endpoint.responseEventIds.map { "response:$it" }).take(20)))
@@ -316,21 +358,27 @@ object RuntimeToolkitSourcePipelineExporter {
                         put("requiredHeaders", namedRequirements(endpoint.requiredHeaders, "required_proven"))
                         put("optionalHeaders", namedRequirements(endpoint.optionalHeaders, "optional_observed"))
                         put("requiredCookies", namedRequirements(endpoint.requiredCookies, "required_proven", cookie = true))
-                        put("optionalCookies", JSONArray())
-                        put("requiredQueryParams", namedRequirements(endpoint.requiredQueryParams, "required_proven"))
+                        put("optionalCookies", namedRequirements(endpoint.optionalCookies.minus(endpoint.requiredCookies), "optional_observed", cookie = true))
+                        put("requiredQueryParams", namedRequirements(stableRequiredQueryParams, "required_proven"))
                         put(
                             "optionalQueryParams",
-                            namedRequirements(endpoint.optionalQueryParams.minus(endpoint.requiredQueryParams), "optional_observed"),
+                            namedRequirements(endpoint.optionalQueryParams.minus(stableRequiredQueryParams), "optional_observed"),
                         )
-                        put("requiredBodyFields", namedRequirements(endpoint.requiredBodyFields, "required_proven"))
+                        put("requiredBodyFields", namedRequirements(stableRequiredBodyFields, "required_proven"))
                         put(
                             "optionalBodyFields",
-                            namedRequirements(endpoint.optionalBodyFields.minus(endpoint.requiredBodyFields), "optional_observed"),
+                            namedRequirements(endpoint.optionalBodyFields.minus(stableRequiredBodyFields), "optional_observed"),
                         )
                         put("requiredReferer", endpoint.requiredReferer ?: JSONObject.NULL)
                         put("requiredOrigin", endpoint.requiredOrigin ?: JSONObject.NULL)
                         put("requiredProvenanceInputs", JSONArray(endpoint.requiredProvenanceInputs.toList()))
-                        put("browserAssistanceNeeded", endpoint.requiredReferer != null || endpoint.requiredOrigin != null)
+                        put(
+                            "browserAssistanceNeeded",
+                            endpoint.requiredReferer != null ||
+                                endpoint.requiredOrigin != null ||
+                                endpoint.role == "auth" ||
+                                endpoint.role == "refresh",
+                        )
                         put(
                             "minimizationEvidence",
                             JSONObject().apply {
@@ -381,13 +429,19 @@ object RuntimeToolkitSourcePipelineExporter {
         val allRequiredHeaders = endpointById.values.flatMap { it.requiredHeaders }.toSet()
         val allRequiredCookies = endpointById.values.flatMap { it.requiredCookies }.toSet()
         val authTokenInputs = endpointById.values.flatMap { it.requiredProvenanceInputs }.toSet()
+        val authLifecycleInsights = collectTokenLifecycleInsights(runtimeRoot, responses)
         val authOrRefreshEndpoints = endpointById.values.filter { it.role == "auth" || it.role == "refresh" }
         val refreshEndpointId = authOrRefreshEndpoints
             .firstOrNull { isRefreshEndpointCandidate(it) }
             ?.endpointId
-        val validationEndpointId = authOrRefreshEndpoints
-            .firstOrNull { !isRefreshEndpointCandidate(it) }
+        val loginEndpointId = authOrRefreshEndpoints
+            .sortedByDescending { loginEndpointScore(it) }
+            .firstOrNull { isLoginEndpointCandidate(it) }
             ?.endpointId
+        val validationEndpointId = authOrRefreshEndpoints
+            .firstOrNull { isValidationEndpointCandidate(it) }
+            ?.endpointId
+            ?: loginEndpointId
             ?: refreshEndpointId
         val requiresLogin = allRequiredHeaders.isNotEmpty() || allRequiredCookies.isNotEmpty() || roleById.values.any { it == "auth" }
         val requiresBrowserSession = endpointById.values.any { it.requiredOrigin != null || it.requiredReferer != null }
@@ -463,7 +517,17 @@ object RuntimeToolkitSourcePipelineExporter {
                     put("requiredTokenInputs", requiredTokenInputs(authTokenInputs, endpointById.values))
                     put("provenanceRefs", JSONArray(authTokenInputs.map { "prov:${normalizeProvenanceName(it)}" }.sorted()))
                     put("authConfidence", if (requiresLogin) 0.7 else 0.95)
-                    put("authWarnings", JSONArray())
+                    put(
+                        "authWarnings",
+                        JSONArray(
+                            buildList {
+                                addAll(authLifecycleInsights.refreshTriggers)
+                                if (loginEndpointId != null) add("login_endpoint_ref:$loginEndpointId")
+                                if (validationEndpointId != null) add("validation_endpoint_ref:$validationEndpointId")
+                                if (refreshEndpointId != null) add("refresh_endpoint_ref:$refreshEndpointId")
+                            }.distinct().sorted(),
+                        ),
+                    )
                 },
             )
             put(
@@ -505,7 +569,7 @@ object RuntimeToolkitSourcePipelineExporter {
                     put("replayMode", if (requiresBrowserSession) "browser_assisted" else "native_preferred")
                     put("requiresOrigin", endpointById.values.any { it.requiredOrigin != null })
                     put("requiresReferer", endpointById.values.any { it.requiredReferer != null })
-                    put("tokenTtlHints", JSONArray())
+                    put("tokenTtlHints", JSONArray(authLifecycleInsights.ttlHints))
                 },
             )
             put("warnings", JSONArray())
@@ -569,6 +633,17 @@ object RuntimeToolkitSourcePipelineExporter {
             }
         }
 
+        val gateFailures = validateExportGates(
+            bundle = bundle,
+            endpointById = endpointById,
+            loginEndpointId = loginEndpointId,
+            validationEndpointId = validationEndpointId,
+            refreshEndpointId = refreshEndpointId,
+        )
+        require(gateFailures.isEmpty()) {
+            "source pipeline export blocked by gates:\n- ${gateFailures.joinToString("\n- ")}"
+        }
+
         val siteRuntimeModel = buildSiteRuntimeModel(bundle)
         val manifest = JSONObject().apply {
             put("bundleType", "source_pipeline_bundle_zip")
@@ -618,6 +693,195 @@ object RuntimeToolkitSourcePipelineExporter {
             manifestPath = manifestPath,
             sourcePluginBundleZipPath = sourcePluginBundleZipPath,
         )
+    }
+
+    private fun validateExportGates(
+        bundle: JSONObject,
+        endpointById: Map<String, EndpointAggregate>,
+        loginEndpointId: String?,
+        validationEndpointId: String?,
+        refreshEndpointId: String?,
+    ): List<String> {
+        val failures = mutableListOf<String>()
+        val capabilities = bundle.optJSONObject("capabilities") ?: JSONObject()
+        val sessionAuth = bundle.optJSONObject("sessionAuth") ?: JSONObject()
+        val endpointTemplates = jsonObjects(bundle.optJSONArray("endpointTemplates"))
+        val replayRequirements = jsonObjects(bundle.optJSONArray("replayRequirements"))
+        val fieldMappings = jsonObjects(bundle.optJSONArray("fieldMappings"))
+        val endpointIds = endpointTemplates.mapNotNull { it.optString("endpointId").takeIf { id -> id.isNotBlank() } }
+        val endpointIdSet = endpointIds.toSet()
+        val replayByEndpointRef = replayRequirements.associateBy { it.optString("endpointRef") }
+        val endpointByRef = endpointTemplates.associateBy { it.optString("endpointId") }
+
+        if (endpointIds.size != endpointIdSet.size) {
+            failures += "duplicate endpointId detected in endpointTemplates"
+        }
+
+        val requiresLogin = sessionAuth.optBoolean("requiresLogin")
+        if (requiresLogin) {
+            if (loginEndpointId.isNullOrBlank()) failures += "auth chain incomplete: missing login endpointRef"
+            if (validationEndpointId.isNullOrBlank()) failures += "auth chain incomplete: missing validation endpointRef"
+            if (refreshEndpointId.isNullOrBlank()) failures += "auth chain incomplete: missing refresh endpointRef"
+        }
+
+        listOf(
+            "login" to loginEndpointId,
+            "validation" to validationEndpointId,
+            "refresh" to refreshEndpointId,
+        ).forEach { (step, ref) ->
+            if (ref.isNullOrBlank()) return@forEach
+            if (ref !in endpointIdSet) {
+                failures += "auth chain endpointRef '$step' not found in endpointTemplates: $ref"
+            }
+            if (!replayByEndpointRef.containsKey(ref)) {
+                failures += "auth chain endpointRef '$step' has no replayRequirements entry: $ref"
+            }
+            val endpoint = endpointByRef[ref]
+            if (endpoint != null) {
+                if (endpoint.optString("method").isBlank()) failures += "auth endpoint '$step' missing method: $ref"
+                if (endpoint.optString("pathTemplate").isBlank()) failures += "auth endpoint '$step' missing pathTemplate: $ref"
+                if (endpoint.opt("queryTemplate") !is JSONObject) failures += "auth endpoint '$step' missing queryTemplate object: $ref"
+                if (endpoint.opt("bodyTemplate") !is JSONObject) failures += "auth endpoint '$step' missing bodyTemplate object: $ref"
+                val placeholders = jsonObjects(endpoint.optJSONArray("variablePlaceholders"))
+                if (placeholders.isEmpty()) {
+                    failures += "auth endpoint '$step' missing variablePlaceholders: $ref"
+                }
+            }
+        }
+
+        endpointTemplates.forEach { endpoint ->
+            val endpointRef = endpoint.optString("endpointId")
+            if (endpointRef.isBlank()) return@forEach
+            val queryTemplateText = endpoint.opt("queryTemplate")?.toString().orEmpty()
+            val bodyTemplateText = endpoint.opt("bodyTemplate")?.toString().orEmpty()
+            val pathTemplate = endpoint.optString("pathTemplate")
+            jsonObjects(endpoint.optJSONArray("variablePlaceholders"))
+                .filter { it.optBoolean("required") }
+                .forEach { placeholder ->
+                    val name = placeholder.optString("name").trim()
+                    if (name.isBlank()) {
+                        failures += "endpoint '$endpointRef' has required placeholder with empty name"
+                        return@forEach
+                    }
+                    val location = placeholder.optString("location").trim().lowercase(Locale.ROOT)
+                    val token = placeholderToken(name)
+                    val used = when (location) {
+                        "query" -> queryTemplateText.contains(token)
+                        "body" -> bodyTemplateText.contains(token)
+                        "path" -> pathTemplate.contains(token)
+                        else -> listOf(pathTemplate, queryTemplateText, bodyTemplateText).any { it.contains(token) }
+                    }
+                    if (!used) {
+                        failures += "required placeholder '$name' (location=$location) is not used in endpoint template: $endpointRef"
+                    }
+                }
+        }
+
+        replayRequirements.forEach { replay ->
+            val endpointRef = replay.optString("endpointRef")
+            if (endpointRef.isBlank()) {
+                failures += "replayRequirements entry missing endpointRef"
+                return@forEach
+            }
+            val endpoint = endpointByRef[endpointRef]
+            if (endpoint == null) {
+                failures += "replayRequirements endpointRef does not exist in endpointTemplates: $endpointRef"
+                return@forEach
+            }
+            listOf("requiredHeaders", "requiredCookies", "requiredQueryParams", "requiredBodyFields").forEach { key ->
+                jsonObjects(replay.optJSONArray(key)).forEach { item ->
+                    val name = item.optString("name").trim()
+                    val status = item.optString("status").trim().lowercase(Locale.ROOT)
+                    val provenanceRef = item.opt("provenanceRef")
+                    if (name.isBlank()) {
+                        failures += "$key on endpoint '$endpointRef' contains empty name"
+                    }
+                    if (status in setOf("required", "required_proven")) {
+                        if (provenanceRef == null || provenanceRef == JSONObject.NULL || provenanceRef.toString().trim().isBlank()) {
+                            failures += "$key on endpoint '$endpointRef' has required item '$name' without provenanceRef"
+                        }
+                    }
+                }
+            }
+            val queryTemplateText = endpoint.opt("queryTemplate")?.toString().orEmpty()
+            jsonObjects(replay.optJSONArray("requiredQueryParams")).forEach { item ->
+                val name = item.optString("name").trim()
+                if (name.isBlank()) return@forEach
+                val placeholderName = sanitizePlaceholderName(name)
+                if (placeholderName.isBlank() || !queryTemplateText.contains(placeholderToken(placeholderName))) {
+                    failures += "required query param '$name' on endpoint '$endpointRef' is not resolvable in queryTemplate"
+                }
+            }
+            val bodyTemplateText = endpoint.opt("bodyTemplate")?.toString().orEmpty()
+            jsonObjects(replay.optJSONArray("requiredBodyFields")).forEach { item ->
+                val name = item.optString("name").trim()
+                if (name.isBlank()) return@forEach
+                val placeholderName = sanitizePlaceholderName(name)
+                if (placeholderName.isBlank() || !bodyTemplateText.contains(placeholderToken(placeholderName))) {
+                    failures += "required body field '$name' on endpoint '$endpointRef' is not resolvable in bodyTemplate"
+                }
+            }
+        }
+
+        fieldMappings.forEach { row ->
+            val fieldName = row.optString("fieldName")
+            val sourceRef = row.optString("sourceRef").trim()
+            if (sourceRef.isBlank() || sourceRef !in endpointIdSet) {
+                failures += "fieldMappings.$fieldName has non-runtime sourceRef: '$sourceRef' (must match endpointId)"
+            }
+            val derivation = row.optString("derivationKind").trim().ifBlank { "missing" }
+            val template = row.opt("valueTemplate")
+            if (derivation == "missing") return@forEach
+            if (template == null || template == JSONObject.NULL) {
+                failures += "fieldMappings.$fieldName has derivationKind=$derivation without valueTemplate"
+                return@forEach
+            }
+            when (template) {
+                is String -> {
+                    val value = template.trim()
+                    if (!looksEvaluableValueTemplate(value)) {
+                        failures += "fieldMappings.$fieldName has non-evaluable valueTemplate string: '$value'"
+                    }
+                }
+                is JSONObject -> {
+                    if (template.length() == 0) {
+                        failures += "fieldMappings.$fieldName has empty valueTemplate object"
+                    }
+                    template.keys().forEach { key ->
+                        val value = template.optString(key).trim()
+                        if (!looksEvaluableValueTemplate(value)) {
+                            failures += "fieldMappings.$fieldName has non-evaluable mapping template at '$key': '$value'"
+                        }
+                    }
+                }
+                else -> failures += "fieldMappings.$fieldName has unsupported valueTemplate type: ${template.javaClass.simpleName}"
+            }
+        }
+
+        if (capabilities.optBoolean("requiresLogin")) {
+            val validationRef = sessionAuth.optString("validationEndpointRef")
+            val refreshRef = sessionAuth.optString("refreshEndpointRef")
+            if (validationRef.isBlank()) failures += "sessionAuth.validationEndpointRef missing while requiresLogin=true"
+            if (refreshRef.isBlank()) failures += "sessionAuth.refreshEndpointRef missing while requiresLogin=true"
+        }
+
+        // Keep mapper-only gate consistent with generated endpoint map.
+        endpointById.keys.forEach { id ->
+            if (id !in endpointIdSet) {
+                failures += "internal endpoint map contains id not exported in endpointTemplates: $id"
+            }
+        }
+        return failures.distinct().sorted()
+    }
+
+    private fun looksEvaluableValueTemplate(template: String): Boolean {
+        if (template.isBlank()) return false
+        if (template.contains(' ')) return false
+        if (template.startsWith("http://", ignoreCase = true) || template.startsWith("https://", ignoreCase = true)) {
+            return false
+        }
+        val allowed = Regex("^[A-Za-z0-9_.:\\[\\]-]+$")
+        return allowed.matches(template)
     }
 
     private fun buildSiteRuntimeModel(bundle: JSONObject): JSONObject {
@@ -1204,10 +1468,19 @@ object RuntimeToolkitSourcePipelineExporter {
             .mapNotNull { token -> token.optString("inputName").takeIf { it.isNotBlank() } }
             .distinct()
             .sorted()
+        val authWarnings = jsonStrings(sessionAuth.optJSONArray("authWarnings"))
+        val loginEndpointRef = authWarnings
+            .firstOrNull { it.startsWith("login_endpoint_ref:") }
+            ?.substringAfter("login_endpoint_ref:")
+            ?.trim()
+            .orEmpty()
         return JSONObject().apply {
             put("auth_mode", sessionAuth.optString("authMode", "none"))
             put("session_artifacts", sessionArtifacts)
             put("provenance_backed_token_inputs", JSONArray(tokenInputs))
+            if (loginEndpointRef.isNotBlank()) {
+                put("login_endpoint_ref", loginEndpointRef)
+            }
             sessionAuth.opt("validationEndpointRef")
                 ?.takeIf { it != JSONObject.NULL }
                 ?.toString()
@@ -1220,7 +1493,7 @@ object RuntimeToolkitSourcePipelineExporter {
                 ?.let { put("refresh_endpoint_ref", it) }
             put("browser_session_required", sessionAuth.optBoolean("requiresBrowserSession"))
             put("auth_confidence", sessionAuth.optDouble("authConfidence", 0.0))
-            put("warnings", JSONArray())
+            put("warnings", JSONArray(authWarnings))
         }
     }
 
@@ -1427,7 +1700,18 @@ object RuntimeToolkitSourcePipelineExporter {
         return headers.entries
             .sortedBy { it.key.lowercase(Locale.ROOT) }
             .filter { it.key.lowercase(Locale.ROOT) !in ignored }
-            .associate { it.key to it.value }
+            .mapNotNull { entry ->
+                val key = entry.key.lowercase(Locale.ROOT)
+                val sanitized = when {
+                    key == "cookie" -> "<cookie_from_runtime_session>"
+                    key == "authorization" -> "<authorization_from_runtime_session>"
+                    key.contains("token") -> "<token_from_runtime_session>"
+                    key.contains("secret") -> "<secret_from_runtime_input>"
+                    else -> entry.value
+                }.trim()
+                key.takeIf { it.isNotBlank() }?.let { it to sanitized }
+            }
+            .associate { it.first to it.second }
     }
 
     private fun parseQueryParams(url: String): JSONObject {
@@ -1554,12 +1838,13 @@ object RuntimeToolkitSourcePipelineExporter {
                 .sortedBy { it.key.lowercase(Locale.ROOT) }
                 .groupBy({ it.value }, { it.key })
                 .mapValues { (_, refs) -> refs.firstOrNull().orEmpty() }
+        val firstEndpointRefOverall = roleByEndpoint.keys.sortedBy { it.lowercase(Locale.ROOT) }.firstOrNull().orEmpty()
         val roleFieldPathCandidates = linkedMapOf<String, MutableMap<String, Pair<String, Double>>>()
 
         fun endpointRefFor(response: ResponseEvent, role: String): String {
             return responseEndpointRefByEventId[response.eventId]
                 ?: firstEndpointRefByRole[role]
-                ?: "runtime_events"
+                ?: firstEndpointRefOverall
         }
 
         fun rememberRolePath(role: String, fieldName: String, path: String, confidence: Double) {
@@ -1770,7 +2055,7 @@ object RuntimeToolkitSourcePipelineExporter {
                     field = evidence("searchMapping", evidence),
                     valueTemplate = searchTemplate,
                     sourceKind = "derived",
-                    sourceRef = firstEndpointRefByRole["search"] ?: "runtime_events",
+                    sourceRef = firstEndpointRefByRole["search"] ?: firstEndpointRefOverall,
                     role = "search",
                     confidence = 0.86,
                     derivationKind = "derived",
@@ -1779,7 +2064,7 @@ object RuntimeToolkitSourcePipelineExporter {
                 setDerivedFallback(
                     field = evidence("searchMapping", evidence),
                     valueTemplate = JSONObject().put("title", "title").put("canonicalId", "canonical"),
-                    sourceRef = firstEndpointRefByRole["search"] ?: "search_mapping_inferred",
+                    sourceRef = firstEndpointRefByRole["search"] ?: firstEndpointRefOverall,
                     confidence = 0.6,
                     role = "search",
                 )
@@ -1796,7 +2081,7 @@ object RuntimeToolkitSourcePipelineExporter {
                     field = evidence("detailMapping", evidence),
                     valueTemplate = detailTemplate,
                     sourceKind = "derived",
-                    sourceRef = firstEndpointRefByRole["detail"] ?: "runtime_events",
+                    sourceRef = firstEndpointRefByRole["detail"] ?: firstEndpointRefOverall,
                     role = "detail",
                     confidence = 0.88,
                     derivationKind = "derived",
@@ -1805,7 +2090,7 @@ object RuntimeToolkitSourcePipelineExporter {
                 setDerivedFallback(
                     field = evidence("detailMapping", evidence),
                     valueTemplate = JSONObject().put("title", "title").put("canonicalId", "canonical"),
-                    sourceRef = firstEndpointRefByRole["detail"] ?: "detail_mapping_inferred",
+                    sourceRef = firstEndpointRefByRole["detail"] ?: firstEndpointRefOverall,
                     confidence = 0.6,
                     role = "detail",
                 )
@@ -1817,7 +2102,7 @@ object RuntimeToolkitSourcePipelineExporter {
                 valueTemplate = "currentMedia.nodes[].ptmdTemplate",
                     sourceRef = firstEndpointRefByRole["playbackResolver"]
                         ?: firstEndpointRefByRole["playback_resolver"]
-                        ?: "playback_hint_inferred",
+                        ?: firstEndpointRefOverall,
                 confidence = 0.6,
                 role = "playbackResolver",
             )
@@ -1826,7 +2111,7 @@ object RuntimeToolkitSourcePipelineExporter {
             setDerivedFallback(
                 field = evidence("title", evidence),
                 valueTemplate = "title",
-                sourceRef = firstEndpointRefByRole["detail"] ?: "title_fallback",
+                sourceRef = firstEndpointRefByRole["detail"] ?: firstEndpointRefOverall,
                 confidence = 0.5,
                 role = "detail",
             )
@@ -1835,7 +2120,7 @@ object RuntimeToolkitSourcePipelineExporter {
             setDerivedFallback(
                 field = evidence("canonicalId", evidence),
                 valueTemplate = "canonical",
-                sourceRef = firstEndpointRefByRole["detail"] ?: "canonical_fallback",
+                sourceRef = firstEndpointRefByRole["detail"] ?: firstEndpointRefOverall,
                 confidence = 0.5,
                 role = "detail",
             )
@@ -1844,6 +2129,9 @@ object RuntimeToolkitSourcePipelineExporter {
         val result = JSONArray()
         fieldOrder.forEach { fieldName ->
             val row = evidence(fieldName, evidence)
+            if (row.sourceRef.isBlank()) {
+                row.sourceRef = firstEndpointRefOverall
+            }
             result.put(
                 JSONObject().apply {
                     put("fieldName", fieldName)
@@ -1965,12 +2253,12 @@ object RuntimeToolkitSourcePipelineExporter {
                 else -> valueTemplate
             }
         val shouldReplace =
-            field.derivationKind == "missing" ||
+                field.derivationKind == "missing" ||
                 confidence > field.confidence + 0.02 ||
                 (
                     confidence >= field.confidence - 0.01 &&
-                        field.sourceRef.equals("runtime_events", ignoreCase = true) &&
-                        !sourceRef.equals("runtime_events", ignoreCase = true)
+                        field.sourceRef.isBlank() &&
+                        sourceRef.isNotBlank()
                 )
         if (shouldReplace) {
             field.valueTemplate = normalizedTemplate
@@ -2109,6 +2397,100 @@ object RuntimeToolkitSourcePipelineExporter {
         return candidate.contains("refresh") || candidate.contains("token_refresh") || candidate.contains("/refresh")
     }
 
+    private fun isLoginEndpointCandidate(endpoint: EndpointAggregate): Boolean {
+        val candidate = "${endpoint.requestOperation} ${endpoint.normalizedPath} ${endpoint.endpointId}"
+            .lowercase(Locale.ROOT)
+        if (isRefreshEndpointCandidate(endpoint)) return false
+        return candidate.contains("login") ||
+            candidate.contains("signin") ||
+            candidate.contains("authorize") ||
+            candidate.contains("oidc") ||
+            candidate.contains("oauth/token") ||
+            candidate.contains("/token")
+    }
+
+    private fun loginEndpointScore(endpoint: EndpointAggregate): Int {
+        val candidate = "${endpoint.requestOperation} ${endpoint.normalizedPath} ${endpoint.endpointId}"
+            .lowercase(Locale.ROOT)
+        var score = 0
+        if (candidate.contains("auth_login") || candidate.contains("/login") || candidate.contains("signin")) score += 160
+        if (candidate.contains("oidc") || candidate.contains("oauth/token") || candidate.contains("authorize")) score += 110
+        if (candidate.contains("/token")) score += 40
+        if (candidate.contains("refresh")) score -= 140
+        score += endpoint.requiredBodyFields.size * 12
+        score += endpoint.requiredQueryParams.size * 6
+        return score
+    }
+
+    private fun isValidationEndpointCandidate(endpoint: EndpointAggregate): Boolean {
+        val candidate = "${endpoint.requestOperation} ${endpoint.normalizedPath} ${endpoint.endpointId}"
+            .lowercase(Locale.ROOT)
+        if (isRefreshEndpointCandidate(endpoint)) return false
+        return candidate.contains("validate") ||
+            candidate.contains("validation") ||
+            candidate.contains("userinfo") ||
+            candidate.contains("userdetails") ||
+            candidate.contains("session") ||
+            candidate.contains("profile") ||
+            candidate.contains("/me")
+    }
+
+    private data class TokenLifecycleInsights(
+        val ttlHints: List<String>,
+        val refreshTriggers: List<String>,
+    )
+
+    private fun collectTokenLifecycleInsights(
+        runtimeRoot: File,
+        responses: List<ResponseEvent>,
+    ): TokenLifecycleInsights {
+        val ttlHints = linkedSetOf<String>()
+        val refreshTriggers = linkedSetOf<String>()
+        responses.forEach { response ->
+            val role = inferRole(response.phaseId, response.operation, response.normalizedPath, response.url)
+            if (response.statusCode == 401 || response.statusCode == 403) {
+                refreshTriggers += "refresh_trigger:http_${response.statusCode}"
+            }
+            val isAuthLike = role == "auth" || role == "refresh" ||
+                response.operation.contains("auth", ignoreCase = true) ||
+                response.operation.contains("token", ignoreCase = true) ||
+                response.operation.contains("refresh", ignoreCase = true)
+            if (!isAuthLike) return@forEach
+            val body = readResponseBody(runtimeRoot, response)
+            val json = runCatching { JSONObject(body) }.getOrNull()
+                ?: runCatching { JSONArray(body) }.getOrNull()
+                ?: return@forEach
+            val leaves = mutableListOf<Pair<String, Any?>>()
+            collectJsonLeaves(json, "", leaves)
+            leaves.forEach { (path, _) ->
+                val lowered = path.lowercase(Locale.ROOT)
+                when {
+                    lowered.contains("expires_in") -> ttlHints += "expires_in"
+                    lowered.endsWith(".exp") || lowered == "exp" -> ttlHints += "exp"
+                    lowered.contains("expiresat") || lowered.contains("expires_at") || lowered.contains("expiry") -> ttlHints += "expires_at"
+                    lowered.contains("ttl") -> ttlHints += "ttl"
+                }
+            }
+            if (isRefreshEndpointCandidate(
+                    EndpointAggregate(
+                        endpointId = "insight",
+                        role = role,
+                        method = "GET",
+                        normalizedHost = response.normalizedHost,
+                        normalizedPath = response.normalizedPath,
+                        requestOperation = response.operation,
+                    ),
+                )
+            ) {
+                refreshTriggers += "refresh_endpoint_observed"
+            }
+        }
+        return TokenLifecycleInsights(
+            ttlHints = ttlHints.toList().sorted(),
+            refreshTriggers = refreshTriggers.toList().sorted(),
+        )
+    }
+
     private fun normalizeProvenanceName(name: String): String {
         return name
             .trim()
@@ -2149,31 +2531,128 @@ object RuntimeToolkitSourcePipelineExporter {
         }
     }
 
-    private fun variablePlaceholdersForEndpoint(role: String): JSONArray {
-        val placeholders = JSONArray()
-        when (role) {
-            "search" -> placeholders.put(
-                JSONObject().apply {
-                    put("name", "query")
-                    put("location", "query")
-                    put("required", true)
-                    put("valueType", "string")
-                    put("defaultTemplate", JSONObject.NULL)
-                },
-            )
-
-            "detail", "playbackResolver", "playback_resolver" -> placeholders.put(
-                JSONObject().apply {
-                    put("name", "canonical")
-                    put("location", "query")
-                    put("required", true)
-                    put("valueType", "string")
-                    put("defaultTemplate", JSONObject.NULL)
-                },
-            )
+    private fun isStableRequiredInputName(rawName: String): Boolean {
+        val name = rawName.trim().lowercase(Locale.ROOT)
+        if (name.isBlank()) return false
+        val volatileMarkers = listOf(
+            "ts",
+            "timestamp",
+            "nonce",
+            "request_id",
+            "trace_id",
+            "span_id",
+            "cache_bust",
+            "cb",
+            "_",
+        )
+        return volatileMarkers.none { marker ->
+            name == marker || name.endsWith(".$marker") || name.contains("_$marker") || name.contains(".$marker")
         }
-        return placeholders
     }
+
+    private fun buildEndpointTemplates(
+        requiredQueryParams: Set<String>,
+        optionalQueryParams: Set<String>,
+        requiredBodyFields: Set<String>,
+        optionalBodyFields: Set<String>,
+        requiredProvenanceInputs: Set<String>,
+    ): EndpointTemplatePayload {
+        val queryTemplate = JSONObject()
+        val bodyTemplate = JSONObject()
+        val placeholders = JSONArray()
+        val seenPlaceholders = linkedSetOf<String>()
+        val sanitizedRequiredQuery = requiredQueryParams
+            .map { sanitizePlaceholderName(it) }
+            .filter { it.isNotBlank() }
+            .toSet()
+        val sanitizedRequiredBody = requiredBodyFields
+            .map { sanitizePlaceholderName(it) }
+            .filter { it.isNotBlank() }
+            .toSet()
+
+        val allQuery = (requiredQueryParams + optionalQueryParams).sortedBy { it.lowercase(Locale.ROOT) }
+        allQuery.forEach { name ->
+            val normalized = sanitizePlaceholderName(name)
+            if (normalized.isBlank()) return@forEach
+            queryTemplate.put(normalized, placeholderToken(normalized))
+            val key = "query:$normalized"
+            if (seenPlaceholders.add(key)) {
+                placeholders.put(
+                    JSONObject().apply {
+                        put("name", normalized)
+                        put("location", "query")
+                        put("required", normalized in sanitizedRequiredQuery)
+                        put("valueType", "string")
+                        put("defaultTemplate", JSONObject.NULL)
+                    },
+                )
+            }
+        }
+
+        val allBody = (requiredBodyFields + optionalBodyFields).sortedBy { it.lowercase(Locale.ROOT) }
+        allBody.forEach { name ->
+            val normalized = sanitizePlaceholderName(name)
+            if (normalized.isBlank()) return@forEach
+            bodyTemplate.put(normalized, placeholderToken(normalized))
+            val key = "body:$normalized"
+            if (seenPlaceholders.add(key)) {
+                placeholders.put(
+                    JSONObject().apply {
+                        put("name", normalized)
+                        put("location", "body")
+                        put("required", normalized in sanitizedRequiredBody)
+                        put("valueType", "string")
+                        put("defaultTemplate", JSONObject.NULL)
+                    },
+                )
+            }
+        }
+
+        requiredProvenanceInputs
+            .map { sanitizePlaceholderName(it) }
+            .filter { it.isNotBlank() }
+            .sortedBy { it.lowercase(Locale.ROOT) }
+            .forEach { name ->
+                val queryExists = queryTemplate.has(name)
+                val bodyExists = bodyTemplate.has(name)
+                val location = when {
+                    queryExists -> "query"
+                    else -> "body"
+                }
+                if (!queryExists && !bodyExists) {
+                    bodyTemplate.put(name, placeholderToken(name))
+                }
+                val key = "$location:$name"
+                if (seenPlaceholders.add(key)) {
+                    placeholders.put(
+                        JSONObject().apply {
+                            put("name", name)
+                            put("location", location)
+                            put("required", true)
+                            put("valueType", "string")
+                            put("defaultTemplate", JSONObject.NULL)
+                        },
+                    )
+                }
+            }
+
+        return EndpointTemplatePayload(
+            queryTemplate = queryTemplate,
+            bodyTemplate = bodyTemplate,
+            variablePlaceholders = placeholders,
+        )
+    }
+
+    private fun sanitizePlaceholderName(raw: String): String {
+        return raw
+            .trim()
+            .replace(Regex("[^A-Za-z0-9._\\[\\]-]+"), "_")
+            .trim('_', '.', '-')
+            .ifBlank { "" }
+            .take(120)
+    }
+
+    private fun placeholderToken(name: String): String = "\${$name}"
 
     private fun templateKindForRole(role: String, path: String): String {
         val lowered = path.lowercase(Locale.ROOT)

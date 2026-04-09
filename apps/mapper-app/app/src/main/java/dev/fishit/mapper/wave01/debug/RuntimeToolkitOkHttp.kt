@@ -316,6 +316,17 @@ class RuntimeToolkitOkHttpInterceptor(
         val merged = "$normalizedUrl $mime"
         val isSignalHost = hostClass in setOf("target_document", "target_api", "target_playback")
         val isCandidatePhase = phaseId in setOf("home_probe", "search_probe", "detail_probe", "playback_probe", "auth_probe")
+        val isAuthLifecycleUrl = listOf(
+            "/auth",
+            "/oauth",
+            "/identity",
+            "/login",
+            "/signin",
+            "/session",
+            "/userinfo",
+            "refresh",
+            "token",
+        ).any { marker -> normalizedUrl.contains(marker) }
         val isMediaSegment = normalizedUrl.endsWith(".ts") ||
             normalizedUrl.endsWith(".m4s") ||
             normalizedUrl.endsWith(".m4a") ||
@@ -337,6 +348,17 @@ class RuntimeToolkitOkHttpInterceptor(
         }
 
         if (!isSignalHost) {
+            if (isAuthLifecycleUrl && isCandidatePhase) {
+                return CapturePlan(
+                    mode = BODY_ACTION_STORE_FULL_REQUIRED,
+                    captureRaw = true,
+                    peekBytes = MAX_PEEK_BYTES_FULL,
+                    bodyCapturePolicy = "full_candidate_required",
+                    captureReason = "auth_lifecycle_non_target_host",
+                    candidateRelevance = "required_candidate",
+                    truncationReasonOnLimit = "body_size_limit",
+                )
+            }
             return CapturePlan(
                 mode = BODY_ACTION_STORE_METADATA_ONLY,
                 captureRaw = false,
