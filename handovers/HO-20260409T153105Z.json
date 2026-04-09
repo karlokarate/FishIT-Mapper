@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260409T153105Z",
+  "generated_at_utc": "2026-04-09T15:31:05Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260409T153105Z"
+  },
+  "scope": "auth fail-closed export gates + provenance resolvability",
+  "highlights": [
+    "Auth artifacts now fail export without complete login/validation/refresh chain; required header/cookie provenance is runtime-resolvable"
+  ],
+  "changed_files": [
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitSourcePipelineExporter.kt",
+      "old_path": null
+    }
+  ]
+}

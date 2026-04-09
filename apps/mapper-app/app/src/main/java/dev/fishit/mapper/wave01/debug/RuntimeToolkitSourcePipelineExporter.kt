@@ -756,6 +756,32 @@ object RuntimeToolkitSourcePipelineExporter {
         val sessionLoginRef = sessionAuth.optString("loginEndpointRef").trim()
         val sessionValidationRef = sessionAuth.optString("validationEndpointRef").trim()
         val sessionRefreshRef = sessionAuth.optString("refreshEndpointRef").trim()
+        val sessionArtifacts = sessionAuth.optJSONObject("sessionArtifacts") ?: JSONObject()
+        val sessionArtifactHeaders = jsonStrings(sessionArtifacts.optJSONArray("headers")).toSet()
+        val sessionArtifactCookies = jsonStrings(sessionArtifacts.optJSONArray("cookies")).toSet()
+        val sessionTokenInputs = jsonObjects(sessionAuth.optJSONArray("requiredTokenInputs"))
+            .mapNotNull { token ->
+                token.optString("inputName").trim().takeIf { it.isNotBlank() }
+            }
+            .toSet()
+        val sessionAuthWarnings = jsonStrings(sessionAuth.optJSONArray("authWarnings"))
+        val sessionProvenanceRefs = linkedSetOf<String>().apply {
+            addAll(jsonStrings(sessionAuth.optJSONArray("provenanceRefs")).map { it.trim() }.filter { it.isNotBlank() })
+            jsonObjects(sessionAuth.optJSONArray("requiredTokenInputs")).forEach { token ->
+                val provenanceRef = token.optString("provenanceRef").trim()
+                if (provenanceRef.isNotBlank()) add(provenanceRef)
+                val inputName = token.optString("inputName").trim()
+                if (inputName.isNotBlank()) add("prov:${normalizeProvenanceName(inputName)}")
+            }
+        }
+        val authArtifactsPresentWithoutChain =
+            sessionAuthWarnings.any { it == "auth_artifacts_detected_without_complete_chain" } ||
+                hasAuthArtifactSignals(
+                    requiredHeaders = sessionArtifactHeaders,
+                    requiredCookies = sessionArtifactCookies,
+                    tokenInputs = sessionTokenInputs,
+                ) ||
+                listOf(sessionLoginRef, sessionValidationRef, sessionRefreshRef).count { it.isNotBlank() } in 1..2
         if (requiresLogin) {
             if (loginEndpointId.isNullOrBlank()) failures += "auth chain incomplete: missing login endpointRef"
             if (validationEndpointId.isNullOrBlank()) failures += "auth chain incomplete: missing validation endpointRef"
@@ -769,6 +795,9 @@ object RuntimeToolkitSourcePipelineExporter {
             if (distinctRefs.size != 3) {
                 failures += "auth chain must use distinct endpointRefs for login/validation/refresh"
             }
+        }
+        if (!requiresLogin && authArtifactsPresentWithoutChain) {
+            failures += "auth artifacts detected but complete login/validation/refresh chain is missing (fail-closed)"
         }
 
         listOf(
@@ -802,6 +831,7 @@ object RuntimeToolkitSourcePipelineExporter {
             val queryTemplateText = endpoint.opt("queryTemplate")?.toString().orEmpty()
             val bodyTemplateText = endpoint.opt("bodyTemplate")?.toString().orEmpty()
             val pathTemplate = endpoint.optString("pathTemplate")
+            val replay = replayByEndpointRef[endpointRef]
             jsonObjects(endpoint.optJSONArray("variablePlaceholders"))
                 .filter { it.optBoolean("required") }
                 .forEach { placeholder ->
@@ -816,6 +846,19 @@ object RuntimeToolkitSourcePipelineExporter {
                         "query" -> queryTemplateText.contains(token)
                         "body" -> bodyTemplateText.contains(token)
                         "path" -> pathTemplate.contains(token)
+                        "header" -> {
+                            val requiredHeaders = jsonObjects(replay?.optJSONArray("requiredHeaders"))
+                                .mapNotNull { item -> item.optString("name").trim().takeIf { it.isNotBlank() } }
+                                .toSet()
+                            name in requiredHeaders
+                        }
+                        "cookie" -> {
+                            val requiredCookies = jsonObjects(replay?.optJSONArray("requiredCookies"))
+                                .mapNotNull { item -> item.optString("name").trim().takeIf { it.isNotBlank() } }
+                                .toSet()
+                            val cookieName = name.removePrefix("cookies.")
+                            cookieName in requiredCookies
+                        }
                         else -> listOf(pathTemplate, queryTemplateText, bodyTemplateText).any { it.contains(token) }
                     }
                     if (!used) {
@@ -846,6 +889,24 @@ object RuntimeToolkitSourcePipelineExporter {
                     if (status in setOf("required", "required_proven")) {
                         if (provenanceRef == null || provenanceRef == JSONObject.NULL || provenanceRef.toString().trim().isBlank()) {
                             failures += "$key on endpoint '$endpointRef' has required item '$name' without provenanceRef"
+                        } else {
+                            when (key) {
+                                "requiredHeaders", "requiredCookies" -> {
+                                    val normalizedProvenanceRef = provenanceRef.toString().trim()
+                                    val endpointProvenanceRefs = jsonStrings(replay.optJSONArray("requiredProvenanceInputs"))
+                                        .map { input -> "prov:${normalizeProvenanceName(input)}" }
+                                        .toSet()
+                                    if (normalizedProvenanceRef !in sessionProvenanceRefs && normalizedProvenanceRef !in endpointProvenanceRefs) {
+                                        failures += "$key on endpoint '$endpointRef' has unresolved provenanceRef '$normalizedProvenanceRef'"
+                                    }
+                                    if (key == "requiredHeaders" && name.isNotBlank() && name !in sessionArtifactHeaders) {
+                                        failures += "required header '$name' on endpoint '$endpointRef' is not present in sessionAuth.sessionArtifacts.headers"
+                                    }
+                                    if (key == "requiredCookies" && name.isNotBlank() && name !in sessionArtifactCookies) {
+                                        failures += "required cookie '$name' on endpoint '$endpointRef' is not present in sessionAuth.sessionArtifacts.cookies"
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -2827,16 +2888,18 @@ object RuntimeToolkitSourcePipelineExporter {
             .filter { it.isNotBlank() }
             .sortedBy { it.lowercase(Locale.ROOT) }
             .forEach { name ->
+                val isCookieProvenance = name.startsWith("cookies.")
+                val isHeaderProvenance = name in setOf("authorization", "api-auth")
                 val pathExists = name in pathTemplatePayload.pathPlaceholders
                 val queryExists = queryTemplate.has(name)
                 val bodyExists = bodyTemplate.has(name)
                 val location = when {
+                    isCookieProvenance -> "cookie"
+                    isHeaderProvenance -> "header"
                     pathExists -> "path"
                     queryExists -> "query"
-                    else -> "body"
-                }
-                if (!pathExists && !queryExists && !bodyExists) {
-                    bodyTemplate.put(name, placeholderToken(name))
+                    bodyExists -> "body"
+                    else -> "unresolved"
                 }
                 val key = "$location:$name"
                 if (seenPlaceholders.add(key)) {
