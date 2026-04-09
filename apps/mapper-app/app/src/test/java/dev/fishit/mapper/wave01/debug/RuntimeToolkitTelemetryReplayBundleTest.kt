@@ -12,6 +12,21 @@ import java.util.zip.ZipOutputStream
 class RuntimeToolkitTelemetryReplayBundleTest {
 
     @Test
+    fun runtime_export_filter_keeps_only_minimal_contract_files() {
+        assertTrue(RuntimeToolkitTelemetry.shouldIncludeInRuntimeExport("source_pipeline_bundle.json"))
+        assertTrue(RuntimeToolkitTelemetry.shouldIncludeInRuntimeExport("site_runtime_model.json"))
+        assertTrue(RuntimeToolkitTelemetry.shouldIncludeInRuntimeExport("manifest.json"))
+        assertTrue(RuntimeToolkitTelemetry.shouldIncludeInRuntimeExport("exports/source_plugin_bundle.zip"))
+        assertTrue(RuntimeToolkitTelemetry.shouldIncludeInRuntimeExport("pipeline_ready_report.json"))
+        assertTrue(RuntimeToolkitTelemetry.shouldIncludeInRuntimeExport("mission_export_summary.json"))
+
+        assertFalse(RuntimeToolkitTelemetry.shouldIncludeInRuntimeExport("events/runtime_events.jsonl"))
+        assertFalse(RuntimeToolkitTelemetry.shouldIncludeInRuntimeExport("response_store/resp_1.bin"))
+        assertFalse(RuntimeToolkitTelemetry.shouldIncludeInRuntimeExport("replay_bundle.json"))
+        assertFalse(RuntimeToolkitTelemetry.shouldIncludeInRuntimeExport("replay_seed.json"))
+    }
+
+    @Test
     fun replay_readiness_blocks_bundle_with_missing_required_entries() {
         val zip = createZip(
             "replay_bundle_missing.zip",
@@ -73,4 +88,3 @@ class RuntimeToolkitTelemetryReplayBundleTest {
         return file
     }
 }
-

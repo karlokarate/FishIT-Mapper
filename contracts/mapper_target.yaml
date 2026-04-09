@@ -109,6 +109,8 @@ mission_profile:
   outputTargets_allowed:
     - site_runtime_model
     - fishit_provider_draft
+    - source_pipeline_bundle
+    - source_plugin_bundle
     - webapp_runtime_draft
     - replay_bundle
     - endpoint_templates
@@ -440,6 +442,8 @@ built_in_mission_presets:
     outputTargets:
       - site_runtime_model
       - fishit_provider_draft
+      - source_pipeline_bundle
+      - source_plugin_bundle
       - endpoint_templates
       - field_matrix
       - auth_draft
@@ -1026,6 +1030,9 @@ mission_specific_export_bundles:
     required_files:
       - site_runtime_model.json
       - fishit_provider_draft.json
+      - source_pipeline_bundle.json
+      - manifest.json
+      - exports/source_plugin_bundle.zip
       - endpoint_templates.json
       - field_matrix.json
       - auth_draft.json

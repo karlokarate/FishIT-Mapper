@@ -294,6 +294,38 @@
       "supersedes": [],
       "superseded_by": null,
       "summary": "Derived runtime outputs now include source_pipeline_bundle.json, site_runtime_model.json, manifest.json, and exports/source_plugin_bundle.zip so FishIT-Player can import the runtime contract directly without a separate TUI conversion step."
+    },
+    {
+      "id": "DEC-0022",
+      "aliases": [
+        "ADR-0022",
+        "MAPPER-SOURCE-BUNDLE-HOST-COMPAT-GATES",
+        "MAPPER-CAPABILITY-ENDPOINT-STRICT-COUPLING"
+      ],
+      "title": "Mission readiness now hard-gates source_pipeline_bundle host compatibility and runtime-coupling semantics",
+      "status": "accepted",
+      "date": "2026-04-06",
+      "supersedes": [
+        "DEC-0021"
+      ],
+      "superseded_by": "DEC-0023",
+      "summary": "Mapper now blocks READY when source_pipeline_bundle/manifest/zip container integrity, host API compatibility (plugin/runtime/capability schema major), required top-level contract shape, capability-to-endpoint bindings, replay-linked home sync refs, or search/detail minimum field usability (canonicalId/title) are not satisfied."
+    },
+    {
+      "id": "DEC-0023",
+      "aliases": [
+        "ADR-0023",
+        "MAPPER-ZDF-RUNTIME-BUNDLE-HARDENING",
+        "MAPPER-SOURCE-BUNDLE-AUTH-PLACEHOLDER-BUDGET-STRICTNESS"
+      ],
+      "title": "Source pipeline bundle export and gates are hardened for immediately runnable ZDF runtime bundles",
+      "status": "accepted",
+      "date": "2026-04-09",
+      "supersedes": [
+        "DEC-0022"
+      ],
+      "superseded_by": null,
+      "summary": "Mapper now enforces fail-closed source bundle checks for descriptor/capability completeness, native sourceKey collision blocking, duplicate endpoint/replay refs, role-scoped templateKind and placeholder resolvability, replay provenance resolvability, browser-session start derivation, refresh endpoint coupling, and ZIP signature/json integrity while preferring target-family endpoint candidates for deterministic ZDF-compatible runtime execution."
     }
   ]
 }

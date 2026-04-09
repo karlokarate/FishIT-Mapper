@@ -16,6 +16,8 @@ TOOLKIT_DIR = Path(__file__).resolve().parents[1]
 if str(TOOLKIT_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLKIT_DIR))
 
+FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "runtime_regression_zdf.jsonl"
+
 from runtime_dataset_cli import (  # type: ignore  # noqa: E402
     body_capture_decision,
     build_body_store,
@@ -2308,6 +2310,233 @@ class RuntimeDatasetHardeningTests(unittest.TestCase):
             gate = summary.get("gate_results", {}).get("provider_export_schema_gate", {})
             self.assertFalse(gate.get("passed"))
             self.assertGreater(int(gate.get("error_count") or 0), 0)
+
+    def test_mission_summary_blocks_when_source_pipeline_bundle_host_contract_is_invalid(self) -> None:
+        rows = read_jsonl(FIXTURE_PATH)
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            paths = ensure_derived(runtime_dir, rows)
+            source_bundle = json.loads(paths["source_pipeline_bundle"].read_text(encoding="utf-8"))
+            source_bundle["unexpectedTopLevelField"] = True
+            paths["source_pipeline_bundle"].write_text(json.dumps(source_bundle, ensure_ascii=True, indent=2), encoding="utf-8")
+
+            summary = build_mission_export_summary(
+                runtime_dir=runtime_dir,
+                rows=rows,
+                mission_id="CUSTOM_MISSION",
+                pipeline_report={"pipeline_ready": True},
+            )
+            self.assertEqual(summary.get("export_readiness"), "BLOCKED")
+            self.assertIn("source_pipeline_bundle_gate", set(summary.get("failed_gates") or []))
+            gate = summary.get("gate_results", {}).get("source_pipeline_bundle_gate", {})
+            self.assertFalse(gate.get("passed"))
+            self.assertIn("unknown_top_level:unexpectedTopLevelField", list(gate.get("errors") or []))
+
+    def test_mission_summary_blocks_when_source_key_collides_with_native_registry(self) -> None:
+        rows = read_jsonl(FIXTURE_PATH)
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            paths = ensure_derived(runtime_dir, rows)
+            source_bundle = json.loads(paths["source_pipeline_bundle"].read_text(encoding="utf-8"))
+            source_bundle.setdefault("bundleDescriptor", {})["sourceKey"] = "xtream"
+            paths["source_pipeline_bundle"].write_text(json.dumps(source_bundle, ensure_ascii=True, indent=2), encoding="utf-8")
+
+            summary = build_mission_export_summary(
+                runtime_dir=runtime_dir,
+                rows=rows,
+                mission_id="CUSTOM_MISSION",
+                pipeline_report={"pipeline_ready": True},
+            )
+            self.assertEqual(summary.get("export_readiness"), "BLOCKED")
+            gate = summary.get("gate_results", {}).get("source_pipeline_bundle_gate", {})
+            self.assertFalse(gate.get("passed"))
+            self.assertIn("source_key_collides_with_native_registry", list(gate.get("errors") or []))
+
+    def test_mission_summary_blocks_when_home_template_kind_is_unsupported(self) -> None:
+        rows = read_jsonl(FIXTURE_PATH)
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            paths = ensure_derived(runtime_dir, rows)
+            source_bundle = json.loads(paths["source_pipeline_bundle"].read_text(encoding="utf-8"))
+            for endpoint in source_bundle.get("endpointTemplates", []):
+                if not isinstance(endpoint, dict):
+                    continue
+                if str(endpoint.get("role") or "") != "home":
+                    continue
+                endpoint["templateKind"] = "html_document"
+                break
+            paths["source_pipeline_bundle"].write_text(json.dumps(source_bundle, ensure_ascii=True, indent=2), encoding="utf-8")
+
+            summary = build_mission_export_summary(
+                runtime_dir=runtime_dir,
+                rows=rows,
+                mission_id="CUSTOM_MISSION",
+                pipeline_report={"pipeline_ready": True},
+            )
+            self.assertEqual(summary.get("export_readiness"), "BLOCKED")
+            gate = summary.get("gate_results", {}).get("source_pipeline_bundle_gate", {})
+            self.assertFalse(gate.get("passed"))
+            self.assertTrue(
+                any(str(item).startswith("endpoint_template_kind_unsupported_for_role:") for item in list(gate.get("errors") or []))
+            )
+
+    def test_mission_summary_blocks_when_browser_session_start_url_is_not_derivable(self) -> None:
+        rows = read_jsonl(FIXTURE_PATH)
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            paths = ensure_derived(runtime_dir, rows)
+            source_bundle = json.loads(paths["source_pipeline_bundle"].read_text(encoding="utf-8"))
+            source_bundle.setdefault("capabilities", {})["requiresBrowserSession"] = True
+            session_auth = source_bundle.setdefault("sessionAuth", {})
+            session_auth["requiresBrowserSession"] = True
+            session_auth["validationEndpointRef"] = ""
+            session_auth["refreshEndpointRef"] = ""
+            for replay in source_bundle.get("replayRequirements", []):
+                if not isinstance(replay, dict):
+                    continue
+                replay["browserAssistanceNeeded"] = False
+                replay["requiredReferer"] = None
+                replay["requiredOrigin"] = None
+            paths["source_pipeline_bundle"].write_text(json.dumps(source_bundle, ensure_ascii=True, indent=2), encoding="utf-8")
+
+            summary = build_mission_export_summary(
+                runtime_dir=runtime_dir,
+                rows=rows,
+                mission_id="CUSTOM_MISSION",
+                pipeline_report={"pipeline_ready": True},
+            )
+            self.assertEqual(summary.get("export_readiness"), "BLOCKED")
+            gate = summary.get("gate_results", {}).get("source_pipeline_bundle_gate", {})
+            self.assertFalse(gate.get("passed"))
+            self.assertIn("browser_session_start_url_unresolvable", list(gate.get("errors") or []))
+
+    def test_mission_summary_blocks_when_required_replay_input_has_no_provenance(self) -> None:
+        rows = read_jsonl(FIXTURE_PATH)
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            paths = ensure_derived(runtime_dir, rows)
+            source_bundle = json.loads(paths["source_pipeline_bundle"].read_text(encoding="utf-8"))
+            search_ref = ""
+            for endpoint in source_bundle.get("endpointTemplates", []):
+                if not isinstance(endpoint, dict):
+                    continue
+                if str(endpoint.get("role") or "") == "search":
+                    search_ref = str(endpoint.get("endpointId") or "")
+                    break
+            for replay in source_bundle.get("replayRequirements", []):
+                if not isinstance(replay, dict):
+                    continue
+                if str(replay.get("endpointRef") or "") != search_ref:
+                    continue
+                replay["requiredHeaders"] = [
+                    {
+                        "name": "authorization",
+                        "status": "required_proven",
+                        "provenanceRef": None,
+                    }
+                ]
+                break
+            paths["source_pipeline_bundle"].write_text(json.dumps(source_bundle, ensure_ascii=True, indent=2), encoding="utf-8")
+
+            summary = build_mission_export_summary(
+                runtime_dir=runtime_dir,
+                rows=rows,
+                mission_id="CUSTOM_MISSION",
+                pipeline_report={"pipeline_ready": True},
+            )
+            self.assertEqual(summary.get("export_readiness"), "BLOCKED")
+            gate = summary.get("gate_results", {}).get("source_pipeline_bundle_gate", {})
+            self.assertFalse(gate.get("passed"))
+            self.assertTrue(
+                any(str(item).startswith("replay_required_inputs_missing_provenance:") for item in list(gate.get("errors") or []))
+            )
+
+    def test_mission_summary_blocks_when_playback_plannable_placeholder_is_missing(self) -> None:
+        rows = read_jsonl(FIXTURE_PATH)
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            paths = ensure_derived(runtime_dir, rows)
+            source_bundle = json.loads(paths["source_pipeline_bundle"].read_text(encoding="utf-8"))
+            playback_ref = str(source_bundle.get("playback", {}).get("playbackEndpointRef") or "")
+            for endpoint in source_bundle.get("endpointTemplates", []):
+                if not isinstance(endpoint, dict):
+                    continue
+                if str(endpoint.get("endpointId") or "") != playback_ref:
+                    continue
+                endpoint["variablePlaceholders"] = [
+                    {
+                        "name": "page",
+                        "location": "query",
+                        "required": True,
+                        "valueType": "integer",
+                        "defaultTemplate": "1",
+                    }
+                ]
+            paths["source_pipeline_bundle"].write_text(json.dumps(source_bundle, ensure_ascii=True, indent=2), encoding="utf-8")
+
+            summary = build_mission_export_summary(
+                runtime_dir=runtime_dir,
+                rows=rows,
+                mission_id="CUSTOM_MISSION",
+                pipeline_report={"pipeline_ready": True},
+            )
+            self.assertEqual(summary.get("export_readiness"), "BLOCKED")
+            gate = summary.get("gate_results", {}).get("source_pipeline_bundle_gate", {})
+            self.assertFalse(gate.get("passed"))
+            self.assertIn("playback_endpoint_missing_plannable_placeholder", list(gate.get("errors") or []))
+
+    def test_mission_summary_blocks_when_playback_url_hint_is_missing(self) -> None:
+        rows = read_jsonl(FIXTURE_PATH)
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            paths = ensure_derived(runtime_dir, rows)
+            source_bundle = json.loads(paths["source_pipeline_bundle"].read_text(encoding="utf-8"))
+            for field in source_bundle.get("fieldMappings", []):
+                if not isinstance(field, dict):
+                    continue
+                if str(field.get("fieldName") or "") != "playbackHint":
+                    continue
+                field["derivationKind"] = "missing"
+                field["valueTemplate"] = None
+                field["sourceRef"] = "field_matrix"
+                field["sourceKind"] = "unknown"
+            paths["source_pipeline_bundle"].write_text(json.dumps(source_bundle, ensure_ascii=True, indent=2), encoding="utf-8")
+
+            summary = build_mission_export_summary(
+                runtime_dir=runtime_dir,
+                rows=rows,
+                mission_id="CUSTOM_MISSION",
+                pipeline_report={"pipeline_ready": True},
+            )
+            self.assertEqual(summary.get("export_readiness"), "BLOCKED")
+            gate = summary.get("gate_results", {}).get("source_pipeline_bundle_gate", {})
+            self.assertFalse(gate.get("passed"))
+            self.assertIn("playback_url_hint_missing", list(gate.get("errors") or []))
+
+    def test_mission_summary_blocks_when_search_endpoint_is_not_executable(self) -> None:
+        rows = read_jsonl(FIXTURE_PATH)
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_dir = Path(tmp)
+            paths = ensure_derived(runtime_dir, rows)
+            source_bundle = json.loads(paths["source_pipeline_bundle"].read_text(encoding="utf-8"))
+            for endpoint in source_bundle.get("endpointTemplates", []):
+                if not isinstance(endpoint, dict):
+                    continue
+                if str(endpoint.get("role") or "") != "search":
+                    continue
+                endpoint["normalizedHost"] = ""
+            paths["source_pipeline_bundle"].write_text(json.dumps(source_bundle, ensure_ascii=True, indent=2), encoding="utf-8")
+
+            summary = build_mission_export_summary(
+                runtime_dir=runtime_dir,
+                rows=rows,
+                mission_id="CUSTOM_MISSION",
+                pipeline_report={"pipeline_ready": True},
+            )
+            self.assertEqual(summary.get("export_readiness"), "BLOCKED")
+            gate = summary.get("gate_results", {}).get("source_pipeline_bundle_gate", {})
+            self.assertFalse(gate.get("passed"))
+            self.assertIn("search_endpoint_not_executable_or_unbound", list(gate.get("errors") or []))
 
     def test_api_mapping_required_artifact_aliases_are_deterministic(self) -> None:
         artifacts = mission_required_artifacts("API_MAPPING")

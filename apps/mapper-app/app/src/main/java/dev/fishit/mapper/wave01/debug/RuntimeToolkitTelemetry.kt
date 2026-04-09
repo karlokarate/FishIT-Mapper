@@ -63,6 +63,22 @@ object RuntimeToolkitTelemetry {
     private const val EXPORT_READINESS_PARTIAL = "PARTIAL"
     private const val EXPORT_READINESS_READY = "READY"
     private const val EXPORT_READINESS_BLOCKED = "BLOCKED"
+    private val MINIMAL_RUNTIME_EXPORT_FILES = setOf(
+        "source_pipeline_bundle.json",
+        "site_runtime_model.json",
+        "manifest.json",
+        "provider_draft_export.json",
+        "fishit_provider_draft.json",
+        "endpoint_templates.json",
+        "endpoint_candidates.json",
+        "replay_requirements.json",
+        "field_matrix.json",
+        "auth_draft.json",
+        "playback_draft.json",
+        "pipeline_ready_report.json",
+        "mission_export_summary.json",
+        "exports/source_plugin_bundle.zip",
+    )
 
     private val ioLock = Any()
     private val requestLock = Any()
@@ -1165,11 +1181,12 @@ object RuntimeToolkitTelemetry {
         val safeMissionId = missionId.trim().ifBlank { state.missionId }.ifBlank {
             RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE
         }
+        ensureMissionDerivedArtifacts(
+            context = context,
+            missionId = safeMissionId,
+            state = state,
+        )
         val requiredSteps = RuntimeToolkitMissionWizard.requiredStepIds(safeMissionId, context)
-        val missingRequiredSteps = requiredSteps.filter {
-            state.stepStates[it] != RuntimeToolkitMissionWizard.SATURATION_SATURATED
-        }
-
         val root = runtimeRoot(context)
         val requiredArtifacts = RuntimeToolkitMissionWizard.requiredArtifactsForMission(safeMissionId, context)
         val availableArtifacts = linkedMapOf<String, Boolean>()
@@ -1188,6 +1205,13 @@ object RuntimeToolkitTelemetry {
             .listFiles()
             ?.any { it.isFile && it.name.endsWith(".zip") && it.length() > 0L }
             ?: false
+        val missingRequiredSteps = inferMissingRequiredSteps(
+            context = context,
+            state = state,
+            requiredSteps = requiredSteps,
+            missingRequiredArtifacts = missingRequiredArtifacts,
+            hasFinalizedExport = hasFinalizedExport,
+        )
 
         val exportReadiness: String
         val reason: String
@@ -1260,7 +1284,198 @@ object RuntimeToolkitTelemetry {
         synchronized(ioLock) {
             summaryFile.writeText(json.toString(), Charsets.UTF_8)
         }
+        writeWarningsArtifact(runtimeRoot(context), summary)
         return summaryFile
+    }
+
+    private fun ensureMissionDerivedArtifacts(
+        context: Context,
+        missionId: String,
+        state: MissionSessionState,
+    ) {
+        val root = runtimeRoot(context)
+        if (!root.exists()) root.mkdirs()
+
+        val eventsFile = File(root, "events/runtime_events.jsonl")
+        if (eventsFile.exists() && eventsFile.length() > 0L) {
+            runCatching {
+                RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+                    runtimeRoot = root,
+                    targetSiteHint = state.targetSiteId,
+                )
+            }
+        }
+        writeMissionQualityArtifacts(context, missionId, state)
+    }
+
+    private fun writeMissionQualityArtifacts(
+        context: Context,
+        missionId: String,
+        state: MissionSessionState,
+    ) {
+        val root = runtimeRoot(context)
+        if (!root.exists()) root.mkdirs()
+
+        val requiredSteps = RuntimeToolkitMissionWizard.requiredStepIds(missionId, context)
+        val requiredArtifacts = RuntimeToolkitMissionWizard.requiredArtifactsForMission(missionId, context)
+        val missingRequiredArtifacts = requiredArtifacts
+            .filter { artifact ->
+                artifact.paths.none { relativePath ->
+                    val artifactPath = File(root, relativePath)
+                    artifactPath.exists() && artifactPath.length() > 0L
+                }
+            }
+            .map { it.id }
+        val hasFinalizedExport = File(root, "exports")
+            .listFiles()
+            ?.any { it.isFile && it.name.endsWith(".zip") && it.length() > 0L }
+            ?: false
+        val missingRequiredSteps = inferMissingRequiredSteps(
+            context = context,
+            state = state,
+            requiredSteps = requiredSteps,
+            missingRequiredArtifacts = missingRequiredArtifacts,
+            hasFinalizedExport = hasFinalizedExport,
+        )
+        val saturatedSteps = requiredSteps.size - missingRequiredSteps.size
+        val requiredStepCoverage = if (requiredSteps.isEmpty()) 1.0 else saturatedSteps.toDouble() / requiredSteps.size.toDouble()
+
+        val requiredPhases = RuntimeToolkitMissionWizard.requiredProbeSet(missionId, context)
+        val successfulTargetByPhase = collectResponseObservations(context)
+            .filter { it.succeeded && it.targetEvidence }
+            .groupingBy { inferProbePhase(it) }
+            .eachCount()
+        val satisfiedRequiredPhases = requiredPhases.count { phaseId ->
+            (successfulTargetByPhase[phaseId] ?: 0) > 0
+        }
+        val requiredPhaseCoverage = if (requiredPhases.isEmpty()) {
+            1.0
+        } else {
+            satisfiedRequiredPhases.toDouble() / requiredPhases.size.toDouble()
+        }
+        val targetResponseCount = successfulTargetByPhase.values.sum()
+        val responseSignalCoverage = minOf(1.0, targetResponseCount.toDouble() / 10.0)
+        val overallConfidence = ((requiredStepCoverage * 0.5) + (requiredPhaseCoverage * 0.3) + (responseSignalCoverage * 0.2))
+            .coerceIn(0.0, 1.0)
+
+        val qualityWarnings = mutableListOf<String>()
+        if (requiredStepCoverage < 1.0) {
+            qualityWarnings += "required_step_coverage_incomplete"
+        }
+        if (requiredPhaseCoverage < 1.0) {
+            qualityWarnings += "required_probe_coverage_incomplete"
+        }
+        if (targetResponseCount == 0) {
+            qualityWarnings += "target_response_evidence_missing"
+        }
+
+        val pipelineReady = requiredPhaseCoverage >= 1.0 && targetResponseCount > 0
+        val generatedAt = Instant.now().toString()
+        val pipelinePayload = JSONObject().apply {
+            put("schema_version", 1)
+            put("generated_at_utc", generatedAt)
+            put("mission_id", missionId)
+            put("target_site_id", state.targetSiteId.ifBlank { "unknown_target" })
+            put("pipeline_ready", pipelineReady)
+            put("required_step_coverage", requiredStepCoverage)
+            put("required_probe_coverage", requiredPhaseCoverage)
+            put("response_signal_coverage", responseSignalCoverage)
+            put("target_response_count", targetResponseCount)
+            put("warnings", JSONArray(qualityWarnings))
+        }
+
+        val confidencePayload = JSONObject().apply {
+            put("schema_version", 1)
+            put("generated_at_utc", generatedAt)
+            put("mission_id", missionId)
+            put("target_site_id", state.targetSiteId.ifBlank { "unknown_target" })
+            put("confidence", JSONObject().apply {
+                put("overall_confidence", overallConfidence)
+                put("required_step_coverage", requiredStepCoverage)
+                put("required_probe_coverage", requiredPhaseCoverage)
+                put("response_signal_coverage", responseSignalCoverage)
+            })
+            put("warnings", JSONArray(qualityWarnings))
+        }
+
+        val warningsPayload = JSONObject().apply {
+            put("schema_version", 1)
+            put("generated_at_utc", generatedAt)
+            put("mission_id", missionId)
+            put("warnings", JSONArray(qualityWarnings))
+        }
+
+        val pipelineReadyReportFile = File(root, "pipeline_ready_report.json")
+        val confidenceReportFile = File(root, "confidence_report.json")
+        val warningsFile = File(root, "warnings.json")
+        synchronized(ioLock) {
+            pipelineReadyReportFile.writeText(pipelinePayload.toString(), Charsets.UTF_8)
+            confidenceReportFile.writeText(confidencePayload.toString(), Charsets.UTF_8)
+            if (!warningsFile.exists() || warningsFile.length() <= 0L) {
+                warningsFile.writeText(warningsPayload.toString(), Charsets.UTF_8)
+            }
+        }
+    }
+
+    private fun writeWarningsArtifact(root: File, summary: MissionExportSummary) {
+        val warningsFile = File(root, "warnings.json")
+        val payload = JSONObject().apply {
+            put("schema_version", 1)
+            put("generated_at_utc", summary.generatedAt)
+            put("mission_id", summary.missionId)
+            put("export_readiness", summary.exportReadiness)
+            put("reason", summary.reason)
+            put("warnings", JSONArray(summary.warnings.distinct()))
+        }
+        synchronized(ioLock) {
+            warningsFile.writeText(payload.toString(), Charsets.UTF_8)
+        }
+    }
+
+    private fun inferMissingRequiredSteps(
+        context: Context,
+        state: MissionSessionState,
+        requiredSteps: List<String>,
+        missingRequiredArtifacts: List<String>,
+        hasFinalizedExport: Boolean,
+    ): List<String> {
+        val missing = linkedSetOf<String>()
+        requiredSteps.forEach { stepId ->
+            if (stepId == RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT) {
+                return@forEach
+            }
+            val saturated = isStepSaturatedByEvidence(
+                context = context,
+                state = state,
+                stepId = stepId,
+            )
+            if (!saturated) {
+                missing += stepId
+            }
+        }
+        if (requiredSteps.contains(RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT)) {
+            val finalReady = missing.isEmpty() && missingRequiredArtifacts.isEmpty() && hasFinalizedExport
+            if (!finalReady) {
+                missing += RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT
+            }
+        }
+        return requiredSteps.filter { it in missing }
+    }
+
+    private fun isStepSaturatedByEvidence(
+        context: Context,
+        state: MissionSessionState,
+        stepId: String,
+    ): Boolean {
+        if (state.stepStates[stepId] == RuntimeToolkitMissionWizard.SATURATION_SATURATED) {
+            return true
+        }
+        if (stepId == RuntimeToolkitMissionWizard.STEP_FINAL_VALIDATION_EXPORT) {
+            return false
+        }
+        return runCatching {
+            evaluateMissionStepSaturation(context, stepId).state == RuntimeToolkitMissionWizard.SATURATION_SATURATED
+        }.getOrDefault(false)
     }
 
     fun startMissionSession(
@@ -2054,12 +2269,32 @@ object RuntimeToolkitTelemetry {
         val root = runtimeRoot(context)
         val exportDir = File(root, "exports")
         if (!exportDir.exists()) exportDir.mkdirs()
+        val eventsFile = File(root, "events/runtime_events.jsonl")
+        if (eventsFile.exists() && eventsFile.length() > 0L) {
+            val targetHint = missionSessionState(context).targetSiteId
+            runCatching {
+                RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+                    runtimeRoot = root,
+                    targetSiteHint = targetHint,
+                )
+            }.getOrElse { throwable ->
+                throw IllegalStateException(
+                    "Failed to derive source pipeline artifacts: ${throwable.message ?: "unknown"}",
+                    throwable,
+                )
+            }
+        }
         writeMissionExportSummary(context)
 
         val exportCandidates = if (root.exists()) {
             root.walkTopDown()
                 .filter { it.isFile }
-                .filterNot { it.absolutePath.startsWith(exportDir.absolutePath) }
+                .filter { file ->
+                    val relativePath = root.toPath().relativize(file.toPath()).toString()
+                        .replace(File.separatorChar, '/')
+                    shouldIncludeInRuntimeExport(relativePath)
+                }
+                .sortedBy { file -> root.toPath().relativize(file.toPath()).toString() }
                 .toList()
         } else {
             emptyList()
@@ -2084,6 +2319,12 @@ object RuntimeToolkitTelemetry {
             }
         }
         return output
+    }
+
+    internal fun shouldIncludeInRuntimeExport(relativePath: String): Boolean {
+        val normalized = relativePath.trim().replace('\\', '/')
+        if (normalized.isBlank()) return false
+        return normalized in MINIMAL_RUNTIME_EXPORT_FILES
     }
 
     private fun eventFile(context: Context): File {
@@ -2238,6 +2479,8 @@ object RuntimeToolkitTelemetry {
     private data class ResponseObservation(
         val phaseId: String,
         val hostClass: String,
+        val routeKind: String,
+        val targetSiteId: String,
         val statusCode: Int,
         val operation: String,
         val fingerprint: String,
@@ -2247,7 +2490,11 @@ object RuntimeToolkitTelemetry {
         val succeeded: Boolean
             get() = statusCode in 200..399
         val targetEvidence: Boolean
-            get() = hostClass.startsWith("target_")
+            get() {
+                val routeEvidence = routeKind in setOf("home", "search", "detail", "playback", "auth", "category", "live")
+                val siteEvidence = targetSiteId.isNotBlank() && targetSiteId !in setOf("unknown_target", "unknown")
+                return hostClass.startsWith("target_") || routeEvidence || siteEvidence
+            }
     }
 
     private fun collectResponseObservations(context: Context): List<ResponseObservation> {
@@ -2262,6 +2509,11 @@ object RuntimeToolkitTelemetry {
                 val payload = root.optJSONObject("payload") ?: JSONObject()
                 val phaseId = normalizePhaseId(payload.optString("phase_id")) ?: PHASE_BACKGROUND
                 val hostClass = payload.optString("host_class").ifBlank { "ignored" }
+                val routeKind = payload.optString("route_kind").trim().lowercase(Locale.ROOT)
+                val targetSiteId = payload.optString("target_site_id")
+                    .trim()
+                    .lowercase(Locale.ROOT)
+                    .replace('.', '_')
                 val statusCode = when {
                     payload.has("status_code") -> payload.optInt("status_code", 0)
                     payload.has("status") -> payload.optInt("status", 0)
@@ -2279,6 +2531,8 @@ object RuntimeToolkitTelemetry {
                 observations += ResponseObservation(
                     phaseId = phaseId,
                     hostClass = hostClass,
+                    routeKind = routeKind,
+                    targetSiteId = targetSiteId,
                     statusCode = statusCode,
                     operation = operation.lowercase(Locale.ROOT),
                     fingerprint = fingerprint,
@@ -2288,6 +2542,33 @@ object RuntimeToolkitTelemetry {
             }
         }
         return observations
+    }
+
+    private fun inferProbePhase(observation: ResponseObservation): String {
+        if (observation.phaseId != PHASE_BACKGROUND) return observation.phaseId
+        val operation = observation.operation
+        val path = observation.path
+        val mime = observation.mimeType
+        return when {
+            observation.routeKind == "home" || path == "/" || path.contains("/home") -> "home_probe"
+            observation.routeKind == "search" || operation.contains("search") || path.contains("/search") -> "search_probe"
+            observation.routeKind == "detail" || operation.contains("detail") || path.contains("/detail") || path.contains("/content/") -> "detail_probe"
+            observation.routeKind == "playback" ||
+                operation.contains("playback") ||
+                path.endsWith(".m3u8") ||
+                path.endsWith(".mpd") ||
+                path.endsWith(".ts") ||
+                mime.contains("mpegurl") ||
+                mime.contains("dash+xml") -> "playback_probe"
+            observation.routeKind == "auth" ||
+                operation.contains("auth") ||
+                operation.contains("token") ||
+                operation.contains("login") ||
+                operation.contains("logout") ||
+                operation.contains("refresh") ||
+                path.contains("/auth") -> "auth_probe"
+            else -> PHASE_BACKGROUND
+        }
     }
 
     private fun collectAuthEvidence(context: Context): Int {
@@ -2316,7 +2597,7 @@ object RuntimeToolkitTelemetry {
         val responses = collectResponseObservations(context)
         val successfulTargetByPhase = responses
             .filter { it.succeeded && it.targetEvidence }
-            .groupBy { it.phaseId }
+            .groupBy { inferProbePhase(it) }
 
         return when (stepId) {
             RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT -> {

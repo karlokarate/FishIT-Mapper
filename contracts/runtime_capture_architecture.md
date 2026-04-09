@@ -141,6 +141,19 @@
   - provider export schema validation pass (`contracts/provider_draft_export.schema.json`)
   - replay requirements non-empty for endpoint context
   - minimum provider field-matrix coverage threshold
+  - source bundle host-compatibility gate pass:
+    - `manifest.json.mainContract == source_pipeline_bundle.json`
+    - zip contains `source_pipeline_bundle.json`, `site_runtime_model.json`, `manifest.json`
+    - source bundle required top-level keys present with no unknown top-level keys
+    - `compatiblePluginApiRange` covers host API major `1`
+    - `compatibleRuntimeModelVersion == 1`
+    - `compatibleCapabilitySchemaVersion` major `1`
+    - capability flags must have executable endpoint/replay coupling:
+      - playback -> playback resolver endpoint + replay binding
+      - search -> search endpoint + replay binding
+      - detail -> detail endpoint + replay binding
+      - home sync -> `selectionModel` + `syncModel.homeEndpointRefs` non-empty + each home ref replay-bound
+    - when search/detail enabled, `fieldMappings` must provide usable `canonicalId` and `title`
 - `latest/` artifacts are published only after successful validation.
 - Publishing is atomic via stage directory swap (`latest.stage.*` -> `latest`).
 - Failed validation must keep previous `latest/` artifacts unchanged.

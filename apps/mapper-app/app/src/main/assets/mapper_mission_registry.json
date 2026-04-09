@@ -21,6 +21,8 @@
       "expected_output_targets": [
         "site_runtime_model",
         "fishit_provider_draft",
+        "source_pipeline_bundle",
+        "source_plugin_bundle",
         "endpoint_templates",
         "field_matrix",
         "auth_draft",
@@ -124,6 +126,25 @@
           "paths": [
             "provider_draft_export.json",
             "fishit_provider_draft.json"
+          ]
+        },
+        {
+          "id": "source_pipeline_bundle",
+          "paths": [
+            "source_pipeline_bundle.json"
+          ]
+        },
+        {
+          "id": "source_bundle_manifest",
+          "paths": [
+            "manifest.json"
+          ]
+        },
+        {
+          "id": "source_plugin_bundle",
+          "paths": [
+            "exports/source_plugin_bundle.zip",
+            "source_plugin_bundle.zip"
           ]
         },
         {

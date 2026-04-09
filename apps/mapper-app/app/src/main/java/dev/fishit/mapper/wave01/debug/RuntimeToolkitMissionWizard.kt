@@ -138,6 +138,8 @@ object RuntimeToolkitMissionWizard {
                 expectedOutputTargets = listOf(
                     "site_runtime_model",
                     "fishit_provider_draft",
+                    "source_pipeline_bundle",
+                    "source_plugin_bundle",
                     "endpoint_templates",
                     "field_matrix",
                     "auth_draft",
@@ -149,6 +151,9 @@ object RuntimeToolkitMissionWizard {
                 requiredArtifacts = listOf(
                     MissionArtifact("site_runtime_model", listOf("site_profile.draft.json", "site_runtime_model.json")),
                     MissionArtifact("fishit_provider_draft", listOf("provider_draft_export.json", "fishit_provider_draft.json")),
+                    MissionArtifact("source_pipeline_bundle", listOf("source_pipeline_bundle.json")),
+                    MissionArtifact("source_bundle_manifest", listOf("manifest.json")),
+                    MissionArtifact("source_plugin_bundle", listOf("exports/source_plugin_bundle.zip", "source_plugin_bundle.zip")),
                     MissionArtifact("endpoint_templates", listOf("endpoint_candidates.json", "endpoint_templates.json")),
                     MissionArtifact("field_matrix", listOf("field_matrix.json")),
                     MissionArtifact("auth_draft", listOf("replay_requirements.json", "auth_draft.json")),

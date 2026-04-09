@@ -169,14 +169,111 @@ class RuntimeDatasetRegressionFixtureTests(unittest.TestCase):
             self.assertIn("replayRequirements", source_pipeline_bundle)
             self.assertIn("sessionAuth", source_pipeline_bundle)
             self.assertIn("playback", source_pipeline_bundle)
+            required_top_level = {
+                "$schema",
+                "bundleDescriptor",
+                "capabilities",
+                "endpointTemplates",
+                "replayRequirements",
+                "sessionAuth",
+                "playback",
+                "fieldMappings",
+                "constraintsBudgets",
+                "warnings",
+                "confidence",
+            }
+            allowed_top_level = set(required_top_level).union({"selectionModel", "syncModel"})
+            self.assertTrue(required_top_level.issubset(set(source_pipeline_bundle.keys())))
+            self.assertEqual(sorted(set(source_pipeline_bundle.keys()).difference(allowed_top_level)), [])
+
+            descriptor = source_pipeline_bundle.get("bundleDescriptor", {})
+            self.assertEqual(int(descriptor.get("compatibleRuntimeModelVersion") or 0), 1)
+            self.assertTrue(str(descriptor.get("compatibleCapabilitySchemaVersion") or "").startswith("1."))
+            plugin_api_range = descriptor.get("compatiblePluginApiRange", {})
+            self.assertTrue(str(plugin_api_range.get("min") or "").startswith("1."))
+            self.assertTrue(str(plugin_api_range.get("max") or "").startswith("1."))
+            self.assertNotIn(str(descriptor.get("sourceKey") or "").strip().lower(), {"xtream", "telegram", "io"})
+
+            capabilities = source_pipeline_bundle.get("capabilities", {})
+            endpoint_templates = [item for item in source_pipeline_bundle.get("endpointTemplates", []) if isinstance(item, dict)]
+            replay_requirements = [item for item in source_pipeline_bundle.get("replayRequirements", []) if isinstance(item, dict)]
+            replay_refs = {str(item.get("endpointRef") or "") for item in replay_requirements}
+            endpoint_role_by_id = {
+                str(item.get("endpointId") or ""): str(item.get("role") or "")
+                for item in endpoint_templates
+                if str(item.get("endpointId") or "")
+            }
+
+            if capabilities.get("supportsGlobalSearch"):
+                self.assertTrue(any(role == "search" for role in endpoint_role_by_id.values()))
+                self.assertTrue(any(endpoint_id in replay_refs for endpoint_id, role in endpoint_role_by_id.items() if role == "search"))
+                for endpoint in endpoint_templates:
+                    if str(endpoint.get("role") or "") != "search":
+                        continue
+                    self.assertIn(str(endpoint.get("templateKind") or ""), {"graphql", "rest_json", "resolver", "manifest", "config"})
+                    self.assertNotEqual(str(endpoint.get("normalizedHost") or "").strip(), "")
+                    self.assertNotEqual(endpoint.get("phaseRelevance"), ["background_noise"])
+            if capabilities.get("supportsDetailEnrichment"):
+                self.assertTrue(any(role == "detail" for role in endpoint_role_by_id.values()))
+                self.assertTrue(any(endpoint_id in replay_refs for endpoint_id, role in endpoint_role_by_id.items() if role == "detail"))
+                for endpoint in endpoint_templates:
+                    if str(endpoint.get("role") or "") != "detail":
+                        continue
+                    self.assertIn(str(endpoint.get("templateKind") or ""), {"graphql", "rest_json", "resolver", "manifest", "config"})
+                    self.assertNotEqual(str(endpoint.get("normalizedHost") or "").strip(), "")
+                    self.assertNotEqual(endpoint.get("phaseRelevance"), ["background_noise"])
+            if capabilities.get("supportsPlayback"):
+                playback_ids = [endpoint_id for endpoint_id, role in endpoint_role_by_id.items() if role in {"playbackResolver", "playback_resolver"}]
+                self.assertTrue(playback_ids)
+                playback_ref = str(source_pipeline_bundle.get("playback", {}).get("playbackEndpointRef") or "")
+                self.assertIn(playback_ref, playback_ids)
+                self.assertIn(playback_ref, replay_refs)
+                playback_endpoint = next(
+                    item
+                    for item in endpoint_templates
+                    if str(item.get("endpointId") or "") == playback_ref
+                )
+                self.assertIn(str(playback_endpoint.get("templateKind") or ""), {"graphql", "rest_json", "resolver", "manifest", "config"})
+                placeholder_names = {
+                    str(item.get("name") or "")
+                    for item in playback_endpoint.get("variablePlaceholders", [])
+                    if isinstance(item, dict)
+                }
+                self.assertTrue({"canonical", "ptmd_template"}.intersection(placeholder_names))
+            if capabilities.get("supportsHomeSync"):
+                sync_model = source_pipeline_bundle.get("syncModel", {})
+                home_refs = [str(item) for item in sync_model.get("homeEndpointRefs", []) if str(item)]
+                self.assertTrue(home_refs)
+                for ref in home_refs:
+                    self.assertEqual(endpoint_role_by_id.get(ref), "home")
+                    self.assertIn(ref, replay_refs)
+                    endpoint = next(item for item in endpoint_templates if str(item.get("endpointId") or "") == ref)
+                    self.assertIn(str(endpoint.get("templateKind") or ""), {"graphql", "rest_json", "config"})
+                    self.assertNotEqual(endpoint.get("phaseRelevance"), ["background_noise"])
+
+            fields_by_name = {
+                str(item.get("fieldName") or ""): item
+                for item in source_pipeline_bundle.get("fieldMappings", [])
+                if isinstance(item, dict)
+            }
+            if capabilities.get("supportsGlobalSearch") or capabilities.get("supportsDetailEnrichment"):
+                self.assertIn("canonicalId", fields_by_name)
+                self.assertIn("title", fields_by_name)
+                self.assertNotEqual(str(fields_by_name["canonicalId"].get("derivationKind") or "missing"), "missing")
+                self.assertNotEqual(str(fields_by_name["title"].get("derivationKind") or "missing"), "missing")
+            if capabilities.get("supportsPlayback"):
+                self.assertIn("playbackHint", fields_by_name)
+                self.assertNotEqual(str(fields_by_name["playbackHint"].get("derivationKind") or "missing"), "missing")
 
             bundle_zip = paths["source_plugin_bundle_zip"]
             self.assertTrue(bundle_zip.exists())
             with zipfile.ZipFile(bundle_zip, "r") as archive:
                 names = set(archive.namelist())
+                zipped_manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
             self.assertIn("source_pipeline_bundle.json", names)
             self.assertIn("site_runtime_model.json", names)
             self.assertIn("manifest.json", names)
+            self.assertEqual(str(zipped_manifest.get("mainContract") or ""), "source_pipeline_bundle.json")
 
     def test_provider_export_serialization_is_byte_stable_for_same_fixture(self) -> None:
         rows = self._fixture_rows()

@@ -24,9 +24,14 @@ class RuntimeToolkitMissionWizardTest {
         val outputs = RuntimeToolkitMissionWizard.expectedOutputTargets(RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE)
         assertTrue(outputs.contains("fishit_provider_draft"))
         assertTrue(outputs.contains("field_matrix"))
+        assertTrue(outputs.contains("source_pipeline_bundle"))
+        assertTrue(outputs.contains("source_plugin_bundle"))
 
         val artifacts = RuntimeToolkitMissionWizard.requiredArtifactsForMission(RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE)
         assertTrue(artifacts.any { it.id == "fishit_provider_draft" && it.paths.contains("provider_draft_export.json") })
+        assertTrue(artifacts.any { it.id == "source_pipeline_bundle" && it.paths.contains("source_pipeline_bundle.json") })
+        assertTrue(artifacts.any { it.id == "source_bundle_manifest" && it.paths.contains("manifest.json") })
+        assertTrue(artifacts.any { it.id == "source_plugin_bundle" && it.paths.contains("exports/source_plugin_bundle.zip") })
         assertTrue(artifacts.any { it.id == "warnings" && it.relativePath == "mission_export_summary.json" })
     }
 

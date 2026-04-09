@@ -211,6 +211,9 @@ step_instruction = {
 artifact_id_by_contract_file = {
     "site_runtime_model.json": "site_runtime_model",
     "fishit_provider_draft.json": "fishit_provider_draft",
+    "source_pipeline_bundle.json": "source_pipeline_bundle",
+    "manifest.json": "source_bundle_manifest",
+    "source_plugin_bundle.zip": "source_plugin_bundle",
     "webapp_runtime_draft.json": "webapp_runtime_draft",
     "endpoint_templates.json": "endpoint_templates",
     "field_matrix.json": "field_matrix",
@@ -226,6 +229,9 @@ artifact_id_by_contract_file = {
 artifact_path_aliases = {
     "site_runtime_model": ["site_profile.draft.json", "site_runtime_model.json"],
     "fishit_provider_draft": ["provider_draft_export.json", "fishit_provider_draft.json"],
+    "source_pipeline_bundle": ["source_pipeline_bundle.json"],
+    "source_bundle_manifest": ["manifest.json"],
+    "source_plugin_bundle": ["exports/source_plugin_bundle.zip", "source_plugin_bundle.zip"],
     "webapp_runtime_draft": ["webapp_runtime_draft.json"],
     "endpoint_templates": ["endpoint_candidates.json", "endpoint_templates.json"],
     "field_matrix": ["field_matrix.json"],
