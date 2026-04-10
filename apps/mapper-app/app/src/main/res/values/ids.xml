@@ -20,6 +20,11 @@
     <item name="mapper_wizard_action_pause" type="id" />
     <item name="mapper_wizard_action_next" type="id" />
     <item name="mapper_wizard_action_minimize" type="id" />
+    <item name="mapper_wizard_live_panel" type="id" />
+    <item name="mapper_wizard_live_title" type="id" />
+    <item name="mapper_wizard_live_refresh" type="id" />
+    <item name="mapper_wizard_live_toggle" type="id" />
+    <item name="mapper_wizard_live_content" type="id" />
     <item name="translation_language" type="id" />
     <item name="remote_text_search" type="id" />
     <item name="external_search_close" type="id" />

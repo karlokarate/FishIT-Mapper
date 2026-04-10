@@ -92,4 +92,40 @@ class RuntimeToolkitTelemetryWizardFlowTest {
         assertTrue(readyWindow!!.containsKey("active"))
         assertTrue(readyWindow.containsKey("armed_step_id"))
     }
+
+    @Test
+    fun live_snapshot_exposes_recent_correlation_and_candidates() {
+        RuntimeToolkitTelemetry.startMissionSession(
+            context = context,
+            missionId = RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE,
+        )
+        RuntimeToolkitTelemetry.setMissionTarget(context, "https://www.zdf.de")
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = context,
+            stepId = RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        )
+        RuntimeToolkitTelemetry.logNetworkRequest(
+            context = context,
+            source = "webview",
+            url = "https://www.zdf.de/api/search?q=heute",
+            method = "GET",
+            headers = emptyMap(),
+        )
+        RuntimeToolkitTelemetry.logNetworkResponse(
+            context = context,
+            source = "webview",
+            url = "https://www.zdf.de/api/search?q=heute",
+            method = "GET",
+            statusCode = 200,
+            reason = "OK",
+            mimeType = "application/json",
+            headers = emptyMap(),
+            rawBody = """{"results":[{"title":"Search Title"}]}""".toByteArray(),
+        )
+
+        val snapshot = RuntimeToolkitTelemetry.buildLiveWizardSnapshot(context)
+        assertTrue(snapshot.recentCorrelated.isNotEmpty())
+        assertTrue(snapshot.endpointCandidates.isNotEmpty())
+    }
 }

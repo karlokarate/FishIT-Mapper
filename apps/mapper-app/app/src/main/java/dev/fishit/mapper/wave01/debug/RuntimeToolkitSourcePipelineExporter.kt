@@ -363,9 +363,11 @@ object RuntimeToolkitSourcePipelineExporter {
                 else -> 0.5
             }
         }
+        val endpointOverrides = RuntimeToolkitTelemetry.readEndpointOverrides(runtimeRoot)
         val selection = selectFinalEndpoints(
             endpoints = endpointById.values,
             responses = responses,
+            overrides = endpointOverrides,
         )
         val exportWarnings = linkedSetOf<String>().apply { addAll(selection.warnings) }
         val endpointsForBundle = selection.endpoints
@@ -3572,8 +3574,10 @@ object RuntimeToolkitSourcePipelineExporter {
     private fun selectFinalEndpoints(
         endpoints: Collection<EndpointAggregate>,
         responses: List<ResponseEvent>,
+        overrides: RuntimeToolkitTelemetry.EndpointOverrides?,
     ): EndpointSelection {
         val warnings = linkedSetOf<String>()
+        val endpointById = endpoints.associateBy { it.endpointId }
         val roleByEndpoint = endpoints.associate { it.endpointId to it.role }
         val responseEndpointRefByEventId = buildMap<String, String> {
             endpoints.forEach { endpoint ->
@@ -3597,6 +3601,15 @@ object RuntimeToolkitSourcePipelineExporter {
             candidates += endpoints.filter { !looksLikeNonContentOperation("${it.requestOperation} ${it.normalizedHost} ${it.normalizedPath}") }
         }
 
+        val excludedByUser = overrides?.excludedEndpoints.orEmpty()
+        if (excludedByUser.isNotEmpty()) {
+            val before = candidates.size
+            candidates.removeAll { it.endpointId in excludedByUser }
+            if (before != candidates.size) {
+                warnings += "USER_ENDPOINT_EXCLUSIONS_APPLIED"
+            }
+        }
+
         val homeEvidence = responses.any { response ->
             val inferred = inferRole(response.phaseId, response.operation, response.normalizedPath, response.url)
             response.statusCode in 200..399 && (response.routeKind == "home" || inferred == "home")
@@ -3616,6 +3629,24 @@ object RuntimeToolkitSourcePipelineExporter {
             }
         }
 
+        val selectedOverrides = overrides?.selectedEndpointByRole.orEmpty()
+        val pinnedByRole = linkedMapOf<String, EndpointAggregate>()
+        selectedOverrides.forEach { (role, endpointId) ->
+            if (endpointId.isBlank()) return@forEach
+            if (endpointId in excludedByUser) return@forEach
+            val rawEndpoint = endpointById[endpointId] ?: return@forEach
+            if (rawEndpoint.role != role) return@forEach
+            if (!shouldIncludeEndpointInBundle(rawEndpoint) || isNoiseEndpoint(rawEndpoint)) {
+                warnings += "USER_OVERRIDE_DROPPED_NOISE"
+                return@forEach
+            }
+            val candidate = candidates.firstOrNull { it.endpointId == endpointId } ?: return@forEach
+            pinnedByRole[role] = candidate
+        }
+        if (pinnedByRole.isNotEmpty()) {
+            warnings += "USER_ENDPOINT_OVERRIDE_APPLIED"
+        }
+
         val selected = mutableListOf<EndpointAggregate>()
         roleExportCaps.forEach { (role, cap) ->
             val roleCandidates = candidates.filter { it.role == role }
@@ -3628,7 +3659,15 @@ object RuntimeToolkitSourcePipelineExporter {
             if (sorted.size > cap) {
                 warnings += "ENDPOINT_CAP_APPLIED:${role}"
             }
-            selected += sorted.take(cap)
+            val pinned = pinnedByRole[role]
+            if (pinned != null) {
+                selected += pinned
+                if (cap > 1) {
+                    selected += sorted.filter { it.endpointId != pinned.endpointId }.take(cap - 1)
+                }
+            } else {
+                selected += sorted.take(cap)
+            }
         }
 
         if (selected.size < candidates.size) {

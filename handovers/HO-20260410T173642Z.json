@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260410T173642Z",
+  "generated_at_utc": "2026-04-10T17:36:42Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260410T173642Z"
+  },
+  "scope": "build+smoke+fixes",
+  "highlights": [
+    "Fixed Log import and override exclusion cleanup; ran wave01 build, integration smoke, device smoke failed (no device)."
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": ".tmp/screens/Screenshot_20260410_104659_FishIT Mapper Lab.jpg",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260410T172652Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260410T173157Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitSourcePipelineExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitTelemetry.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/activity/BrowserActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/view/MainContentLayout.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/res/values/ids.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/res/values/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/test/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitSourcePipelineExporterTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/test/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitTelemetryWizardFlowTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/decision_trace.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/runtime_event.schema.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/runtime_toolkit_v2.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/archive/runtime_event.schema.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "docs/archive/runtime_toolkit_v2.contract.json",
+      "old_path": null
+    }
+  ]
+}

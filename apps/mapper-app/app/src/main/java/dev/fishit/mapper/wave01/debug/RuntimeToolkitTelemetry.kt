@@ -74,6 +74,8 @@ object RuntimeToolkitTelemetry {
     private const val EXPORT_READINESS_PARTIAL = "PARTIAL"
     private const val EXPORT_READINESS_READY = "READY"
     private const val EXPORT_READINESS_BLOCKED = "BLOCKED"
+    private const val ENDPOINT_OVERRIDE_SCHEMA_VERSION = 1
+    private const val ENDPOINT_OVERRIDE_FILE = "endpoint_overrides.json"
     private val MINIMAL_RUNTIME_EXPORT_FILES = setOf(
         "source_pipeline_bundle.json",
         "site_runtime_model.json",
@@ -82,6 +84,7 @@ object RuntimeToolkitTelemetry {
         "fishit_provider_draft.json",
         "endpoint_templates.json",
         "endpoint_candidates.json",
+        "endpoint_overrides.json",
         "replay_requirements.json",
         "field_matrix.json",
         "auth_draft.json",
@@ -169,6 +172,66 @@ object RuntimeToolkitTelemetry {
         val availableArtifacts: Map<String, Boolean>,
         val hasFinalizedExport: Boolean,
         val warnings: List<String>,
+    )
+
+    data class EndpointOverrideTestResult(
+        val status: Int,
+        val durationMillis: Long,
+        val sizeBytes: Int,
+        val mimeType: String,
+        val ok: Boolean,
+        val recordedAt: String,
+    )
+
+    data class EndpointOverrides(
+        val schemaVersion: Int,
+        val selectedEndpointByRole: LinkedHashMap<String, String>,
+        val excludedEndpoints: LinkedHashSet<String>,
+        val lastTestResults: LinkedHashMap<String, EndpointOverrideTestResult>,
+    )
+
+    data class LiveCorrelationCount(
+        val phaseId: String,
+        val routeKind: String,
+        val statusBucket: String,
+        val hostClass: String,
+        val count: Int,
+    )
+
+    data class LiveCorrelationEntry(
+        val statusCode: Int,
+        val routeKind: String,
+        val operation: String,
+        val normalizedHost: String,
+        val normalizedPath: String,
+        val phaseId: String,
+    )
+
+    data class LiveEndpointCandidate(
+        val endpointId: String,
+        val role: String,
+        val method: String,
+        val normalizedHost: String,
+        val normalizedPath: String,
+        val requestOperation: String,
+        val score: Double,
+        val confidence: Double,
+        val evidenceCount: Int,
+        val phaseId: String,
+        val queryParamNames: List<String>,
+        val bodyFieldNames: List<String>,
+        val sampleUrl: String,
+    )
+
+    data class LiveWizardSnapshot(
+        val schemaVersion: Int,
+        val generatedAt: String,
+        val missionId: String,
+        val wizardStepId: String,
+        val phaseId: String,
+        val correlationSummary: List<LiveCorrelationCount>,
+        val recentCorrelated: List<LiveCorrelationEntry>,
+        val endpointCandidates: Map<String, List<LiveEndpointCandidate>>,
     )
 
     data class OverlayAnchor(
@@ -1274,6 +1337,325 @@ object RuntimeToolkitTelemetry {
         )
     }
 
+    fun ensureEndpointOverrides(context: Context): EndpointOverrides {
+        return readEndpointOverrides(runtimeRoot(context))
+    }
+
+    fun readEndpointOverrides(context: Context): EndpointOverrides {
+        return readEndpointOverrides(runtimeRoot(context))
+    }
+
+    fun readEndpointOverrides(runtimeRoot: File): EndpointOverrides {
+        if (!runtimeRoot.exists()) runtimeRoot.mkdirs()
+        val file = File(runtimeRoot, ENDPOINT_OVERRIDE_FILE)
+        synchronized(ioLock) {
+            if (!file.exists() || file.length() <= 0L) {
+                val defaults = defaultEndpointOverrides()
+                writeEndpointOverrides(runtimeRoot, defaults)
+                return defaults
+            }
+            val raw = runCatching { file.readText(Charsets.UTF_8) }.getOrNull().orEmpty()
+            val json = runCatching { JSONObject(raw) }.getOrNull() ?: JSONObject()
+            val schema = json.optInt("schema_version", ENDPOINT_OVERRIDE_SCHEMA_VERSION)
+            val selected = linkedMapOf<String, String>()
+            val selectedObj = json.optJSONObject("selected_endpoint_by_role") ?: JSONObject()
+            selectedObj.keys().forEach { role ->
+                val value = selectedObj.optString(role).trim()
+                if (value.isNotBlank()) selected[role.trim()] = value
+            }
+            val excluded = linkedSetOf<String>()
+            val excludedArr = json.optJSONArray("excluded_endpoints") ?: JSONArray()
+            for (i in 0 until excludedArr.length()) {
+                val value = excludedArr.optString(i).trim()
+                if (value.isNotBlank()) excluded += value
+            }
+            val testResults = linkedMapOf<String, EndpointOverrideTestResult>()
+            val testsObj = json.optJSONObject("last_test_results") ?: JSONObject()
+            testsObj.keys().forEach { endpointId ->
+                val entry = testsObj.optJSONObject(endpointId) ?: return@forEach
+                val result = EndpointOverrideTestResult(
+                    status = entry.optInt("status", 0),
+                    durationMillis = entry.optLong("ms", 0L),
+                    sizeBytes = entry.optInt("size", 0),
+                    mimeType = entry.optString("mime").trim(),
+                    ok = entry.optBoolean("ok", false),
+                    recordedAt = entry.optString("at").trim(),
+                )
+                testResults[endpointId] = result
+            }
+            return EndpointOverrides(
+                schemaVersion = schema,
+                selectedEndpointByRole = LinkedHashMap(selected),
+                excludedEndpoints = LinkedHashSet(excluded),
+                lastTestResults = LinkedHashMap(testResults),
+            )
+        }
+    }
+
+    fun writeEndpointOverrides(context: Context, overrides: EndpointOverrides): EndpointOverrides {
+        return writeEndpointOverrides(runtimeRoot(context), overrides)
+    }
+
+    fun writeEndpointOverrides(runtimeRoot: File, overrides: EndpointOverrides): EndpointOverrides {
+        if (!runtimeRoot.exists()) runtimeRoot.mkdirs()
+        val file = File(runtimeRoot, ENDPOINT_OVERRIDE_FILE)
+        val payload = JSONObject().apply {
+            put("schema_version", overrides.schemaVersion)
+            put("selected_endpoint_by_role", JSONObject().apply {
+                overrides.selectedEndpointByRole.toSortedMap().forEach { (role, endpointId) ->
+                    put(role, endpointId)
+                }
+            })
+            put("excluded_endpoints", JSONArray().apply {
+                overrides.excludedEndpoints.toList().sorted().forEach { put(it) }
+            })
+            put("last_test_results", JSONObject().apply {
+                overrides.lastTestResults.toSortedMap().forEach { (endpointId, result) ->
+                    put(
+                        endpointId,
+                        JSONObject().apply {
+                            put("status", result.status)
+                            put("ms", result.durationMillis)
+                            put("size", result.sizeBytes)
+                            put("mime", result.mimeType)
+                            put("ok", result.ok)
+                            put("at", result.recordedAt)
+                        },
+                    )
+                }
+            })
+        }
+        synchronized(ioLock) {
+            file.writeText(payload.toString(2) + "\n", Charsets.UTF_8)
+        }
+        return overrides
+    }
+
+    fun setEndpointOverrideSelection(
+        context: Context,
+        role: String,
+        endpointId: String?,
+    ): EndpointOverrides {
+        val safeRole = role.trim()
+        if (safeRole.isBlank()) return readEndpointOverrides(context)
+        val overrides = readEndpointOverrides(context)
+        val selected = LinkedHashMap(overrides.selectedEndpointByRole)
+        if (endpointId.isNullOrBlank()) {
+            selected.remove(safeRole)
+        } else {
+            selected[safeRole] = endpointId.trim()
+        }
+        return writeEndpointOverrides(
+            context,
+            overrides.copy(selectedEndpointByRole = selected),
+        )
+    }
+
+    fun setEndpointExcluded(
+        context: Context,
+        endpointId: String,
+        excluded: Boolean,
+    ): EndpointOverrides {
+        val safeId = endpointId.trim()
+        if (safeId.isBlank()) return readEndpointOverrides(context)
+        val overrides = readEndpointOverrides(context)
+        val excludedIds = LinkedHashSet(overrides.excludedEndpoints)
+        val selectedByRole = LinkedHashMap(overrides.selectedEndpointByRole)
+        if (excluded) {
+            excludedIds += safeId
+            selectedByRole.entries.removeAll { it.value == safeId }
+        } else {
+            excludedIds.remove(safeId)
+        }
+        return writeEndpointOverrides(
+            context,
+            overrides.copy(
+                excludedEndpoints = excludedIds,
+                selectedEndpointByRole = selectedByRole,
+            ),
+        )
+    }
+
+    fun recordEndpointTestResult(
+        context: Context,
+        endpointId: String,
+        status: Int,
+        durationMillis: Long,
+        sizeBytes: Int,
+        mimeType: String,
+        ok: Boolean,
+    ): EndpointOverrides {
+        val safeId = endpointId.trim()
+        if (safeId.isBlank()) return readEndpointOverrides(context)
+        val overrides = readEndpointOverrides(context)
+        val results = LinkedHashMap(overrides.lastTestResults)
+        results[safeId] = EndpointOverrideTestResult(
+            status = status,
+            durationMillis = durationMillis,
+            sizeBytes = sizeBytes,
+            mimeType = mimeType.trim(),
+            ok = ok,
+            recordedAt = Instant.now().toString(),
+        )
+        return writeEndpointOverrides(
+            context,
+            overrides.copy(lastTestResults = results),
+        )
+    }
+
+    fun buildLiveWizardSnapshot(context: Context, maxRecent: Int = 10): LiveWizardSnapshot {
+        RuntimeToolkitMissionWizard.ensureRegistryLoaded(context)
+        val state = missionSessionState(context)
+        val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, context)
+        val stepPhase = step?.phaseId?.trim().orEmpty()
+        val activePhase = normalizePhaseId(activePhaseId(context)) ?: PHASE_BACKGROUND
+        val targetPhase = when {
+            stepPhase.isNotBlank() -> stepPhase
+            activePhase != PHASE_BACKGROUND -> activePhase
+            else -> ""
+        }
+        val file = eventFile(context)
+        val responses = mutableListOf<LiveResponseEvent>()
+        val requests = mutableListOf<LiveRequestEvent>()
+
+        if (file.exists()) {
+            runCatching {
+                file.forEachLine { line ->
+                    if (line.isBlank()) return@forEachLine
+                    val root = runCatching { JSONObject(line) }.getOrNull() ?: return@forEachLine
+                    val eventType = root.optString("event_type")
+                    val payload = root.optJSONObject("payload") ?: JSONObject()
+                    if (!isEventWithinMission(state, root, payload)) return@forEachLine
+                    when (eventType) {
+                        "network_request_event" -> {
+                            val parsed = parseLiveRequestEvent(root, payload, targetPhase)
+                            if (parsed != null) requests += parsed
+                        }
+                        "network_response_event" -> {
+                            val parsed = parseLiveResponseEvent(root, payload, targetPhase)
+                            if (parsed != null) responses += parsed
+                        }
+                    }
+                }
+            }
+        }
+
+        val correlationSummary = responses
+            .groupingBy { entry ->
+                listOf(entry.phaseId, entry.routeKind, statusBucket(entry.statusCode), entry.hostClass).joinToString("|")
+            }
+            .eachCount()
+            .map { (key, count) ->
+                val parts = key.split("|")
+                LiveCorrelationCount(
+                    phaseId = parts.getOrNull(0).orEmpty(),
+                    routeKind = parts.getOrNull(1).orEmpty(),
+                    statusBucket = parts.getOrNull(2).orEmpty(),
+                    hostClass = parts.getOrNull(3).orEmpty(),
+                    count = count,
+                )
+            }
+
+        val recentCorrelated = responses
+            .takeLast(maxRecent)
+            .map { response ->
+                LiveCorrelationEntry(
+                    statusCode = response.statusCode,
+                    routeKind = response.routeKind,
+                    operation = response.operation,
+                    normalizedHost = response.normalizedHost,
+                    normalizedPath = response.normalizedPath,
+                    phaseId = response.phaseId,
+                )
+            }
+
+        val aggregateById = linkedMapOf<String, LiveEndpointAggregate>()
+        val responsesByRequestId = responses.groupBy { it.requestId }
+        requests.forEach { request ->
+            val role = inferLiveRole(request.phaseId, request.operation, request.normalizedPath)
+            if (role == "helper") return@forEach
+            val endpointId = "ep_${shortHash("$role|${request.method}|${request.normalizedHost}|${request.normalizedPath}")}".take(19)
+            val aggregate = aggregateById.getOrPut(endpointId) {
+                LiveEndpointAggregate(
+                    endpointId = endpointId,
+                    role = role,
+                    method = request.method,
+                    normalizedHost = request.normalizedHost,
+                    normalizedPath = request.normalizedPath,
+                    requestOperation = request.operation,
+                    phaseId = request.phaseId,
+                    sampleUrl = request.url,
+                )
+            }
+            aggregate.requestEvidenceCount += 1
+            aggregate.queryParamNames += request.queryParamNames
+            aggregate.bodyFieldNames += request.bodyFieldNames
+            responsesByRequestId[request.requestId].orEmpty().forEach { response ->
+                aggregate.responseEvidenceCount += 1
+                if (response.statusCode in 200..399) aggregate.responseOkCount += 1
+                if (response.hostClass.isNotBlank()) aggregate.hostClassSignals += response.hostClass
+                if (response.mimeType.isNotBlank()) aggregate.responseMimeTypes += response.mimeType
+                if (response.routeKind.isNotBlank()) aggregate.routeKinds += response.routeKind
+            }
+        }
+
+        val candidateList = aggregateById.values.map { aggregate ->
+            val evidence = aggregate.requestEvidenceCount + aggregate.responseEvidenceCount
+            val confidence = when {
+                evidence >= 6 -> 0.9
+                evidence >= 3 -> 0.8
+                evidence >= 1 -> 0.7
+                else -> 0.5
+            }
+            val score = scoreLiveCandidate(aggregate, confidence, targetPhase)
+            LiveEndpointCandidate(
+                endpointId = aggregate.endpointId,
+                role = aggregate.role,
+                method = aggregate.method,
+                normalizedHost = aggregate.normalizedHost,
+                normalizedPath = aggregate.normalizedPath,
+                requestOperation = aggregate.requestOperation,
+                score = score,
+                confidence = confidence,
+                evidenceCount = evidence,
+                phaseId = aggregate.phaseId,
+                queryParamNames = aggregate.queryParamNames.toList().sorted(),
+                bodyFieldNames = aggregate.bodyFieldNames.toList().sorted(),
+                sampleUrl = aggregate.sampleUrl,
+            )
+        }.sortedWith(
+            compareByDescending<LiveEndpointCandidate> { it.score }
+                .thenByDescending { it.confidence }
+                .thenBy { it.endpointId.lowercase(Locale.ROOT) },
+        )
+
+        val roleOrder = listOf("home", "search", "detail", "playbackResolver", "auth", "refresh", "config", "helper")
+        val grouped = linkedMapOf<String, List<LiveEndpointCandidate>>()
+        roleOrder.forEach { role ->
+            val items = candidateList.filter { it.role == role }
+            if (items.isNotEmpty()) grouped[role] = items
+        }
+        candidateList
+            .map { it.role }
+            .distinct()
+            .filterNot { roleOrder.contains(it) }
+            .forEach { role ->
+                val items = candidateList.filter { it.role == role }
+                if (items.isNotEmpty()) grouped[role] = items
+            }
+
+        return LiveWizardSnapshot(
+            schemaVersion = 1,
+            generatedAt = Instant.now().toString(),
+            missionId = state.missionId,
+            wizardStepId = state.wizardStepId,
+            phaseId = targetPhase,
+            correlationSummary = correlationSummary.sortedByDescending { it.count },
+            recentCorrelated = recentCorrelated,
+            endpointCandidates = grouped,
+        )
+    }
+
     fun buildMissionExportSummary(
         context: Context,
         missionId: String = missionSessionState(context).missionId,
@@ -1618,6 +2000,7 @@ object RuntimeToolkitTelemetry {
         clearLatestReadyHit(context)
         setLatestExportGateError(context, null)
         writeMissionSession(context, updated)
+        ensureEndpointOverrides(context)
         return updated
     }
 
@@ -2824,8 +3207,51 @@ object RuntimeToolkitTelemetry {
                 val routeEvidence = routeKind in setOf("home", "search", "detail", "playback", "auth", "category", "live")
                 val siteEvidence = targetSiteId.isNotBlank() && targetSiteId !in setOf("unknown_target", "unknown")
                 return hostClass.startsWith("target_") || routeEvidence || siteEvidence
-            }
+        }
     }
+
+    private data class LiveRequestEvent(
+        val requestId: String,
+        val phaseId: String,
+        val method: String,
+        val url: String,
+        val normalizedHost: String,
+        val normalizedPath: String,
+        val operation: String,
+        val queryParamNames: Set<String>,
+        val bodyFieldNames: Set<String>,
+    )
+
+    private data class LiveResponseEvent(
+        val requestId: String,
+        val phaseId: String,
+        val statusCode: Int,
+        val routeKind: String,
+        val operation: String,
+        val normalizedHost: String,
+        val normalizedPath: String,
+        val hostClass: String,
+        val mimeType: String,
+    )
+
+    private data class LiveEndpointAggregate(
+        val endpointId: String,
+        val role: String,
+        val method: String,
+        val normalizedHost: String,
+        val normalizedPath: String,
+        val requestOperation: String,
+        val phaseId: String,
+        val sampleUrl: String,
+        var requestEvidenceCount: Int = 0,
+        var responseEvidenceCount: Int = 0,
+        var responseOkCount: Int = 0,
+        val hostClassSignals: MutableSet<String> = linkedSetOf(),
+        val responseMimeTypes: MutableSet<String> = linkedSetOf(),
+        val routeKinds: MutableSet<String> = linkedSetOf(),
+        val queryParamNames: MutableSet<String> = linkedSetOf(),
+        val bodyFieldNames: MutableSet<String> = linkedSetOf(),
+    )
 
     private fun parseInstant(value: String): Instant? {
         val trimmed = value.trim()
@@ -2920,6 +3346,223 @@ object RuntimeToolkitTelemetry {
                 path.contains("/auth") -> "auth_probe"
             else -> PHASE_BACKGROUND
         }
+    }
+
+    private fun defaultEndpointOverrides(): EndpointOverrides {
+        return EndpointOverrides(
+            schemaVersion = ENDPOINT_OVERRIDE_SCHEMA_VERSION,
+            selectedEndpointByRole = linkedMapOf(),
+            excludedEndpoints = linkedSetOf(),
+            lastTestResults = linkedMapOf(),
+        )
+    }
+
+    private fun statusBucket(statusCode: Int): String {
+        return when (statusCode) {
+            in 200..299 -> "2xx"
+            in 300..399 -> "3xx"
+            in 400..499 -> "4xx"
+            in 500..599 -> "5xx"
+            0 -> "unknown"
+            else -> "${statusCode / 100}xx"
+        }
+    }
+
+    private fun inferLiveRole(phaseId: String, operation: String, normalizedPath: String): String {
+        val phase = normalizePhaseId(phaseId) ?: PHASE_BACKGROUND
+        if (phase.startsWith("home")) return "home"
+        if (phase.startsWith("search")) return "search"
+        if (phase.startsWith("detail")) return "detail"
+        if (phase.startsWith("playback")) return "playbackResolver"
+        if (phase.startsWith("auth")) return "auth"
+        if (phase.startsWith("replay")) return "helper"
+        val context = "${operation.lowercase(Locale.ROOT)} ${normalizedPath.lowercase(Locale.ROOT)}"
+        return when {
+            context.contains("refresh") -> "refresh"
+            context.contains("auth") || context.contains("login") || context.contains("token") -> "auth"
+            context.contains("search") -> "search"
+            context.contains("detail") || context.contains("/content/") -> "detail"
+            context.contains("playback") || context.contains("resolver") || context.contains("ptmd") || context.contains("manifest") -> "playbackResolver"
+            context.contains("config") || context.contains("settings") -> "config"
+            else -> "helper"
+        }
+    }
+
+    private fun scoreLiveCandidate(
+        aggregate: LiveEndpointAggregate,
+        confidence: Double,
+        targetPhase: String,
+    ): Double {
+        var score = confidence * 100.0
+        score += aggregate.requestEvidenceCount * 3.0
+        score += aggregate.responseOkCount * 8.0
+        if (aggregate.hostClassSignals.any { it.startsWith("target_") }) score += 12.0
+        if (aggregate.responseMimeTypes.any { it.contains("json") }) score += 8.0
+        if (aggregate.method == "OPTIONS") score -= 40.0
+        if (aggregate.phaseId == targetPhase) score += 10.0
+        if (aggregate.routeKinds.contains(aggregate.role)) score += 6.0
+        if (isLiveNoiseEndpoint(aggregate)) score -= 80.0
+        return score
+    }
+
+    private fun isLiveNoiseEndpoint(aggregate: LiveEndpointAggregate): Boolean {
+        val host = aggregate.normalizedHost.lowercase(Locale.ROOT)
+        val path = aggregate.normalizedPath.lowercase(Locale.ROOT)
+        val context = "${aggregate.requestOperation} $host $path".lowercase(Locale.ROOT)
+        if (host.contains("analytics") || host.contains("measurement") || host.contains("metrics") || host.contains("sentry")) {
+            return true
+        }
+        if (path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".woff") || path.endsWith(".woff2")) return true
+        if (path.endsWith(".png") || path.endsWith(".jpg") || path.endsWith(".jpeg") || path.endsWith(".gif")) return true
+        if (path.endsWith(".svg") || path.endsWith(".webp") || path.endsWith(".ico")) return true
+        if (path.endsWith(".m3u8") || path.endsWith(".mpd") || path.endsWith(".ts") || path.endsWith(".m4s")) return true
+        if (path.endsWith(".vtt") || path.endsWith(".mp3") || path.endsWith(".mp4") || path.endsWith(".m4a")) return true
+        if (path.contains("/usage-data/") || path.contains("/user-histories/")) return true
+        if (path.contains("/geo.txt") || path.contains("/nmrodam")) return true
+        if (context.contains("segment") || context.contains("subtitle") || context.contains("geo") || context.contains("usage-history")) return true
+        return false
+    }
+
+    private fun parseLiveRequestEvent(
+        root: JSONObject,
+        payload: JSONObject,
+        targetPhase: String,
+    ): LiveRequestEvent? {
+        val requestId = payload.optString("request_id").ifBlank { root.optString("event_id") }
+        if (requestId.isBlank()) return null
+        val method = payload.optString("method").ifBlank { "GET" }.uppercase(Locale.ROOT)
+        val url = payload.optString("url")
+        if (url.isBlank()) return null
+        val normalizedParts = normalizedUrlParts(url)
+        val normalizedHost = payload.optString("normalized_host").ifBlank { normalizedParts.host }
+        val normalizedPath = payload.optString("normalized_path").ifBlank { normalizedParts.path }
+        val operation = payload.optString("request_operation")
+            .ifBlank { payload.optString("operation") }
+            .ifBlank { normalizedPath.trim('/').substringBefore('/') }
+        val phaseId = resolveLivePhase(
+            phaseId = payload.optString("phase_id"),
+            routeKind = payload.optString("route_kind"),
+            operation = operation,
+            path = normalizedPath,
+            mimeType = "",
+        )
+        if (targetPhase.isNotBlank() && phaseId != targetPhase) return null
+        val queryParamNames = parseQueryParamNames(url)
+        val bodyFieldNames = parseBodyFieldNames(payload.optString("body_preview"))
+        return LiveRequestEvent(
+            requestId = requestId,
+            phaseId = phaseId,
+            method = method,
+            url = url,
+            normalizedHost = normalizedHost,
+            normalizedPath = normalizedPath,
+            operation = operation.lowercase(Locale.ROOT),
+            queryParamNames = queryParamNames,
+            bodyFieldNames = bodyFieldNames,
+        )
+    }
+
+    private fun parseLiveResponseEvent(
+        root: JSONObject,
+        payload: JSONObject,
+        targetPhase: String,
+    ): LiveResponseEvent? {
+        val requestId = payload.optString("request_id").ifBlank { root.optString("request_id") }
+        if (requestId.isBlank()) return null
+        val url = payload.optString("url")
+        if (url.isBlank()) return null
+        val normalizedParts = normalizedUrlParts(url)
+        val normalizedHost = payload.optString("normalized_host").ifBlank { normalizedParts.host }
+        val normalizedPath = payload.optString("normalized_path").ifBlank { normalizedParts.path }
+        val operation = payload.optString("response_operation")
+            .ifBlank { payload.optString("request_operation") }
+            .ifBlank { payload.optString("operation") }
+            .ifBlank { normalizedPath.trim('/').substringBefore('/') }
+        val statusCode = when {
+            payload.has("status_code") -> payload.optInt("status_code", 0)
+            payload.has("status") -> payload.optInt("status", 0)
+            else -> 0
+        }
+        val mimeType = payload.optString("mime_type").ifBlank { payload.optString("mime") }
+        val phaseId = resolveLivePhase(
+            phaseId = payload.optString("phase_id"),
+            routeKind = payload.optString("route_kind"),
+            operation = operation,
+            path = normalizedPath,
+            mimeType = mimeType,
+        )
+        if (targetPhase.isNotBlank() && phaseId != targetPhase) return null
+        return LiveResponseEvent(
+            requestId = requestId,
+            phaseId = phaseId,
+            statusCode = statusCode,
+            routeKind = payload.optString("route_kind").trim().lowercase(Locale.ROOT),
+            operation = operation.lowercase(Locale.ROOT),
+            normalizedHost = normalizedHost,
+            normalizedPath = normalizedPath,
+            hostClass = payload.optString("host_class").ifBlank { "unknown" },
+            mimeType = mimeType.lowercase(Locale.ROOT),
+        )
+    }
+
+    private fun resolveLivePhase(
+        phaseId: String,
+        routeKind: String,
+        operation: String,
+        path: String,
+        mimeType: String,
+    ): String {
+        val normalized = normalizePhaseId(phaseId) ?: PHASE_BACKGROUND
+        if (normalized != PHASE_BACKGROUND) return normalized
+        val loweredRoute = routeKind.trim().lowercase(Locale.ROOT)
+        val loweredOp = operation.lowercase(Locale.ROOT)
+        val loweredPath = path.lowercase(Locale.ROOT)
+        return when {
+            loweredRoute == "home" || loweredPath == "/" || loweredPath.contains("/home") -> "home_probe"
+            loweredRoute == "search" || loweredOp.contains("search") || loweredPath.contains("/search") -> "search_probe"
+            loweredRoute == "detail" || loweredOp.contains("detail") || loweredPath.contains("/detail") || loweredPath.contains("/content/") -> "detail_probe"
+            isPlaybackSignal(
+                routeKind = loweredRoute,
+                operation = loweredOp,
+                path = loweredPath,
+                mimeType = mimeType.lowercase(Locale.ROOT),
+            ) -> "playback_probe"
+            loweredRoute == "auth" ||
+                loweredOp.contains("auth") ||
+                loweredOp.contains("token") ||
+                loweredOp.contains("login") ||
+                loweredOp.contains("logout") ||
+                loweredOp.contains("refresh") ||
+                loweredPath.contains("/auth") -> "auth_probe"
+            else -> PHASE_BACKGROUND
+        }
+    }
+
+    private fun parseQueryParamNames(url: String): Set<String> {
+        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return emptySet()
+        return uri.queryParameterNames.map { it.trim() }.filter { it.isNotBlank() }.toSet()
+    }
+
+    private fun parseBodyFieldNames(bodyPreview: String): Set<String> {
+        val trimmed = bodyPreview.trim()
+        if (trimmed.isBlank()) return emptySet()
+        return runCatching {
+            when {
+                trimmed.startsWith("{") -> {
+                    val obj = JSONObject(trimmed)
+                    obj.keys().asSequence().map { it.trim() }.filter { it.isNotBlank() }.toSet()
+                }
+                trimmed.startsWith("[") -> {
+                    val arr = JSONArray(trimmed)
+                    if (arr.length() == 0) emptySet()
+                    else {
+                        val first = arr.optJSONObject(0) ?: return@runCatching emptySet()
+                        first.keys().asSequence().map { it.trim() }.filter { it.isNotBlank() }.toSet()
+                    }
+                }
+                else -> emptySet()
+            }
+        }.getOrDefault(emptySet())
     }
 
     private fun collectAuthEvidence(context: Context): Int {
@@ -4363,6 +5006,15 @@ object RuntimeToolkitTelemetry {
             out.append(String.format("%02x", b))
         }
         return out.toString()
+    }
+
+    private fun shortHash(value: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
+        val out = StringBuilder(digest.size * 2)
+        for (b in digest) {
+            out.append(String.format("%02x", b))
+        }
+        return out.toString().take(16)
     }
 
     private fun buildDeviceJson(): JSONObject = JSONObject().apply {

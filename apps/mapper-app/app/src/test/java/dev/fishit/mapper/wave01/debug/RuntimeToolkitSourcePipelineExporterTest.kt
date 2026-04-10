@@ -226,6 +226,86 @@ class RuntimeToolkitSourcePipelineExporterTest {
     }
 
     @Test
+    fun exporter_applies_endpoint_overrides_for_selection_and_exclusion() {
+        val runtimeRoot = Files.createTempDirectory("rtk_source_bundle_overrides").toFile()
+        val extraEvents = listOf(
+            requestEvent(
+                eventId = "evt_req_search_alt",
+                requestId = "req_search_alt",
+                phaseId = "search_probe",
+                url = "https://www.zdf.de/api/search_alt?q=tagesschau",
+                normalizedPath = "/api/search_alt",
+                operation = "search_alt",
+                headers = mapOf("accept" to "application/json"),
+            ),
+            responseEvent(
+                eventId = "evt_res_search_alt",
+                requestId = "req_search_alt",
+                phaseId = "search_probe",
+                url = "https://www.zdf.de/api/search_alt?q=tagesschau",
+                normalizedPath = "/api/search_alt",
+                bodyPreview = """{"results":[{"title":"Alt Search","canonicalId":"cid_alt"}]}""",
+            ),
+        ).joinToString("\n")
+        val eventsFile = File(runtimeRoot, "events/runtime_events.jsonl").apply {
+            parentFile?.mkdirs()
+            val base = buildRuntimeEventsFixture().trimEnd()
+            writeText(listOf(base, extraEvents).joinToString("\n"), Charsets.UTF_8)
+        }
+        assertTrue(eventsFile.exists())
+        assertTrue(eventsFile.length() > 0L)
+
+        RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+            runtimeRoot = runtimeRoot,
+            targetSiteHint = "zdf.de",
+        )
+        val initialBundle = JSONObject(File(runtimeRoot, "source_pipeline_bundle.json").readText(Charsets.UTF_8))
+        val initialTemplates = initialBundle.getJSONArray("endpointTemplates")
+        val searchEndpoints = mutableListOf<String>()
+        forEachObject(initialTemplates) { endpoint ->
+            if (endpoint.optString("role") == "search") {
+                val id = endpoint.optString("endpointId")
+                if (id.isNotBlank()) searchEndpoints += id
+            }
+        }
+        assertTrue(searchEndpoints.size >= 2)
+        val selectedId = searchEndpoints.first()
+        val excludedId = searchEndpoints.last()
+
+        RuntimeToolkitTelemetry.writeEndpointOverrides(
+            runtimeRoot,
+            RuntimeToolkitTelemetry.EndpointOverrides(
+                schemaVersion = 1,
+                selectedEndpointByRole = linkedMapOf("search" to selectedId),
+                excludedEndpoints = linkedSetOf(excludedId),
+                lastTestResults = linkedMapOf(),
+            ),
+        )
+
+        val artifacts = RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+            runtimeRoot = runtimeRoot,
+            targetSiteHint = "zdf.de",
+        )
+        val bundle = JSONObject(artifacts.sourcePipelineBundlePath.readText(Charsets.UTF_8))
+        val warnings = bundle.optJSONArray("warnings") ?: JSONArray()
+        val warningSet = mutableSetOf<String>()
+        for (i in 0 until warnings.length()) {
+            val value = warnings.optString(i)
+            if (value.isNotBlank()) warningSet += value
+        }
+        assertTrue("USER_ENDPOINT_OVERRIDE_APPLIED" in warningSet)
+
+        val endpointTemplates = bundle.getJSONArray("endpointTemplates")
+        val endpointIds = mutableSetOf<String>()
+        forEachObject(endpointTemplates) { endpoint ->
+            val id = endpoint.optString("endpointId")
+            if (id.isNotBlank()) endpointIds += id
+        }
+        assertTrue(selectedId in endpointIds)
+        assertFalse(excludedId in endpointIds)
+    }
+
+    @Test
     fun exporter_derives_refresh_endpoint_and_auth_replay_requirements() {
         val runtimeRoot = Files.createTempDirectory("rtk_source_bundle_auth_refresh").toFile()
         val eventsFile = File(runtimeRoot, "events/runtime_events.jsonl").apply {

@@ -8,6 +8,7 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
@@ -51,6 +52,11 @@ class MainContentLayout(
     val mapperWizardActionCheck: TextView,
     val mapperWizardActionPause: TextView,
     val mapperWizardActionNext: TextView,
+    val mapperWizardLivePanel: LinearLayout,
+    val mapperWizardLiveTitle: TextView,
+    val mapperWizardLiveRefresh: TextView,
+    val mapperWizardLiveToggle: TextView,
+    val mapperWizardLiveContent: LinearLayout,
     val translationLanguage: TextView,
     val remoteTextSearch: ImageButton,
     val externalSearchClose: ImageButton,
@@ -525,6 +531,98 @@ class MainContentLayout(
                 )
             }
 
+            val mapperWizardLivePanel = LinearLayout(context).apply {
+                id = R.id.mapper_wizard_live_panel
+                orientation = LinearLayout.VERTICAL
+                layoutParams = ConstraintLayout.LayoutParams(
+                    dpToPx(context, 320), ConstraintLayout.LayoutParams.WRAP_CONTENT
+                )
+                background = ContextCompat.getDrawable(context, R.drawable.background_with_border)
+                setPadding(dpToPx(context, 12), dpToPx(context, 10), dpToPx(context, 12), dpToPx(context, 10))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    elevation = dpToPx(context, 6).toFloat()
+                }
+                visibility = View.GONE
+            }
+            root.addView(mapperWizardLivePanel)
+
+            val mapperWizardLiveHeader = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            mapperWizardLivePanel.addView(
+                mapperWizardLiveHeader,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+
+            val mapperWizardLiveTitle = TextView(context).apply {
+                id = R.id.mapper_wizard_live_title
+                textSize = 14f
+                setTextColor(ContextCompat.getColor(context, android.R.color.black))
+                text = context.getString(R.string.mapper_wizard_live_title)
+            }
+            mapperWizardLiveHeader.addView(
+                mapperWizardLiveTitle,
+                LinearLayout.LayoutParams(
+                    0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f
+                )
+            )
+
+            val mapperWizardLiveRefresh = createWizardActionButton(
+                id = R.id.mapper_wizard_live_refresh,
+                labelRes = R.string.mapper_wizard_live_refresh
+            )
+            mapperWizardLiveHeader.addView(
+                mapperWizardLiveRefresh,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    marginStart = dpToPx(context, 6)
+                }
+            )
+
+            val mapperWizardLiveToggle = createWizardActionButton(
+                id = R.id.mapper_wizard_live_toggle,
+                labelRes = R.string.mapper_wizard_live_hide
+            )
+            mapperWizardLiveHeader.addView(
+                mapperWizardLiveToggle,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    marginStart = dpToPx(context, 6)
+                }
+            )
+
+            val mapperWizardLiveScroll = ScrollView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dpToPx(context, 360)
+                ).apply {
+                    topMargin = dpToPx(context, 8)
+                }
+            }
+            mapperWizardLivePanel.addView(mapperWizardLiveScroll)
+
+            val mapperWizardLiveContent = LinearLayout(context).apply {
+                id = R.id.mapper_wizard_live_content
+                orientation = LinearLayout.VERTICAL
+            }
+            mapperWizardLiveScroll.addView(
+                mapperWizardLiveContent,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+
             // translation_language
             val translationLanguage = TextView(context).apply {
                 id = R.id.translation_language
@@ -684,6 +782,12 @@ class MainContentLayout(
             constraintSet.setMargin(mapperWizardCard.id, ConstraintSet.TOP, dpToPx(context, 56))
             constraintSet.setMargin(mapperWizardCard.id, ConstraintSet.START, dpToPx(context, 12))
 
+            // mapper_wizard_live_panel: floating side panel near top-end
+            constraintSet.connect(mapperWizardLivePanel.id, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+            constraintSet.connect(mapperWizardLivePanel.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+            constraintSet.setMargin(mapperWizardLivePanel.id, ConstraintSet.TOP, dpToPx(context, 56))
+            constraintSet.setMargin(mapperWizardLivePanel.id, ConstraintSet.END, dpToPx(context, 12))
+
             // translation_language: end to parent, bottom to parent
             constraintSet.connect(translationLanguage.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
             constraintSet.connect(translationLanguage.id, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
@@ -733,6 +837,11 @@ class MainContentLayout(
                 mapperWizardActionCheck = mapperWizardActionCheck,
                 mapperWizardActionPause = mapperWizardActionPause,
                 mapperWizardActionNext = mapperWizardActionNext,
+                mapperWizardLivePanel = mapperWizardLivePanel,
+                mapperWizardLiveTitle = mapperWizardLiveTitle,
+                mapperWizardLiveRefresh = mapperWizardLiveRefresh,
+                mapperWizardLiveToggle = mapperWizardLiveToggle,
+                mapperWizardLiveContent = mapperWizardLiveContent,
                 translationLanguage = translationLanguage,
                 remoteTextSearch = remoteTextSearch,
                 externalSearchClose = externalSearchClose,

@@ -350,7 +350,10 @@
                   "wizard_step_saturation_updated",
                   "wizard_step_completed",
                   "wizard_step_blocked",
-                  "wizard_finished"
+                  "wizard_finished",
+                  "wizard_endpoint_selected",
+                  "wizard_endpoint_excluded",
+                  "wizard_endpoint_tested"
                 ]
               },
               "saturation_state": {

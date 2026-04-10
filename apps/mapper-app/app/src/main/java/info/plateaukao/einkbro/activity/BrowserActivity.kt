@@ -30,6 +30,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Message
 import android.text.InputType
+import android.util.Log
 import android.view.ActionMode
 import android.view.Gravity
 import android.view.KeyEvent
@@ -79,8 +80,11 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.FragmentActivity
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.lifecycle.lifecycleScope
+import dev.fishit.mapper.network.MapperHttpMethod
+import dev.fishit.mapper.network.MapperNativeHttpRequest
 import dev.fishit.mapper.wave01.debug.RuntimeToolkitMissionWizard
 import dev.fishit.mapper.wave01.debug.RuntimeToolkitTelemetry
+import dev.fishit.mapper.wave01.debug.replay.MapperNativeReplayRuntime
 import info.plateaukao.einkbro.R
 import info.plateaukao.einkbro.browser.AlbumController
 import info.plateaukao.einkbro.browser.BrowserContainer
@@ -205,6 +209,7 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.coroutines.resume
 
 
 open class BrowserActivity : FragmentActivity(),
@@ -2141,6 +2146,11 @@ open class BrowserActivity : FragmentActivity(),
     private lateinit var missionWizardActionPause: TextView
     private lateinit var missionWizardActionNext: TextView
     private lateinit var missionWizardActionMinimize: TextView
+    private lateinit var missionWizardLivePanel: LinearLayout
+    private lateinit var missionWizardLiveTitle: TextView
+    private lateinit var missionWizardLiveRefresh: TextView
+    private lateinit var missionWizardLiveToggle: TextView
+    private lateinit var missionWizardLiveContent: LinearLayout
     private var missionWizardOverlayMinimized: Boolean = false
     private var missionWizardCardDragActive: Boolean = false
     private var missionWizardCardDragMoved: Boolean = false
@@ -2158,6 +2168,9 @@ open class BrowserActivity : FragmentActivity(),
     private var pendingMissionBannerUrl: String = ""
     private val wizardAutoAdvanceDelayMs: Long = 3_000L
     private val wizardReadyWindowSeconds: Long = 90L
+    private val wizardLiveRefreshIntervalMs: Long = 2_000L
+    private var missionWizardLivePanelVisible: Boolean = true
+    private var missionWizardLiveRefreshRunnable: Runnable? = null
 
     private fun initFAB() {
         fabImageViewController = FabImageViewController(
@@ -2235,6 +2248,11 @@ open class BrowserActivity : FragmentActivity(),
         missionWizardActionPause = findViewById(R.id.mapper_wizard_action_pause)
         missionWizardActionNext = findViewById(R.id.mapper_wizard_action_next)
         missionWizardActionMinimize = findViewById(R.id.mapper_wizard_action_minimize)
+        missionWizardLivePanel = findViewById(R.id.mapper_wizard_live_panel)
+        missionWizardLiveTitle = findViewById(R.id.mapper_wizard_live_title)
+        missionWizardLiveRefresh = findViewById(R.id.mapper_wizard_live_refresh)
+        missionWizardLiveToggle = findViewById(R.id.mapper_wizard_live_toggle)
+        missionWizardLiveContent = findViewById(R.id.mapper_wizard_live_content)
 
         missionWizardButton.visibility = VISIBLE
         missionWizardButton.text = getString(R.string.mapper_wizard_button_label)
@@ -2295,6 +2313,11 @@ open class BrowserActivity : FragmentActivity(),
         missionWizardActionMinimize.setOnClickListener {
             setMissionWizardOverlayMinimized(!missionWizardOverlayMinimized)
         }
+        missionWizardLiveRefresh.setOnClickListener { updateMissionWizardLivePanel(forceRefresh = true) }
+        missionWizardLiveToggle.setOnClickListener {
+            missionWizardLivePanelVisible = !missionWizardLivePanelVisible
+            updateMissionWizardLivePanel(forceRefresh = true)
+        }
         missionWizardCard.setOnTouchListener { _, event ->
             handleMissionWizardCardDrag(event)
         }
@@ -2330,6 +2353,7 @@ open class BrowserActivity : FragmentActivity(),
             missionWizardButton.setTextColor(ContextCompat.getColor(this, color))
         }
         updateMissionWizardCard()
+        updateMissionWizardLivePanel()
     }
 
     private fun updateMissionWizardCard() {
@@ -2433,6 +2457,531 @@ open class BrowserActivity : FragmentActivity(),
                 R.string.mapper_wizard_overlay_minimize
             }
         )
+    }
+
+    private fun updateMissionWizardLivePanel(forceRefresh: Boolean = false) {
+        if (!this::missionWizardLivePanel.isInitialized) return
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        if (state.missionId.isBlank()) {
+            missionWizardLivePanel.visibility = GONE
+            cancelWizardLivePanelRefresh()
+            return
+        }
+        missionWizardLivePanel.visibility = VISIBLE
+        missionWizardLiveToggle.text = getString(
+            if (missionWizardLivePanelVisible) {
+                R.string.mapper_wizard_live_hide
+            } else {
+                R.string.mapper_wizard_live_show
+            }
+        )
+        missionWizardLiveContent.visibility = if (missionWizardLivePanelVisible) VISIBLE else GONE
+        if (!missionWizardLivePanelVisible) {
+            cancelWizardLivePanelRefresh()
+            return
+        }
+
+        val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, this)
+        val stepLabel = step?.displayName?.ifBlank { state.wizardStepId } ?: state.wizardStepId
+        missionWizardLiveTitle.text = "${getString(R.string.mapper_wizard_live_title)} · $stepLabel"
+        val snapshot = RuntimeToolkitTelemetry.buildLiveWizardSnapshot(this)
+        val overrides = RuntimeToolkitTelemetry.readEndpointOverrides(this)
+        val feedback = RuntimeToolkitTelemetry.evaluateMissionStepFeedback(this, state.wizardStepId)
+
+        missionWizardLiveContent.removeAllViews()
+        addLivePanelSectionHeader(missionWizardLiveContent, getString(R.string.mapper_wizard_live_section_status))
+        addLivePanelTextLine(
+            missionWizardLiveContent,
+            "Step: $stepLabel (${state.wizardStepId})",
+        )
+        addLivePanelTextLine(
+            missionWizardLiveContent,
+            "Saturation: ${feedback.state} ${feedback.progressPercent}%",
+        )
+        val missingSignals = if (feedback.missingSignals.isEmpty()) "-" else feedback.missingSignals.joinToString(", ")
+        addLivePanelTextLine(
+            missionWizardLiveContent,
+            "Missing: $missingSignals",
+            dim = feedback.missingSignals.isEmpty(),
+        )
+        addLivePanelTextLine(
+            missionWizardLiveContent,
+            "Phase: ${snapshot.phaseId}",
+        )
+
+        addLivePanelSectionHeader(missionWizardLiveContent, getString(R.string.mapper_wizard_live_section_feed))
+        val summary = snapshot.correlationSummary.take(6)
+        if (summary.isEmpty() && snapshot.recentCorrelated.isEmpty()) {
+            addLivePanelTextLine(missionWizardLiveContent, getString(R.string.mapper_wizard_live_empty), dim = true)
+        } else {
+            summary.forEach { row ->
+                addLivePanelTextLine(
+                    missionWizardLiveContent,
+                    "${row.phaseId} | ${row.routeKind} | ${row.statusBucket} | ${row.hostClass} (${row.count})",
+                    dim = true,
+                )
+            }
+            snapshot.recentCorrelated.takeLast(6).forEach { entry ->
+                addLivePanelTextLine(
+                    missionWizardLiveContent,
+                    "${entry.statusCode} ${entry.routeKind} ${entry.operation} ${entry.normalizedHost}${entry.normalizedPath}",
+                )
+            }
+        }
+
+        addLivePanelSectionHeader(missionWizardLiveContent, getString(R.string.mapper_wizard_live_section_candidates))
+        if (snapshot.endpointCandidates.isEmpty()) {
+            addLivePanelTextLine(missionWizardLiveContent, getString(R.string.mapper_wizard_live_empty), dim = true)
+        } else {
+            snapshot.endpointCandidates.forEach { (role, candidates) ->
+                addLivePanelRoleHeader(missionWizardLiveContent, role)
+                candidates.take(5).forEach { candidate ->
+                    addLivePanelCandidateRow(
+                        container = missionWizardLiveContent,
+                        candidate = candidate,
+                        overrides = overrides,
+                    )
+                }
+            }
+        }
+
+        if (forceRefresh) {
+            cancelWizardLivePanelRefresh()
+        }
+        scheduleWizardLivePanelRefresh()
+    }
+
+    private fun scheduleWizardLivePanelRefresh() {
+        if (!missionWizardLivePanelVisible) return
+        if (!this::missionWizardLivePanel.isInitialized) return
+        if (missionWizardLiveRefreshRunnable != null) return
+        val runnable = Runnable {
+            missionWizardLiveRefreshRunnable = null
+            updateMissionWizardLivePanel()
+        }
+        missionWizardLiveRefreshRunnable = runnable
+        missionWizardLivePanel.postDelayed(runnable, wizardLiveRefreshIntervalMs)
+    }
+
+    private fun cancelWizardLivePanelRefresh() {
+        missionWizardLiveRefreshRunnable?.let { runnable ->
+            missionWizardLivePanel.removeCallbacks(runnable)
+        }
+        missionWizardLiveRefreshRunnable = null
+    }
+
+    private fun addLivePanelSectionHeader(container: LinearLayout, title: String) {
+        val header = TextView(this).apply {
+            text = title
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(this@BrowserActivity, android.R.color.black))
+        }
+        container.addView(
+            header,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = ViewUnit.dpToPixel(8).toInt()
+            },
+        )
+    }
+
+    private fun addLivePanelRoleHeader(container: LinearLayout, role: String) {
+        val header = TextView(this).apply {
+            text = role.uppercase(Locale.ROOT)
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@BrowserActivity, android.R.color.holo_blue_dark))
+        }
+        container.addView(
+            header,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = ViewUnit.dpToPixel(6).toInt()
+            },
+        )
+    }
+
+    private fun addLivePanelTextLine(container: LinearLayout, text: String, dim: Boolean = false) {
+        val line = TextView(this).apply {
+            this.text = text
+            textSize = 11f
+            setTextColor(
+                ContextCompat.getColor(
+                    this@BrowserActivity,
+                    if (dim) android.R.color.darker_gray else android.R.color.black,
+                ),
+            )
+        }
+        container.addView(
+            line,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+    }
+
+    private fun addLivePanelCandidateRow(
+        container: LinearLayout,
+        candidate: RuntimeToolkitTelemetry.LiveEndpointCandidate,
+        overrides: RuntimeToolkitTelemetry.EndpointOverrides,
+    ) {
+        val isSelected = overrides.selectedEndpointByRole[candidate.role] == candidate.endpointId
+        val isExcluded = overrides.excludedEndpoints.contains(candidate.endpointId)
+        val testResult = overrides.lastTestResults[candidate.endpointId]
+
+        val wrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val title = TextView(this).apply {
+            text = "${candidate.method} ${candidate.normalizedPath}"
+            textSize = 11f
+            setTextColor(
+                ContextCompat.getColor(
+                    this@BrowserActivity,
+                    when {
+                        isExcluded -> android.R.color.holo_red_dark
+                        isSelected -> android.R.color.holo_green_dark
+                        else -> android.R.color.black
+                    },
+                ),
+            )
+        }
+        wrapper.addView(title)
+        val meta = TextView(this).apply {
+            text = "score=${candidate.score.toInt()} conf=${"%.2f".format(candidate.confidence)} ev=${candidate.evidenceCount} op=${candidate.requestOperation}"
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(this@BrowserActivity, android.R.color.darker_gray))
+        }
+        wrapper.addView(meta)
+        if (testResult != null) {
+            val testLine = TextView(this).apply {
+                val sizeLabel = formatBytes(testResult.sizeBytes)
+                val okLabel = if (testResult.ok) "ok" else "fail"
+                text = "test: ${testResult.status} ${testResult.durationMillis}ms $sizeLabel ${testResult.mimeType} ($okLabel)"
+                textSize = 10f
+                setTextColor(ContextCompat.getColor(this@BrowserActivity, android.R.color.darker_gray))
+            }
+            wrapper.addView(testLine)
+        }
+
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.START
+        }
+        val selectLabel = if (isSelected) {
+            getString(R.string.mapper_wizard_live_selected)
+        } else {
+            getString(R.string.mapper_wizard_live_select)
+        }
+        val selectButton = createLivePanelButton(selectLabel, enabled = !isSelected && !isExcluded)
+        selectButton.setOnClickListener {
+            val state = RuntimeToolkitTelemetry.missionSessionState(this)
+            RuntimeToolkitTelemetry.setEndpointOverrideSelection(this, candidate.role, candidate.endpointId)
+            RuntimeToolkitTelemetry.logWizardEvent(
+                context = this,
+                operation = "wizard_endpoint_selected",
+                missionId = state.missionId,
+                wizardStepId = state.wizardStepId,
+                saturationState = state.saturationState,
+                payload = mapOf(
+                    "role" to candidate.role,
+                    "endpoint_id" to candidate.endpointId,
+                    "score" to candidate.score,
+                ),
+            )
+            updateMissionWizardLivePanel(forceRefresh = true)
+        }
+        actionRow.addView(selectButton)
+
+        val excludeLabel = if (isExcluded) {
+            getString(R.string.mapper_wizard_live_include)
+        } else {
+            getString(R.string.mapper_wizard_live_exclude)
+        }
+        val excludeButton = createLivePanelButton(excludeLabel, enabled = true)
+        excludeButton.setOnClickListener {
+            val state = RuntimeToolkitTelemetry.missionSessionState(this)
+            RuntimeToolkitTelemetry.setEndpointExcluded(this, candidate.endpointId, !isExcluded)
+            RuntimeToolkitTelemetry.logWizardEvent(
+                context = this,
+                operation = "wizard_endpoint_excluded",
+                missionId = state.missionId,
+                wizardStepId = state.wizardStepId,
+                saturationState = state.saturationState,
+                payload = mapOf(
+                    "endpoint_id" to candidate.endpointId,
+                    "excluded" to (!isExcluded),
+                ),
+            )
+            updateMissionWizardLivePanel(forceRefresh = true)
+        }
+        actionRow.addView(excludeButton)
+
+        val testButton = createLivePanelButton(getString(R.string.mapper_wizard_live_test), enabled = !isExcluded)
+        testButton.setOnClickListener {
+            runLiveEndpointTest(candidate)
+        }
+        actionRow.addView(testButton)
+
+        wrapper.addView(
+            actionRow,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = ViewUnit.dpToPixel(4).toInt()
+            },
+        )
+
+        container.addView(
+            wrapper,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = ViewUnit.dpToPixel(6).toInt()
+            },
+        )
+    }
+
+    private fun createLivePanelButton(label: String, enabled: Boolean): TextView {
+        return TextView(this).apply {
+            text = label
+            textSize = 10f
+            gravity = Gravity.CENTER
+            background = ContextCompat.getDrawable(this@BrowserActivity, R.drawable.roundcorner)
+            setPadding(
+                ViewUnit.dpToPixel(6).toInt(),
+                ViewUnit.dpToPixel(4).toInt(),
+                ViewUnit.dpToPixel(6).toInt(),
+                ViewUnit.dpToPixel(4).toInt(),
+            )
+            setTextColor(
+                ContextCompat.getColor(
+                    this@BrowserActivity,
+                    if (enabled) android.R.color.black else android.R.color.darker_gray,
+                ),
+            )
+            isEnabled = enabled
+        }
+    }
+
+    private fun formatBytes(sizeBytes: Int): String {
+        if (sizeBytes < 0) return "0B"
+        if (sizeBytes < 1024) return "${sizeBytes}B"
+        val kb = sizeBytes / 1024.0
+        if (kb < 1024) return String.format(Locale.ROOT, "%.1fKB", kb)
+        val mb = kb / 1024.0
+        return String.format(Locale.ROOT, "%.1fMB", mb)
+    }
+
+    private fun runLiveEndpointTest(candidate: RuntimeToolkitTelemetry.LiveEndpointCandidate) {
+        if (isUnsafeLiveTestCandidate(candidate)) {
+            EBToast.showShort(this, getString(R.string.mapper_wizard_live_test_skip))
+            return
+        }
+        EBToast.showShort(this, getString(R.string.mapper_wizard_live_test_started))
+        lifecycleScope.launch {
+            val method = candidate.method.uppercase(Locale.ROOT)
+            if (method == "POST") {
+                val confirmed = confirmLiveTest(
+                    title = getString(R.string.mapper_wizard_live_test_confirm_post_title),
+                    message = getString(R.string.mapper_wizard_live_test_confirm_post_message),
+                )
+                if (!confirmed) return@launch
+            }
+
+            val queryParams = resolveLiveTestQueryParams(candidate) ?: return@launch
+            val body = if (method == "POST") resolveLiveTestBody() else null
+            if (method == "POST" && body == null) return@launch
+
+            val baseUrl = resolveLiveTestBaseUrl(candidate)
+            val headers = buildLiveTestHeaders(baseUrl)
+            val request = MapperNativeHttpRequest(
+                url = baseUrl,
+                method = if (method == "POST") MapperHttpMethod.POST else MapperHttpMethod.GET,
+                headers = headers,
+                queryParams = queryParams,
+                body = body,
+                contentType = if (body != null) "application/json" else null,
+                timeoutMillis = 10_000,
+            )
+            val requestId = RuntimeToolkitTelemetry.logNetworkRequest(
+                context = this@BrowserActivity,
+                source = "wizard_live_test",
+                url = request.resolvedUrl(),
+                method = method,
+                headers = headers,
+                payload = mapOf(
+                    "request_operation" to candidate.requestOperation,
+                    "route_kind" to candidate.role,
+                ),
+            ).requestId
+
+            val response = runCatching {
+                withContext(Dispatchers.IO) {
+                    MapperNativeReplayRuntime.execute(this@BrowserActivity, request)
+                }
+            }.getOrElse { failure ->
+                RuntimeToolkitTelemetry.recordEndpointTestResult(
+                    context = this@BrowserActivity,
+                    endpointId = candidate.endpointId,
+                    status = 0,
+                    durationMillis = 0L,
+                    sizeBytes = 0,
+                    mimeType = "error",
+                    ok = false,
+                )
+                EBToast.showShort(this@BrowserActivity, getString(R.string.mapper_wizard_live_test_failed))
+                updateMissionWizardLivePanel(forceRefresh = true)
+                Log.w("PIPELAB/WIZ", "Live endpoint test failed", failure)
+                return@launch
+            }
+
+            val status = response.statusCode
+            val mimeHeader = response.headers.entries
+                .firstOrNull { it.key.equals("content-type", ignoreCase = true) }
+                ?.value
+                .orEmpty()
+            RuntimeToolkitTelemetry.logNetworkResponse(
+                context = this@BrowserActivity,
+                source = "wizard_live_test",
+                url = response.finalUrl.ifBlank { request.resolvedUrl() },
+                method = method,
+                statusCode = status,
+                reason = response.statusText,
+                mimeType = mimeHeader,
+                headers = response.headers,
+                rawBody = response.body,
+                requestId = requestId,
+                payload = mapOf(
+                    "request_operation" to candidate.requestOperation,
+                    "route_kind" to candidate.role,
+                ),
+            )
+            RuntimeToolkitTelemetry.recordEndpointTestResult(
+                context = this@BrowserActivity,
+                endpointId = candidate.endpointId,
+                status = status,
+                durationMillis = response.durationMillis,
+                sizeBytes = response.body.size,
+                mimeType = mimeHeader,
+                ok = response.succeeded,
+            )
+            val state = RuntimeToolkitTelemetry.missionSessionState(this@BrowserActivity)
+            RuntimeToolkitTelemetry.logWizardEvent(
+                context = this@BrowserActivity,
+                operation = "wizard_endpoint_tested",
+                missionId = state.missionId,
+                wizardStepId = state.wizardStepId,
+                saturationState = state.saturationState,
+                payload = mapOf(
+                    "endpoint_id" to candidate.endpointId,
+                    "status" to status,
+                    "ms" to response.durationMillis,
+                    "size" to response.body.size,
+                    "mime" to response.headers["content-type"].orEmpty(),
+                    "ok" to response.succeeded,
+                ),
+            )
+            updateMissionWizardLivePanel(forceRefresh = true)
+        }
+    }
+
+    private fun isUnsafeLiveTestCandidate(candidate: RuntimeToolkitTelemetry.LiveEndpointCandidate): Boolean {
+        val path = candidate.normalizedPath.lowercase(Locale.ROOT)
+        return path.endsWith(".m3u8") ||
+            path.endsWith(".mpd") ||
+            path.endsWith(".ts") ||
+            path.endsWith(".m4s") ||
+            path.endsWith(".vtt") ||
+            path.endsWith(".mp3") ||
+            path.endsWith(".mp4") ||
+            path.endsWith(".m4a")
+    }
+
+    private suspend fun confirmLiveTest(title: String, message: String): Boolean {
+        return withContext(Dispatchers.Main) {
+            kotlinx.coroutines.suspendCancellableCoroutine<Boolean> { continuation ->
+                AlertDialog.Builder(this@BrowserActivity, R.style.TouchAreaDialog)
+                    .setTitle(title)
+                    .setMessage(message)
+                    .setPositiveButton(android.R.string.ok) { dialog, _ ->
+                        dialog.dismiss()
+                        continuation.resume(true)
+                    }
+                    .setNegativeButton(android.R.string.cancel) { dialog, _ ->
+                        dialog.dismiss()
+                        continuation.resume(false)
+                    }
+                    .setOnCancelListener {
+                        continuation.resume(false)
+                    }
+                    .show()
+            }
+        }
+    }
+
+    private suspend fun resolveLiveTestQueryParams(
+        candidate: RuntimeToolkitTelemetry.LiveEndpointCandidate,
+    ): List<Pair<String, String>>? {
+        if (candidate.queryParamNames.isEmpty()) return emptyList()
+        val uri = runCatching { Uri.parse(candidate.sampleUrl) }.getOrNull()
+        val params = mutableListOf<Pair<String, String>>()
+        for (name in candidate.queryParamNames) {
+            val existing = uri?.getQueryParameter(name).orEmpty()
+            if (existing.isNotBlank()) {
+                params += name to existing
+                continue
+            }
+            val prompt = when {
+                name.equals("q", ignoreCase = true) || name.contains("query", ignoreCase = true) ->
+                    getString(R.string.mapper_wizard_live_test_param_prompt_query)
+                name.contains("canonical", ignoreCase = true) || name.contains("id", ignoreCase = true) ->
+                    getString(R.string.mapper_wizard_live_test_param_prompt_canonical)
+                else -> getString(R.string.mapper_wizard_live_test_param_prompt_message, name)
+            }
+            val value = TextInputDialog(
+                context = this,
+                title = getString(R.string.mapper_wizard_live_test_param_prompt_title),
+                message = prompt,
+            ).show() ?: return null
+            params += name to value
+        }
+        return params
+    }
+
+    private suspend fun resolveLiveTestBody(): ByteArray? {
+        val bodyText = TextInputDialog(
+            context = this,
+            title = getString(R.string.mapper_wizard_live_test_body_prompt_title),
+            message = getString(R.string.mapper_wizard_live_test_body_prompt_message),
+            defaultText = "{}",
+        ).show() ?: return null
+        val trimmed = bodyText.trim()
+        if (trimmed.isBlank()) return null
+        return trimmed.toByteArray(Charsets.UTF_8)
+    }
+
+    private fun resolveLiveTestBaseUrl(candidate: RuntimeToolkitTelemetry.LiveEndpointCandidate): String {
+        val uri = runCatching { Uri.parse(candidate.sampleUrl) }.getOrNull()
+        val scheme = uri?.scheme?.ifBlank { "https" } ?: "https"
+        val host = uri?.host?.ifBlank { candidate.normalizedHost }.orEmpty()
+        val path = uri?.path?.ifBlank { candidate.normalizedPath }.orEmpty()
+        return "$scheme://$host$path"
+    }
+
+    private fun buildLiveTestHeaders(url: String): Map<String, String> {
+        val headers = linkedMapOf<String, String>()
+        headers["accept"] = "application/json, text/plain;q=0.9, */*;q=0.1"
+        CookieManager.getInstance().getCookie(url)?.let { cookie ->
+            if (cookie.isNotBlank()) headers["cookie"] = cookie
+        }
+        return headers
     }
 
     private fun ensureWizardPhaseFocus(

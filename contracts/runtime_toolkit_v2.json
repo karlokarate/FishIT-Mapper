@@ -84,6 +84,7 @@
     "replay_requirements.json",
     "field_matrix.json",
     "endpoint_candidates.json",
+    "endpoint_overrides.json",
     "site_profile.draft.json",
     "provider_draft_export.json",
     "source_pipeline_bundle.json",
