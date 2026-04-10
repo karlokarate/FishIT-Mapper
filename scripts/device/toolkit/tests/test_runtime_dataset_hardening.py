@@ -26,6 +26,7 @@ from runtime_dataset_cli import (  # type: ignore  # noqa: E402
     build_field_matrix,
     build_mission_export_summary,
     build_provider_draft_export,
+    build_source_pipeline_bundle,
     build_provenance_registry,
     build_replay_requirements,
     build_required_headers,
@@ -2232,6 +2233,103 @@ class RuntimeDatasetHardeningTests(unittest.TestCase):
         self.assertNotIn("bearer secret", joined)
         for item in auth.get("provenance_backed_token_inputs", []):
             self.assertNotIn("bearer", str(item).lower())
+
+    def test_source_pipeline_bundle_auth_inputs_are_credentials_only(self) -> None:
+        provider_export = {
+            "generated_at": "2026-04-10T00:00:00Z",
+            "source_runtime_export_id": "runtime:test:credentials",
+            "target_site_id": "example.com",
+            "endpoint_templates": [
+                {
+                    "template_id": "ep_login",
+                    "endpoint_role": "auth_or_refresh",
+                    "request_operation": "auth_login",
+                    "normalized_host": "api.example.com",
+                    "normalized_path": "/identity/login",
+                    "method": "POST",
+                    "stable_query_template": {},
+                    "stable_body_template": {},
+                    "required_phase_relevance": ["auth_probe"],
+                    "required_provenance_inputs": ["api-auth"],
+                    "confidence": 0.8,
+                },
+                {
+                    "template_id": "ep_userinfo",
+                    "endpoint_role": "auth_or_refresh",
+                    "request_operation": "auth_userinfo",
+                    "normalized_host": "api.example.com",
+                    "normalized_path": "/identity/userinfo",
+                    "method": "GET",
+                    "stable_query_template": {},
+                    "stable_body_template": {},
+                    "required_phase_relevance": ["auth_probe"],
+                    "required_provenance_inputs": ["api-auth", "authorization"],
+                    "confidence": 0.8,
+                },
+            ],
+            "replay_requirements": [
+                {
+                    "template_ref": "ep_login",
+                    "endpoint_role": "auth_or_refresh",
+                    "required_headers": ["api-auth"],
+                    "required_cookies": [],
+                    "required_query_params": [],
+                    "required_body_fields": [],
+                    "required_provenance_inputs": ["api-auth"],
+                    "required_referer": "",
+                    "required_origin": "",
+                },
+                {
+                    "template_ref": "ep_userinfo",
+                    "endpoint_role": "auth_or_refresh",
+                    "required_headers": ["api-auth", "authorization"],
+                    "required_cookies": [],
+                    "required_query_params": [],
+                    "required_body_fields": [],
+                    "required_provenance_inputs": ["api-auth", "authorization"],
+                    "required_referer": "",
+                    "required_origin": "",
+                },
+            ],
+            "field_matrix": {"fields": []},
+            "auth_draft": {
+                "auth_mode": "browser_required",
+                "validation_endpoint_ref": "ep_userinfo",
+                "refresh_endpoint_ref": "",
+                "provenance_backed_token_inputs": ["api-auth", "authorization"],
+                "browser_session_required": True,
+                "warnings": [],
+                "auth_confidence": 0.75,
+            },
+            "playback_draft": {
+                "token_dependencies": [],
+                "browser_context_required": False,
+                "playback_confidence": 0.0,
+                "warnings": [],
+            },
+            "confidence_summary": {"overall_confidence": 0.75, "endpoint_confidence_avg": 0.75},
+            "warnings": [],
+            "capability_class": "HYBRID",
+        }
+        provenance_registry = {
+            "entries": [
+                {"name": "api-auth"},
+                {"name": "authorization"},
+            ]
+        }
+        bundle = build_source_pipeline_bundle(provider_export, rows=[], provenance_registry=provenance_registry)
+        session_auth = bundle.get("sessionAuth", {})
+        self.assertTrue(session_auth.get("requiresLogin"))
+        self.assertEqual(str(session_auth.get("loginEndpointRef") or ""), "ep_login")
+        token_inputs = [
+            str(item.get("inputName") or "")
+            for item in list(session_auth.get("requiredTokenInputs") or [])
+            if isinstance(item, dict)
+        ]
+        self.assertEqual(token_inputs, ["username", "password"])
+        provenance_refs = set(str(item) for item in list(session_auth.get("provenanceRefs") or []))
+        self.assertIn("prov:api-auth", provenance_refs)
+        self.assertIn("prov:authorization", provenance_refs)
 
     def test_provenance_graph_builds_edges(self) -> None:
         rows = [

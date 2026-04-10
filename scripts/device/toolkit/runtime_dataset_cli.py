@@ -4850,6 +4850,61 @@ def normalize_stream_container_hints(values: List[Any]) -> List[str]:
     return out
 
 
+def _auth_endpoint_text(endpoint: Dict[str, Any]) -> str:
+    return " ".join(
+        [
+            str(endpoint.get("requestOperation") or ""),
+            str(endpoint.get("normalizedPath") or ""),
+            str(endpoint.get("endpointId") or ""),
+        ]
+    ).strip().lower()
+
+
+def _is_refresh_auth_endpoint(endpoint: Dict[str, Any]) -> bool:
+    if str(endpoint.get("role") or "").strip().lower() == "refresh":
+        return True
+    text = _auth_endpoint_text(endpoint)
+    return any(token in text for token in ("refresh", "token_refresh", "/refresh"))
+
+
+def _is_login_auth_endpoint(endpoint: Dict[str, Any]) -> bool:
+    text = _auth_endpoint_text(endpoint)
+    if not text or _is_refresh_auth_endpoint(endpoint):
+        return False
+    return any(
+        token in text
+        for token in ("auth_login", "/login", "signin", "authorize", "oidc", "oauth/token", "/token")
+    )
+
+
+def _is_validation_auth_endpoint(endpoint: Dict[str, Any]) -> bool:
+    text = _auth_endpoint_text(endpoint)
+    if not text or _is_refresh_auth_endpoint(endpoint):
+        return False
+    return any(
+        token in text
+        for token in ("validate", "validation", "userinfo", "userdetails", "session", "profile", "/me")
+    )
+
+
+def _credential_required_token_inputs(login_endpoint_ref: Optional[str]) -> List[Dict[str, Any]]:
+    required_for = [login_endpoint_ref] if login_endpoint_ref else []
+    return [
+        {
+            "inputName": "username",
+            "requiredFor": required_for,
+            "provenanceRef": "cred:username",
+            "confidentiality": "non_secret",
+        },
+        {
+            "inputName": "password",
+            "requiredFor": required_for,
+            "provenanceRef": "cred:password",
+            "confidentiality": "secret",
+        },
+    ]
+
+
 def build_source_pipeline_bundle(
     provider_draft_export: Dict[str, Any],
     rows: List[Dict[str, Any]],
@@ -5105,7 +5160,6 @@ def build_source_pipeline_bundle(
             if isinstance(item, dict) and str(item.get("kind") or "") == "required_header" and str(item.get("name") or "").strip()
         }
     )
-    requires_login = auth_mode != "none" or bool(session_cookie_names or session_header_names)
     requires_browser_session = bool(browser_context_required or auth_draft.get("browser_session_required") or playback_draft.get("browser_context_required"))
 
     token_input_names = sorted(
@@ -5131,10 +5185,49 @@ def build_source_pipeline_bundle(
         for item in endpoint_templates
         if str(item.get("role") or "") == "refresh" and str(item.get("endpointId") or "")
     ]
+    auth_endpoints = [item for item in endpoint_templates if str(item.get("role") or "") in {"auth", "refresh"}]
+    login_endpoint_ref = str(auth_draft.get("login_endpoint_ref") or "") or None
+    if not login_endpoint_ref:
+        login_candidates = [
+            str(item.get("endpointId") or "")
+            for item in auth_endpoints
+            if str(item.get("endpointId") or "") and _is_login_auth_endpoint(item)
+        ]
+        if login_candidates:
+            login_endpoint_ref = login_candidates[0]
+    if not login_endpoint_ref:
+        non_refresh_auth_ids = [
+            str(item.get("endpointId") or "")
+            for item in auth_endpoints
+            if str(item.get("endpointId") or "") and not _is_refresh_auth_endpoint(item)
+        ]
+        if non_refresh_auth_ids:
+            login_endpoint_ref = non_refresh_auth_ids[0]
+
     validation_endpoint_ref = str(auth_draft.get("validation_endpoint_ref") or "") or None
+    if not validation_endpoint_ref:
+        validation_candidates = [
+            str(item.get("endpointId") or "")
+            for item in auth_endpoints
+            if str(item.get("endpointId") or "") and _is_validation_auth_endpoint(item)
+        ]
+        if login_endpoint_ref:
+            validation_candidates = [item for item in validation_candidates if item != login_endpoint_ref]
+        if validation_candidates:
+            validation_endpoint_ref = validation_candidates[0]
     refresh_endpoint_ref = str(auth_draft.get("refresh_endpoint_ref") or "") or None
     if not validation_endpoint_ref and auth_endpoint_refs:
-        validation_endpoint_ref = auth_endpoint_refs[0]
+        fallback_validation = [item for item in auth_endpoint_refs if item != login_endpoint_ref]
+        if fallback_validation:
+            validation_endpoint_ref = fallback_validation[0]
+        else:
+            validation_endpoint_ref = auth_endpoint_refs[0]
+
+    has_deterministic_auth_chain = bool(
+        login_endpoint_ref and validation_endpoint_ref and login_endpoint_ref != validation_endpoint_ref
+    )
+    requires_login = has_deterministic_auth_chain
+
     if requires_login and not refresh_endpoint_ref:
         if refresh_role_refs:
             refresh_endpoint_ref = refresh_role_refs[0]
@@ -5143,28 +5236,20 @@ def build_source_pipeline_bundle(
             refresh_endpoint_ref = validation_endpoint_ref
         elif auth_endpoint_refs:
             refresh_endpoint_ref = auth_endpoint_refs[0]
-    required_token_inputs = []
-    for token_name in token_input_names:
-        lowered = token_name.lower()
-        confidentiality = "hash_only" if any(marker in lowered for marker in ["auth", "token", "authorization", "session"]) else "non_secret"
-        required_for = []
-        if validation_endpoint_ref:
-            required_for.append(validation_endpoint_ref)
-        if refresh_endpoint_ref and refresh_endpoint_ref not in required_for:
-            required_for.append(refresh_endpoint_ref)
-        required_token_inputs.append(
-            {
-                "inputName": token_name,
-                "requiredFor": required_for,
-                "provenanceRef": f"prov:{normalize_provenance_ref_name(token_name)}",
-                "confidentiality": confidentiality,
-            }
-        )
+    required_token_inputs = _credential_required_token_inputs(login_endpoint_ref) if requires_login else []
+    derived_provenance_refs = {
+        f"prov:{normalize_provenance_ref_name(token_name)}"
+        for token_name in token_input_names
+        if str(token_name).strip()
+    }
     provenance_refs = sorted(
         {
-            str(item.get("provenanceRef") or "")
-            for item in required_token_inputs
-            if str(item.get("provenanceRef") or "")
+            str(item).strip()
+            for item in (
+                list(derived_provenance_refs)
+                + [str(token.get("provenanceRef") or "") for token in required_token_inputs]
+            )
+            if str(item).strip() and str(item).startswith("prov:")
         }
     )
 
@@ -5224,6 +5309,10 @@ def build_source_pipeline_bundle(
 
     provider_warnings = [str(item) for item in list(provider_draft_export.get("warnings") or []) if str(item).strip()]
     auth_warnings = [str(item) for item in list(auth_draft.get("warnings") or []) if str(item).strip()]
+    if requires_login:
+        auth_warnings.append("auth: credentials_only_required_inputs")
+    elif token_input_names and (session_header_names or session_cookie_names):
+        auth_warnings.append("auth: auth_artifacts_without_deterministic_login_chain")
     playback_warnings = [str(item) for item in list(playback_draft.get("warnings") or []) if str(item).strip()]
     warning_messages = sorted(set(provider_warnings + auth_warnings + playback_warnings))
     warnings = []
@@ -5303,6 +5392,7 @@ def build_source_pipeline_bundle(
                 "localStorage": [],
                 "indexedDb": [],
             },
+            "loginEndpointRef": login_endpoint_ref,
             "validationEndpointRef": validation_endpoint_ref,
             "refreshEndpointRef": refresh_endpoint_ref,
             "requiredTokenInputs": required_token_inputs,
