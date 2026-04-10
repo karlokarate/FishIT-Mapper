@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260410T085739Z",
+  "generated_at_utc": "2026-04-10T08:57:39Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260410T085739Z"
+  },
+  "scope": "wizard overlay minimize + drag",
+  "highlights": [
+    "Wizard step window can now be minimized reliably and moved via drag-and-drop by dragging the step title"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": ".tmp/screens/Screenshot_20260410_104659_FishIT Mapper Lab.jpg",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/activity/BrowserActivity.kt",
+      "old_path": null
+    }
+  ]
+}

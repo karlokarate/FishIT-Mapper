@@ -55,6 +55,7 @@ import android.widget.ProgressBar
 import android.widget.RelativeLayout
 import android.widget.TextView
 import android.widget.VideoView
+import kotlin.math.abs
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -2141,6 +2142,12 @@ open class BrowserActivity : FragmentActivity(),
     private lateinit var missionWizardActionNext: TextView
     private lateinit var missionWizardActionMinimize: TextView
     private var missionWizardOverlayMinimized: Boolean = false
+    private var missionWizardCardDragActive: Boolean = false
+    private var missionWizardCardDragMoved: Boolean = false
+    private var missionWizardCardDragStartRawX: Float = 0f
+    private var missionWizardCardDragStartRawY: Float = 0f
+    private var missionWizardCardDragStartTranslationX: Float = 0f
+    private var missionWizardCardDragStartTranslationY: Float = 0f
     private var pendingWizardAutoAdvanceStepId: String? = null
     private var pendingWizardAutoAdvanceRunnable: Runnable? = null
     private var pendingWizardUndoState: RuntimeToolkitTelemetry.MissionSessionState? = null
@@ -2286,6 +2293,10 @@ open class BrowserActivity : FragmentActivity(),
         missionWizardActionMinimize.setOnClickListener {
             setMissionWizardOverlayMinimized(true)
         }
+        missionWizardStepTitle.isClickable = true
+        missionWizardStepTitle.setOnTouchListener { _, event ->
+            handleMissionWizardCardDrag(event)
+        }
         updateMissionWizardUi()
     }
 
@@ -2294,6 +2305,8 @@ open class BrowserActivity : FragmentActivity(),
         val state = RuntimeToolkitTelemetry.missionSessionState(this)
         if (state.missionId.isBlank()) {
             missionWizardOverlayMinimized = false
+            missionWizardCard.translationX = 0f
+            missionWizardCard.translationY = 0f
             missionWizardButton.setTextColor(ContextCompat.getColor(this, android.R.color.holo_blue_dark))
             missionWizardButton.text = getString(R.string.mapper_wizard_button_label)
         } else {
@@ -2428,6 +2441,71 @@ open class BrowserActivity : FragmentActivity(),
                 }
             ),
         )
+    }
+
+    private fun handleMissionWizardCardDrag(event: MotionEvent): Boolean {
+        if (!this::missionWizardCard.isInitialized || missionWizardOverlayMinimized) return false
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                missionWizardCardDragActive = true
+                missionWizardCardDragMoved = false
+                missionWizardCardDragStartRawX = event.rawX
+                missionWizardCardDragStartRawY = event.rawY
+                missionWizardCardDragStartTranslationX = missionWizardCard.translationX
+                missionWizardCardDragStartTranslationY = missionWizardCard.translationY
+                return true
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                if (!missionWizardCardDragActive) return false
+                val dx = event.rawX - missionWizardCardDragStartRawX
+                val dy = event.rawY - missionWizardCardDragStartRawY
+                if (!missionWizardCardDragMoved && (abs(dx) > 6f || abs(dy) > 6f)) {
+                    missionWizardCardDragMoved = true
+                }
+                updateMissionWizardCardTranslation(
+                    desiredTranslationX = missionWizardCardDragStartTranslationX + dx,
+                    desiredTranslationY = missionWizardCardDragStartTranslationY + dy,
+                )
+                return true
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val moved = missionWizardCardDragMoved
+                missionWizardCardDragActive = false
+                missionWizardCardDragMoved = false
+                if (!moved && event.actionMasked == MotionEvent.ACTION_UP) {
+                    missionWizardStepTitle.performClick()
+                }
+                return moved
+            }
+        }
+        return false
+    }
+
+    private fun updateMissionWizardCardTranslation(
+        desiredTranslationX: Float,
+        desiredTranslationY: Float,
+    ) {
+        if (!this::missionWizardCard.isInitialized) return
+        val rootView = binding.root
+        if (rootView.width <= 0 || rootView.height <= 0 || missionWizardCard.width <= 0 || missionWizardCard.height <= 0) {
+            missionWizardCard.translationX = desiredTranslationX
+            missionWizardCard.translationY = desiredTranslationY
+            return
+        }
+        val minLeft = 0f
+        val maxLeft = (rootView.width - missionWizardCard.width).toFloat().coerceAtLeast(0f)
+        val minTop = 0f
+        val maxTop = (rootView.height - missionWizardCard.height).toFloat().coerceAtLeast(0f)
+
+        val desiredLeft = missionWizardCard.left + desiredTranslationX
+        val desiredTop = missionWizardCard.top + desiredTranslationY
+        val clampedLeft = desiredLeft.coerceIn(minLeft, maxLeft)
+        val clampedTop = desiredTop.coerceIn(minTop, maxTop)
+
+        missionWizardCard.translationX = clampedLeft - missionWizardCard.left
+        missionWizardCard.translationY = clampedTop - missionWizardCard.top
     }
 
     private fun isWizardUndoWindowActive(nowMs: Long = System.currentTimeMillis()): Boolean {
