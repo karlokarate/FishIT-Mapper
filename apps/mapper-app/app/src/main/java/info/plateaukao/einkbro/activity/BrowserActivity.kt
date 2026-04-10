@@ -3299,6 +3299,10 @@ open class BrowserActivity : FragmentActivity(),
             else -> evaluated.state
         }
         if (current != RuntimeToolkitMissionWizard.SATURATION_SATURATED) {
+            if (RuntimeToolkitMissionWizard.isOptionalStep(state.missionId, state.wizardStepId, this)) {
+                skipOptionalCurrentWizardStep(openWizardPanel = openWizardPanel)
+                return
+            }
             RuntimeToolkitTelemetry.logWizardEvent(
                 context = this,
                 operation = "wizard_step_blocked",
@@ -3367,7 +3371,7 @@ open class BrowserActivity : FragmentActivity(),
         showMissionWizardPanel()
     }
 
-    private fun skipOptionalCurrentWizardStep() {
+    private fun skipOptionalCurrentWizardStep(openWizardPanel: Boolean = true) {
         val state = RuntimeToolkitTelemetry.missionSessionState(this)
         if (!RuntimeToolkitMissionWizard.isOptionalStep(state.missionId, state.wizardStepId, this)) {
             EBToast.showShort(this, "Current step is not optional")
@@ -3388,7 +3392,9 @@ open class BrowserActivity : FragmentActivity(),
         )
         RuntimeToolkitTelemetry.skipOptionalMissionWizardStep(this)
         updateMissionWizardUi()
-        showMissionWizardPanel()
+        if (openWizardPanel) {
+            showMissionWizardPanel()
+        }
     }
 
     private fun finishMissionWizard() {

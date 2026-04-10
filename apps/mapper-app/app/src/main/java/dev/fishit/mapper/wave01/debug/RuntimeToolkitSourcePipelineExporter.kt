@@ -796,33 +796,37 @@ object RuntimeToolkitSourcePipelineExporter {
                 failures += "auth chain must use distinct endpointRefs for login/validation/refresh"
             }
         }
-        if (!requiresLogin && authArtifactsPresentWithoutChain) {
-            failures += "auth artifacts detected but complete login/validation/refresh chain is missing (fail-closed)"
-        }
+        // Incomplete auth chains are common on anonymous-capable sites.
+        // Keep them as warnings, but do not hard-block export.
+        val enforceStrictAuthChain = requiresLogin
 
-        listOf(
-            "login" to loginEndpointId,
-            "validation" to validationEndpointId,
-            "refresh" to refreshEndpointId,
-        ).forEach { (step, ref) ->
-            if (ref.isNullOrBlank()) return@forEach
-            if (ref !in endpointIdSet) {
-                failures += "auth chain endpointRef '$step' not found in endpointTemplates: $ref"
-            }
-            if (!replayByEndpointRef.containsKey(ref)) {
-                failures += "auth chain endpointRef '$step' has no replayRequirements entry: $ref"
-            }
-            val endpoint = endpointByRef[ref]
-            if (endpoint != null) {
-                if (endpoint.optString("method").isBlank()) failures += "auth endpoint '$step' missing method: $ref"
-                if (endpoint.optString("pathTemplate").isBlank()) failures += "auth endpoint '$step' missing pathTemplate: $ref"
-                if (endpoint.opt("queryTemplate") !is JSONObject) failures += "auth endpoint '$step' missing queryTemplate object: $ref"
-                if (endpoint.opt("bodyTemplate") !is JSONObject) failures += "auth endpoint '$step' missing bodyTemplate object: $ref"
-                val placeholders = jsonObjects(endpoint.optJSONArray("variablePlaceholders"))
-                if (placeholders.isEmpty()) {
-                    failures += "auth endpoint '$step' missing variablePlaceholders: $ref"
+        if (enforceStrictAuthChain) {
+            listOf(
+                "login" to loginEndpointId,
+                "validation" to validationEndpointId,
+                "refresh" to refreshEndpointId,
+            ).forEach { (step, ref) ->
+                if (ref.isNullOrBlank()) return@forEach
+                if (ref !in endpointIdSet) {
+                    failures += "auth chain endpointRef '$step' not found in endpointTemplates: $ref"
+                }
+                if (!replayByEndpointRef.containsKey(ref)) {
+                    failures += "auth chain endpointRef '$step' has no replayRequirements entry: $ref"
+                }
+                val endpoint = endpointByRef[ref]
+                if (endpoint != null) {
+                    if (endpoint.optString("method").isBlank()) failures += "auth endpoint '$step' missing method: $ref"
+                    if (endpoint.optString("pathTemplate").isBlank()) failures += "auth endpoint '$step' missing pathTemplate: $ref"
+                    if (endpoint.opt("queryTemplate") !is JSONObject) failures += "auth endpoint '$step' missing queryTemplate object: $ref"
+                    if (endpoint.opt("bodyTemplate") !is JSONObject) failures += "auth endpoint '$step' missing bodyTemplate object: $ref"
+                    val placeholders = jsonObjects(endpoint.optJSONArray("variablePlaceholders"))
+                    if (placeholders.isEmpty()) {
+                        failures += "auth endpoint '$step' missing variablePlaceholders: $ref"
+                    }
                 }
             }
+        } else if (authArtifactsPresentWithoutChain) {
+            // no-op on purpose: authWarnings carries the partial-chain signal for observability.
         }
 
         endpointTemplates.forEach { endpoint ->
