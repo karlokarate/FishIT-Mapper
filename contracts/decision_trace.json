@@ -324,7 +324,7 @@
       "supersedes": [
         "DEC-0022"
       ],
-      "superseded_by": null,
+      "superseded_by": "DEC-0025",
       "summary": "Mapper now enforces fail-closed source bundle checks for descriptor/capability completeness, native sourceKey collision blocking, duplicate endpoint/replay refs, role-scoped templateKind and placeholder resolvability, replay provenance resolvability, browser-session start derivation, refresh endpoint coupling, and ZIP signature/json integrity while preferring target-family endpoint candidates for deterministic ZDF-compatible runtime execution."
     },
     {
@@ -338,8 +338,25 @@
       "status": "accepted",
       "date": "2026-04-10",
       "supersedes": [],
-      "superseded_by": null,
+      "superseded_by": "DEC-0025",
       "summary": "Runtime toolkit now emits a live wizard snapshot UI with correlation feed, ranked endpoint candidates, user-driven select/exclude overrides, and manual endpoint tests stored in endpoint_overrides.json; exporter honors overrides while preserving fail-closed noise filtering."
+    },
+    {
+      "id": "DEC-0025",
+      "aliases": [
+        "ADR-0025",
+        "MAPPER-ROLE-STRICT-ENDPOINT-POLICY",
+        "MAPPER-QUALITY-GATED-WIZARD-SATURATION"
+      ],
+      "title": "Final export and wizard saturation are role-strict, quality-gated, and requirement-template consistent",
+      "status": "accepted",
+      "date": "2026-04-10",
+      "supersedes": [
+        "DEC-0023",
+        "DEC-0024"
+      ],
+      "superseded_by": null,
+      "summary": "Exporter and live wizard now share role-specific ranking/noise filters, enforce compact per-role caps, keep PTMD/TMD resolver precedence over manifest/media helpers, derive required provenance inputs only from effective required replay/template usage, and gate step saturation on high-quality role candidates so READY no longer reaches 100% with noisy endpoints."
     }
   ]
 }

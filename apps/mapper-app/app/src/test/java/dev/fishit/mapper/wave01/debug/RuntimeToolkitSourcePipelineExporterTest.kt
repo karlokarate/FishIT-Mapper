@@ -689,8 +689,8 @@ class RuntimeToolkitSourcePipelineExporterTest {
         assertTrue("code_verifier" in tokenByName.keys)
         assertTrue("refresh_token" in tokenByName.keys)
         assertTrue("client_secret" in tokenByName.keys)
-        assertTrue("nonce" in tokenByName.keys)
-        assertTrue("state" in tokenByName.keys)
+        assertFalse("nonce" in tokenByName.keys)
+        assertFalse("state" in tokenByName.keys)
 
         assertEquals("non_secret", tokenByName.getValue("client_id").optString("confidentiality"))
         assertEquals("secret", tokenByName.getValue("code_verifier").optString("confidentiality"))
@@ -723,6 +723,224 @@ class RuntimeToolkitSourcePipelineExporterTest {
         assertTrue("code" in authProvenanceInputs)
         assertTrue("code_verifier" in authProvenanceInputs)
         assertTrue("refresh_token" in authProvenanceInputs)
+    }
+
+    @Test
+    fun exporter_enforces_role_hygiene_caps_and_noise_filters() {
+        val runtimeRoot = Files.createTempDirectory("rtk_source_bundle_role_hygiene").toFile()
+        val noiseEvents = listOf(
+            requestEvent(
+                eventId = "evt_req_noise_usage",
+                requestId = "req_noise_usage",
+                phaseId = "playback_probe",
+                url = "https://api.zdf.de/usage-data/user-histories/123/playbackHistory/entries",
+                normalizedPath = "/usage-data/user-histories/123/playbackHistory/entries",
+                operation = "playback_history_sync",
+                headers = mapOf("accept" to "application/json"),
+            ),
+            responseEvent(
+                eventId = "evt_res_noise_usage",
+                requestId = "req_noise_usage",
+                phaseId = "playback_probe",
+                url = "https://api.zdf.de/usage-data/user-histories/123/playbackHistory/entries",
+                normalizedPath = "/usage-data/user-histories/123/playbackHistory/entries",
+                bodyPreview = """{"ok":true}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_noise_geo",
+                requestId = "req_noise_geo",
+                phaseId = "playback_probe",
+                url = "https://ssl.zdf.de/geo/de/geo.txt",
+                normalizedPath = "/geo/de/geo.txt",
+                operation = "network_request",
+                headers = mapOf("accept" to "text/plain"),
+            ),
+            responseEvent(
+                eventId = "evt_res_noise_geo",
+                requestId = "req_noise_geo",
+                phaseId = "playback_probe",
+                url = "https://ssl.zdf.de/geo/de/geo.txt",
+                normalizedPath = "/geo/de/geo.txt",
+                bodyPreview = "DE",
+                mimeType = "text/plain",
+            ),
+            requestEvent(
+                eventId = "evt_req_noise_event",
+                requestId = "req_noise_event",
+                phaseId = "search_probe",
+                url = "https://www.zdf.de/event",
+                normalizedPath = "/event",
+                operation = "tracking_event",
+                headers = mapOf("accept" to "application/json"),
+            ),
+            responseEvent(
+                eventId = "evt_res_noise_event",
+                requestId = "req_noise_event",
+                phaseId = "search_probe",
+                url = "https://www.zdf.de/event",
+                normalizedPath = "/event",
+                bodyPreview = """{"ok":true}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_noise_segment",
+                requestId = "req_noise_segment",
+                phaseId = "playback_probe",
+                url = "https://cdn.example.org/video/seg-001.ts",
+                normalizedPath = "/video/seg-001.ts",
+                operation = "playback_media_segment",
+                headers = mapOf("accept" to "*/*"),
+            ),
+            responseEvent(
+                eventId = "evt_res_noise_segment",
+                requestId = "req_noise_segment",
+                phaseId = "playback_probe",
+                url = "https://cdn.example.org/video/seg-001.ts",
+                normalizedPath = "/video/seg-001.ts",
+                bodyPreview = "segment",
+                mimeType = "video/mp2t",
+            ),
+        ).joinToString("\n")
+        File(runtimeRoot, "events/runtime_events.jsonl").apply {
+            parentFile?.mkdirs()
+            writeText(buildRuntimeEventsFixture().trimEnd() + "\n" + noiseEvents + "\n", Charsets.UTF_8)
+        }
+
+        val artifacts = RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+            runtimeRoot = runtimeRoot,
+            targetSiteHint = "zdf.de",
+        )
+        val bundle = JSONObject(artifacts.sourcePipelineBundlePath.readText(Charsets.UTF_8))
+        val endpointTemplates = bundle.getJSONArray("endpointTemplates")
+        val roleCounts = linkedMapOf<String, Int>()
+        forEachObject(endpointTemplates) { endpoint ->
+            val endpointId = endpoint.optString("endpointId")
+            assertTrue(endpointId.isNotBlank())
+            val role = endpoint.optString("role")
+            roleCounts[role] = (roleCounts[role] ?: 0) + 1
+            val phases = endpoint.optJSONArray("phaseRelevance") ?: JSONArray()
+            for (idx in 0 until phases.length()) {
+                val phase = phases.optString(idx)
+                assertFalse(phase == "background_noise")
+                assertTrue(phase in setOf("home_probe", "search_probe", "detail_probe", "playback_probe", "auth_probe", "replay_probe"))
+            }
+            val path = endpoint.optString("normalizedPath").lowercase()
+            assertFalse(path.contains("/usage-data/"))
+            assertFalse(path.endsWith("/geo.txt"))
+            assertFalse(path.endsWith("/event"))
+            assertFalse(path.endsWith(".ts"))
+            assertFalse(path.endsWith(".m4s"))
+            assertFalse(path.endsWith(".vtt"))
+        }
+        assertTrue((roleCounts["home"] ?: 0) <= 2)
+        assertTrue((roleCounts["search"] ?: 0) <= 2)
+        assertTrue((roleCounts["detail"] ?: 0) <= 2)
+        assertTrue((roleCounts["playbackResolver"] ?: 0) <= 2)
+        assertTrue((roleCounts["auth"] ?: 0) <= 2)
+        assertTrue((roleCounts["refresh"] ?: 0) <= 1)
+        assertTrue((roleCounts["config"] ?: 0) <= 1)
+        assertTrue((roleCounts["helper"] ?: 0) == 0)
+
+        val capabilities = bundle.getJSONObject("capabilities")
+        if (capabilities.optBoolean("supportsHomeSync")) {
+            val homeCount = roleCounts["home"] ?: 0
+            assertTrue(homeCount > 0)
+            val syncModel = bundle.optJSONObject("syncModel")
+            assertNotNull(syncModel)
+            assertTrue((syncModel!!.optJSONArray("homeEndpointRefs")?.length() ?: 0) > 0)
+        }
+    }
+
+    @Test
+    fun exporter_realigns_required_provenance_and_avoids_unused_required_placeholders() {
+        val runtimeRoot = Files.createTempDirectory("rtk_source_bundle_realign_placeholders").toFile()
+        val events = listOf(
+            requestEvent(
+                eventId = "evt_req_auth_login_1",
+                requestId = "req_auth_login",
+                phaseId = "auth_probe",
+                url = "https://api.zdf.de/identity/login",
+                normalizedPath = "/identity/login",
+                operation = "auth_login",
+                method = "POST",
+                headers = mapOf(
+                    "api-auth" to "token-1",
+                    "cookie" to "_pcid=a; _pctx=b; atuserid=c; zdf_cmp_client=d",
+                    "content-type" to "application/json",
+                ),
+                extraPayload = JSONObject().apply {
+                    put("body_preview", """{"username":"u1","password":"p1"}""")
+                },
+            ),
+            requestEvent(
+                eventId = "evt_req_auth_login_2",
+                requestId = "req_auth_login",
+                phaseId = "auth_probe",
+                url = "https://api.zdf.de/identity/login",
+                normalizedPath = "/identity/login",
+                operation = "auth_login",
+                method = "POST",
+                headers = mapOf(
+                    "content-type" to "application/json",
+                ),
+                extraPayload = JSONObject().apply {
+                    put("body_preview", """{"username":"u1","password":"p1"}""")
+                },
+            ),
+            responseEvent(
+                eventId = "evt_res_auth_login",
+                requestId = "req_auth_login",
+                phaseId = "auth_probe",
+                url = "https://api.zdf.de/identity/login",
+                normalizedPath = "/identity/login",
+                bodyPreview = """{"ok":true}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_auth_validation",
+                requestId = "req_auth_validation",
+                phaseId = "auth_probe",
+                url = "https://api.zdf.de/identity/userinfo",
+                normalizedPath = "/identity/userinfo",
+                operation = "auth_userinfo",
+                headers = mapOf("authorization" to "Bearer at"),
+            ),
+            responseEvent(
+                eventId = "evt_res_auth_validation",
+                requestId = "req_auth_validation",
+                phaseId = "auth_probe",
+                url = "https://api.zdf.de/identity/userinfo",
+                normalizedPath = "/identity/userinfo",
+                bodyPreview = """{"sub":"u1"}""",
+            ),
+        )
+        File(runtimeRoot, "events/runtime_events.jsonl").apply {
+            parentFile?.mkdirs()
+            writeText(events.joinToString(separator = "\n", postfix = "\n"), Charsets.UTF_8)
+        }
+
+        val artifacts = RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+            runtimeRoot = runtimeRoot,
+            targetSiteHint = "zdf.de",
+        )
+        val bundle = JSONObject(artifacts.sourcePipelineBundlePath.readText(Charsets.UTF_8))
+        val warnings = mutableSetOf<String>()
+        val warningArray = bundle.optJSONArray("warnings") ?: JSONArray()
+        for (idx in 0 until warningArray.length()) {
+            val warning = warningArray.optString(idx)
+            if (warning.isNotBlank()) warnings += warning
+        }
+        assertTrue("REQUIREMENT_TEMPLATE_REALIGNED" in warnings)
+
+        val endpointTemplates = bundle.getJSONArray("endpointTemplates")
+        forEachObject(endpointTemplates) { endpoint ->
+            val placeholders = endpoint.optJSONArray("variablePlaceholders") ?: JSONArray()
+            forEachObject(placeholders) { placeholder ->
+                val name = placeholder.optString("name")
+                assertFalse(name.contains("_pcid"))
+                assertFalse(name.contains("_pctx"))
+                assertFalse(name.contains("atuserid"))
+                assertFalse(name.contains("zdf_cmp_client"))
+            }
+        }
     }
 
     private fun buildRuntimeEventsFixture(): String {
@@ -918,6 +1136,7 @@ class RuntimeToolkitSourcePipelineExporterTest {
         url: String,
         normalizedPath: String,
         bodyPreview: String,
+        mimeType: String = "application/json",
         normalizedHost: String = "www.zdf.de",
         hostClass: String = "target_primary",
     ): String {
@@ -935,7 +1154,7 @@ class RuntimeToolkitSourcePipelineExporterTest {
                     put("normalized_host", normalizedHost)
                     put("normalized_path", normalizedPath)
                     put("host_class", hostClass)
-                    put("mime_type", "application/json")
+                    put("mime_type", mimeType)
                     put("body_preview", bodyPreview)
                     put("target_site_id", "zdf.de")
                 },

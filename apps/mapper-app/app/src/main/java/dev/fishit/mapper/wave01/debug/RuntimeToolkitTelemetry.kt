@@ -1628,19 +1628,34 @@ object RuntimeToolkitTelemetry {
                 .thenByDescending { it.confidence }
                 .thenBy { it.endpointId.lowercase(Locale.ROOT) },
         )
+        val filteredCandidates = candidateList.filterNot { candidate ->
+            val aggregate = LiveEndpointAggregate(
+                endpointId = candidate.endpointId,
+                role = candidate.role,
+                method = candidate.method,
+                normalizedHost = candidate.normalizedHost,
+                normalizedPath = candidate.normalizedPath,
+                requestOperation = candidate.requestOperation,
+                phaseId = candidate.phaseId,
+                sampleUrl = candidate.sampleUrl,
+            )
+            isLiveNoiseEndpoint(aggregate) ||
+                isLiveRoleCrossContaminated(candidate.role, candidate.requestOperation, candidate.normalizedPath)
+        }
+        val finalCandidates = if (filteredCandidates.isNotEmpty()) filteredCandidates else candidateList
 
         val roleOrder = listOf("home", "search", "detail", "playbackResolver", "auth", "refresh", "config", "helper")
         val grouped = linkedMapOf<String, List<LiveEndpointCandidate>>()
         roleOrder.forEach { role ->
-            val items = candidateList.filter { it.role == role }
+            val items = finalCandidates.filter { it.role == role }
             if (items.isNotEmpty()) grouped[role] = items
         }
-        candidateList
+        finalCandidates
             .map { it.role }
             .distinct()
             .filterNot { roleOrder.contains(it) }
             .forEach { role ->
-                val items = candidateList.filter { it.role == role }
+                val items = finalCandidates.filter { it.role == role }
                 if (items.isNotEmpty()) grouped[role] = items
             }
 
@@ -3368,22 +3383,155 @@ object RuntimeToolkitTelemetry {
         }
     }
 
+    private fun isLiveSearchSignal(operation: String, path: String): Boolean {
+        val op = operation.lowercase(Locale.ROOT)
+        val loweredPath = path.lowercase(Locale.ROOT)
+        return op.contains("search") ||
+            op.contains("suggest") ||
+            loweredPath.contains("/suche") ||
+            loweredPath.contains("/search")
+    }
+
+    private fun isLiveDetailSignal(operation: String, path: String): Boolean {
+        val op = operation.lowercase(Locale.ROOT)
+        val loweredPath = path.lowercase(Locale.ROOT)
+        return op.contains("detail") ||
+            op.contains("episode") ||
+            op.contains("canonical") ||
+            op.contains("video") ||
+            op.contains("content") ||
+            loweredPath.contains("/detail") ||
+            loweredPath.contains("/content/") ||
+            loweredPath.contains("/video/") ||
+            loweredPath.contains("/episode/") ||
+            loweredPath.contains("/reportagen/") ||
+            loweredPath.contains("/dokus/") ||
+            loweredPath.contains("/filme/") ||
+            loweredPath.contains("/serien/")
+    }
+
+    private fun isLiveHomeSignal(operation: String, path: String): Boolean {
+        val op = operation.lowercase(Locale.ROOT)
+        val loweredPath = path.lowercase(Locale.ROOT)
+        return loweredPath == "/" ||
+            op.contains("home") ||
+            op.contains("start") ||
+            op.contains("cluster") ||
+            op.contains("rail") ||
+            op.contains("recommend") ||
+            op.contains("collection") ||
+            op.contains("teaser") ||
+            loweredPath.contains("/home") ||
+            loweredPath.contains("/kategorien")
+    }
+
+    private fun isLiveOrCategorySignal(operation: String, path: String): Boolean {
+        val op = operation.lowercase(Locale.ROOT)
+        val loweredPath = path.lowercase(Locale.ROOT)
+        return op.contains("live_catalog") ||
+            op.contains("live") ||
+            op.contains("category") ||
+            loweredPath.contains("/live-tv") ||
+            loweredPath.contains("/livetv") ||
+            loweredPath.contains("/kategorien")
+    }
+
+    private fun isLiveTrackingSignal(operation: String, path: String): Boolean {
+        val context = "$operation $path".lowercase(Locale.ROOT)
+        return context.contains("tracking") ||
+            context.contains("telemetry") ||
+            context.contains("analytics") ||
+            context.contains("beacon") ||
+            context.contains("pixel") ||
+            context.contains("/event")
+    }
+
+    private fun isLiveRoleCrossContaminated(role: String, operation: String, path: String): Boolean {
+        val normalizedRole = role.trim()
+        val op = operation.lowercase(Locale.ROOT)
+        val loweredPath = path.lowercase(Locale.ROOT)
+        val context = "$op $loweredPath"
+        return when (normalizedRole) {
+            "home" -> isLiveSearchSignal(op, loweredPath) || isLiveDetailSignal(op, loweredPath) || isLiveOrCategorySignal(op, loweredPath) || isLiveTrackingSignal(op, loweredPath)
+            "search" -> isLiveOrCategorySignal(op, loweredPath) || isLiveDetailSignal(op, loweredPath) || op.contains("live_catalog") || isLiveTrackingSignal(op, loweredPath)
+            "detail" -> isLiveSearchSignal(op, loweredPath) || isLiveOrCategorySignal(op, loweredPath) || context.contains("playback_manifest") || context.contains("/ptmd/") || context.contains("/tmd/") || isLiveTrackingSignal(op, loweredPath)
+            "playbackResolver" -> isLiveTrackingSignal(op, loweredPath) || context.contains("playback_history") || context.contains("usage-data")
+            else -> false
+        }
+    }
+
+    private fun strongCandidateThreshold(role: String): Double {
+        return when (role) {
+            "home" -> 120.0
+            "search" -> 126.0
+            "detail" -> 124.0
+            "playbackResolver" -> 128.0
+            "auth", "refresh" -> 118.0
+            else -> 120.0
+        }
+    }
+
+    private fun strongestRoleCandidate(snapshot: LiveWizardSnapshot, role: String): LiveEndpointCandidate? {
+        return snapshot.endpointCandidates[role].orEmpty().maxByOrNull { it.score }
+    }
+
+    private fun hasStrongRoleCandidate(snapshot: LiveWizardSnapshot, role: String): Boolean {
+        val candidate = strongestRoleCandidate(snapshot, role) ?: return false
+        if (candidate.confidence < 0.7) return false
+        if (candidate.score < strongCandidateThreshold(role)) return false
+        if (isLiveRoleCrossContaminated(role, candidate.requestOperation, candidate.normalizedPath)) return false
+        if (isLiveNoiseEndpoint(
+                LiveEndpointAggregate(
+                    endpointId = candidate.endpointId,
+                    role = candidate.role,
+                    method = candidate.method,
+                    normalizedHost = candidate.normalizedHost,
+                    normalizedPath = candidate.normalizedPath,
+                    requestOperation = candidate.requestOperation,
+                    phaseId = candidate.phaseId,
+                    sampleUrl = candidate.sampleUrl,
+                ),
+            )
+        ) {
+            return false
+        }
+        return true
+    }
+
     private fun inferLiveRole(phaseId: String, operation: String, normalizedPath: String): String {
         val phase = normalizePhaseId(phaseId) ?: PHASE_BACKGROUND
-        if (phase.startsWith("home")) return "home"
-        if (phase.startsWith("search")) return "search"
-        if (phase.startsWith("detail")) return "detail"
-        if (phase.startsWith("playback")) return "playbackResolver"
-        if (phase.startsWith("auth")) return "auth"
-        if (phase.startsWith("replay")) return "helper"
-        val context = "${operation.lowercase(Locale.ROOT)} ${normalizedPath.lowercase(Locale.ROOT)}"
+        val op = operation.lowercase(Locale.ROOT)
+        val path = normalizedPath.lowercase(Locale.ROOT)
+        val context = "$op $path"
+        if (isLiveTrackingSignal(op, path) || isLiveNoiseEndpoint(
+                LiveEndpointAggregate(
+                    endpointId = "live_role_probe",
+                    role = "helper",
+                    method = "GET",
+                    normalizedHost = "",
+                    normalizedPath = path,
+                    requestOperation = op,
+                    phaseId = phase,
+                    sampleUrl = "",
+                ),
+            )
+        ) {
+            return "helper"
+        }
         return when {
             context.contains("refresh") -> "refresh"
             context.contains("auth") || context.contains("login") || context.contains("token") -> "auth"
-            context.contains("search") -> "search"
-            context.contains("detail") || context.contains("/content/") -> "detail"
-            context.contains("playback") || context.contains("resolver") || context.contains("ptmd") || context.contains("manifest") -> "playbackResolver"
+            context.contains("playback") || context.contains("resolver") || context.contains("ptmd") || context.contains("manifest") || path.endsWith(".m3u8") || path.endsWith(".mpd") -> "playbackResolver"
+            isLiveSearchSignal(op, path) -> "search"
+            isLiveDetailSignal(op, path) -> "detail"
+            isLiveHomeSignal(op, path) -> "home"
             context.contains("config") || context.contains("settings") -> "config"
+            phase.startsWith("home") -> "home"
+            phase.startsWith("search") -> "search"
+            phase.startsWith("detail") -> "detail"
+            phase.startsWith("playback") -> "playbackResolver"
+            phase.startsWith("auth") -> "auth"
+            phase.startsWith("replay") -> "helper"
             else -> "helper"
         }
     }
@@ -3397,10 +3545,37 @@ object RuntimeToolkitTelemetry {
         score += aggregate.requestEvidenceCount * 3.0
         score += aggregate.responseOkCount * 8.0
         if (aggregate.hostClassSignals.any { it.startsWith("target_") }) score += 12.0
-        if (aggregate.responseMimeTypes.any { it.contains("json") }) score += 8.0
+        if (aggregate.responseMimeTypes.any { it.contains("json") }) score += 7.0
+        if (aggregate.responseMimeTypes.any { it.contains("html") }) score += 0.4
         if (aggregate.method == "OPTIONS") score -= 40.0
         if (aggregate.phaseId == targetPhase) score += 10.0
         if (aggregate.routeKinds.contains(aggregate.role)) score += 6.0
+        val operation = aggregate.requestOperation.lowercase(Locale.ROOT)
+        val path = aggregate.normalizedPath.lowercase(Locale.ROOT)
+        when (aggregate.role) {
+            "home" -> {
+                if (isLiveHomeSignal(operation, path)) score += 8.0
+                if (isLiveSearchSignal(operation, path) || isLiveDetailSignal(operation, path) || isLiveOrCategorySignal(operation, path)) score -= 8.0
+            }
+            "search" -> {
+                if (isLiveSearchSignal(operation, path)) score += 8.0
+                if (path.contains("/suche")) score += 6.0
+                if (path.contains("/graphql") && !operation.contains("search")) score -= 6.0
+                if (isLiveOrCategorySignal(operation, path) || isLiveDetailSignal(operation, path)) score -= 8.0
+            }
+            "detail" -> {
+                if (isLiveDetailSignal(operation, path)) score += 8.0
+                if (path.contains("/graphql") && !isLiveDetailSignal(operation, path)) score -= 5.0
+                if (isLiveSearchSignal(operation, path) || isLiveOrCategorySignal(operation, path)) score -= 7.0
+                if (path.contains("/ptmd/") || path.contains("/tmd/") || path.contains("manifest")) score -= 9.0
+            }
+            "playbackResolver" -> {
+                if (path.contains("/ptmd/") || path.contains("/tmd/")) score += 14.0
+                if (path.endsWith(".m3u8") || path.endsWith(".mpd")) score += 4.0
+                if (operation.contains("resolver") || operation.contains("playback_manifest")) score += 6.0
+            }
+        }
+        if (isLiveRoleCrossContaminated(aggregate.role, operation, path)) score -= 18.0
         if (isLiveNoiseEndpoint(aggregate)) score -= 80.0
         return score
     }
@@ -3419,6 +3594,7 @@ object RuntimeToolkitTelemetry {
         if (path.endsWith(".vtt") || path.endsWith(".mp3") || path.endsWith(".mp4") || path.endsWith(".m4a")) return true
         if (path.contains("/usage-data/") || path.contains("/user-histories/")) return true
         if (path.contains("/geo.txt") || path.contains("/nmrodam")) return true
+        if (path.endsWith("/event") || path.contains("/event/")) return true
         if (context.contains("segment") || context.contains("subtitle") || context.contains("geo") || context.contains("usage-history")) return true
         return false
     }
@@ -3729,9 +3905,19 @@ object RuntimeToolkitTelemetry {
         val responses = collectResponseObservations(context)
         val readyHitsByStep = collectWizardReadyHitsByStep(context)
         val authChainEvidence = collectAuthChainEvidence(context)
+        val liveSnapshot = buildLiveWizardSnapshot(context, maxRecent = 20)
         val successfulTargetByPhase = responses
             .filter { it.succeeded && it.targetEvidence }
             .groupBy { inferProbePhase(it) }
+        fun roleCandidateMetrics(role: String): Map<String, Any?> {
+            val strongest = strongestRoleCandidate(liveSnapshot, role)
+            return mapOf(
+                "role_candidate_ok" to hasStrongRoleCandidate(liveSnapshot, role),
+                "top_candidate_endpoint_id" to strongest?.endpointId.orEmpty(),
+                "top_candidate_score" to (strongest?.score ?: 0.0),
+                "top_candidate_confidence" to (strongest?.confidence ?: 0.0),
+            )
+        }
 
         return when (stepId) {
             RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT -> {
@@ -3751,17 +3937,19 @@ object RuntimeToolkitTelemetry {
             }
             RuntimeToolkitMissionWizard.STEP_HOME_PROBE -> {
                 val count = successfulTargetByPhase["home_probe"].orEmpty().size
-                if (count >= 1) {
+                val candidateMetrics = roleCandidateMetrics("home")
+                val candidateOk = candidateMetrics["role_candidate_ok"] == true
+                if (count >= 1 && candidateOk) {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
                         reason = "home_probe_evidence_ok",
-                        metrics = mapOf("response_count" to count),
+                        metrics = mapOf("response_count" to count) + candidateMetrics,
                     )
                 } else {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
-                        reason = "missing_home_target_response",
-                        metrics = mapOf("response_count" to count),
+                        reason = if (count <= 0) "missing_home_target_response" else "home_probe_low_quality_candidates",
+                        metrics = mapOf("response_count" to count) + candidateMetrics,
                     )
                 }
             }
@@ -3771,7 +3959,9 @@ object RuntimeToolkitTelemetry {
                 }
                 val unique = relevant.map { it.fingerprint }.toSet().size
                 val readyHits = readyHitsByStep[RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE] ?: 0
-                val saturated = unique >= 2 && (readyHits > 0 || unique >= 3)
+                val candidateMetrics = roleCandidateMetrics("search")
+                val candidateOk = candidateMetrics["role_candidate_ok"] == true
+                val saturated = unique >= 2 && candidateOk && (readyHits > 0 || unique >= 3)
                 if (saturated) {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
@@ -3779,16 +3969,16 @@ object RuntimeToolkitTelemetry {
                         metrics = mapOf(
                             "unique_request_templates" to unique,
                             "ready_hits" to readyHits,
-                        ),
+                        ) + candidateMetrics,
                     )
                 } else {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
-                        reason = "search_probe_needs_more_variants",
+                        reason = if (unique < 2) "search_probe_needs_more_variants" else "search_probe_low_quality_candidates",
                         metrics = mapOf(
                             "unique_request_templates" to unique,
                             "ready_hits" to readyHits,
-                        ),
+                        ) + candidateMetrics,
                     )
                 }
             }
@@ -3802,7 +3992,9 @@ object RuntimeToolkitTelemetry {
                 }
                 val readyHits = readyHitsByStep[RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE] ?: 0
                 val responseCount = relevant.size
-                val saturated = responseCount > 0 && (readyHits > 0 || responseCount >= 2)
+                val candidateMetrics = roleCandidateMetrics("detail")
+                val candidateOk = candidateMetrics["role_candidate_ok"] == true
+                val saturated = responseCount > 0 && candidateOk && (readyHits > 0 || responseCount >= 2)
                 if (saturated) {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
@@ -3810,16 +4002,16 @@ object RuntimeToolkitTelemetry {
                         metrics = mapOf(
                             "response_count" to responseCount,
                             "ready_hits" to readyHits,
-                        ),
+                        ) + candidateMetrics,
                     )
                 } else {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
-                        reason = "missing_detail_target_response",
+                        reason = if (responseCount <= 0) "missing_detail_target_response" else "detail_probe_low_quality_candidates",
                         metrics = mapOf(
                             "response_count" to responseCount,
                             "ready_hits" to readyHits,
-                        ),
+                        ) + candidateMetrics,
                     )
                 }
             }
@@ -3834,6 +4026,8 @@ object RuntimeToolkitTelemetry {
                 }
                 val readyHits = readyHitsByStep[RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE] ?: 0
                 val responseCount = relevant.size
+                val candidateMetrics = roleCandidateMetrics("playbackResolver")
+                val candidateOk = candidateMetrics["role_candidate_ok"] == true
                 val strongEvidenceCount = relevant.count {
                     it.path.contains("/ptmd/") ||
                         it.path.contains("/tmd/") ||
@@ -3843,6 +4037,7 @@ object RuntimeToolkitTelemetry {
                 }
                 val saturated = when {
                     responseCount <= 0 -> false
+                    !candidateOk -> false
                     readyHits > 0 -> true
                     strongEvidenceCount > 0 -> true
                     else -> responseCount >= 2
@@ -3855,17 +4050,17 @@ object RuntimeToolkitTelemetry {
                             "response_count" to responseCount,
                             "strong_evidence_count" to strongEvidenceCount,
                             "ready_hits" to readyHits,
-                        ),
+                        ) + candidateMetrics,
                     )
                 } else {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE,
-                        reason = "missing_playback_manifest_or_resolver",
+                        reason = if (responseCount <= 0) "missing_playback_manifest_or_resolver" else "playback_probe_low_quality_candidates",
                         metrics = mapOf(
                             "response_count" to responseCount,
                             "strong_evidence_count" to strongEvidenceCount,
                             "ready_hits" to readyHits,
-                        ),
+                        ) + candidateMetrics,
                     )
                 }
             }
@@ -3925,6 +4120,8 @@ object RuntimeToolkitTelemetry {
                 }
                 val summary = buildMissionExportSummary(context, state.missionId)
                 val exportReady = summary.exportReadiness == EXPORT_READINESS_READY
+                val gateError = latestExportGateError(context)
+                val topGateReasons = extractTopGateReasons(gateError)
                 if (requiredComplete && exportReady) {
                     RuntimeToolkitMissionWizard.SaturationResult(
                         state = RuntimeToolkitMissionWizard.SATURATION_SATURATED,
@@ -3934,6 +4131,7 @@ object RuntimeToolkitTelemetry {
                             "export_readiness" to summary.exportReadiness,
                             "summary_reason" to summary.reason,
                             "missing_required_artifacts" to summary.missingRequiredArtifacts,
+                            "export_gate_top_reasons" to topGateReasons,
                         ),
                     )
                 } else {
@@ -3946,7 +4144,8 @@ object RuntimeToolkitTelemetry {
                             "summary_reason" to summary.reason,
                             "missing_required_artifacts" to summary.missingRequiredArtifacts,
                             "missing_required_steps" to summary.missingRequiredSteps,
-                            "export_gate_error" to latestExportGateError(context),
+                            "export_gate_error" to gateError,
+                            "export_gate_top_reasons" to topGateReasons,
                         ),
                     )
                 }
@@ -3958,6 +4157,25 @@ object RuntimeToolkitTelemetry {
         }
     }
 
+    private fun extractTopGateReasons(rawError: String, maxItems: Int = 3): List<String> {
+        val value = rawError.trim()
+        if (value.isBlank()) return emptyList()
+        return value
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .map { line ->
+                when {
+                    line.startsWith("- ") -> line.removePrefix("- ").trim()
+                    line.startsWith("source pipeline export blocked by gates:") -> ""
+                    else -> line
+                }
+            }
+            .filter { it.isNotBlank() }
+            .take(maxItems)
+            .toList()
+    }
+
     private fun inferStepProgressPercent(
         stepId: String,
         saturation: RuntimeToolkitMissionWizard.SaturationResult,
@@ -3967,23 +4185,31 @@ object RuntimeToolkitTelemetry {
             RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT -> 0
             RuntimeToolkitMissionWizard.STEP_HOME_PROBE -> {
                 val count = intPayloadValue(saturation.metrics["response_count"]) ?: 0
-                minOf(95, count * 70)
+                val candidateOk = boolPayloadValue(saturation.metrics["role_candidate_ok"]) == true
+                val base = (count * 70) + if (candidateOk) 20 else -10
+                minOf(95, base)
             }
             RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE -> {
                 val variants = intPayloadValue(saturation.metrics["unique_request_templates"]) ?: 0
                 val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
-                minOf(95, (variants * 40) + if (readyHits > 0) 15 else 0)
+                val candidateOk = boolPayloadValue(saturation.metrics["role_candidate_ok"]) == true
+                val base = (variants * 40) + if (readyHits > 0) 15 else 0
+                minOf(95, base + if (candidateOk) 15 else -15)
             }
             RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE -> {
                 val count = intPayloadValue(saturation.metrics["response_count"]) ?: 0
                 val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
-                minOf(95, (count * 55) + if (readyHits > 0) 20 else 0)
+                val candidateOk = boolPayloadValue(saturation.metrics["role_candidate_ok"]) == true
+                val base = (count * 55) + if (readyHits > 0) 20 else 0
+                minOf(95, base + if (candidateOk) 15 else -15)
             }
             RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE -> {
                 val count = intPayloadValue(saturation.metrics["response_count"]) ?: 0
                 val strongEvidenceCount = intPayloadValue(saturation.metrics["strong_evidence_count"]) ?: 0
                 val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
-                minOf(95, (count * 40) + (strongEvidenceCount * 20) + if (readyHits > 0) 15 else 0)
+                val candidateOk = boolPayloadValue(saturation.metrics["role_candidate_ok"]) == true
+                val base = (count * 40) + (strongEvidenceCount * 20) + if (readyHits > 0) 15 else 0
+                minOf(95, base + if (candidateOk) 15 else -15)
             }
             RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL -> {
                 val login = intPayloadValue(saturation.metrics["login_responses"]) ?: 0
@@ -4018,20 +4244,31 @@ object RuntimeToolkitTelemetry {
         if (saturation.state == RuntimeToolkitMissionWizard.SATURATION_SATURATED) return emptyList()
         return when (stepId) {
             RuntimeToolkitMissionWizard.STEP_TARGET_URL_INPUT -> listOf("target_url_confirmed")
-            RuntimeToolkitMissionWizard.STEP_HOME_PROBE -> listOf("home_target_response")
+            RuntimeToolkitMissionWizard.STEP_HOME_PROBE -> {
+                val count = intPayloadValue(saturation.metrics["response_count"]) ?: 0
+                val candidateOk = boolPayloadValue(saturation.metrics["role_candidate_ok"]) == true
+                buildList {
+                    if (count <= 0) add("home_target_response")
+                    if (!candidateOk) add("high_quality_home_candidate")
+                }.ifEmpty { listOf("home_target_response") }
+            }
             RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE -> {
                 val variants = intPayloadValue(saturation.metrics["unique_request_templates"]) ?: 0
                 val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
+                val candidateOk = boolPayloadValue(saturation.metrics["role_candidate_ok"]) == true
                 buildList {
                     if (variants < 2) add("search_variants>=2")
+                    if (!candidateOk) add("high_quality_search_candidate")
                     if (readyHits <= 0) add("ready_window_hit")
                 }.ifEmpty { listOf("search_variants>=2") }
             }
             RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE -> {
                 val count = intPayloadValue(saturation.metrics["response_count"]) ?: 0
                 val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
+                val candidateOk = boolPayloadValue(saturation.metrics["role_candidate_ok"]) == true
                 buildList {
                     if (count <= 0) add("detail_target_response")
+                    if (!candidateOk) add("high_quality_detail_candidate")
                     if (readyHits <= 0) add("ready_window_hit")
                 }.ifEmpty { listOf("detail_target_response") }
             }
@@ -4039,9 +4276,11 @@ object RuntimeToolkitTelemetry {
                 val count = intPayloadValue(saturation.metrics["response_count"]) ?: 0
                 val strongEvidenceCount = intPayloadValue(saturation.metrics["strong_evidence_count"]) ?: 0
                 val readyHits = intPayloadValue(saturation.metrics["ready_hits"]) ?: 0
+                val candidateOk = boolPayloadValue(saturation.metrics["role_candidate_ok"]) == true
                 buildList {
                     if (count <= 0) add("playback_manifest_or_resolver")
                     if (count > 0 && strongEvidenceCount <= 0) add("strong_playback_signal")
+                    if (!candidateOk) add("high_quality_playback_candidate")
                     if (readyHits <= 0) add("ready_window_hit_recommended")
                 }.ifEmpty { listOf("playback_manifest_or_resolver") }
             }
@@ -4062,10 +4301,12 @@ object RuntimeToolkitTelemetry {
                 val missingSteps = (metrics["missing_required_steps"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty()
                 val missingArtifacts = (metrics["missing_required_artifacts"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty()
                 val exportGateError = stringPayloadValue(metrics["export_gate_error"]).orEmpty()
+                val topGateReasons = (metrics["export_gate_top_reasons"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty()
                 val signals = mutableListOf<String>()
                 signals += missingSteps.map { "step:$it" }
                 signals += missingArtifacts.map { "artifact:$it" }
                 if (exportGateError.isNotBlank()) signals += "gate:$exportGateError"
+                signals += topGateReasons.map { "gate_reason:$it" }
                 if (signals.isEmpty()) signals += "mission_export_ready"
                 signals.take(5)
             }

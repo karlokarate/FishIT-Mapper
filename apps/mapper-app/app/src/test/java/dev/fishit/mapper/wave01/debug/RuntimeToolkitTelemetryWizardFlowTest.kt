@@ -105,7 +105,9 @@ class RuntimeToolkitTelemetryWizardFlowTest {
             stepId = RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE,
             saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
         )
-        RuntimeToolkitTelemetry.logNetworkRequest(
+        RuntimeToolkitTelemetry.startCaptureSession(context, source = "unit_test")
+        RuntimeToolkitTelemetry.setActivePhaseId(context, "search_probe")
+        val request = RuntimeToolkitTelemetry.logNetworkRequest(
             context = context,
             source = "webview",
             url = "https://www.zdf.de/api/search?q=heute",
@@ -122,6 +124,7 @@ class RuntimeToolkitTelemetryWizardFlowTest {
             mimeType = "application/json",
             headers = emptyMap(),
             rawBody = """{"results":[{"title":"Search Title"}]}""".toByteArray(),
+            requestId = request.requestId,
         )
 
         val snapshot = RuntimeToolkitTelemetry.buildLiveWizardSnapshot(context)
