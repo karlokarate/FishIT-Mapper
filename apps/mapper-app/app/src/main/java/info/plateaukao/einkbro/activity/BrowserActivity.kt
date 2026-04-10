@@ -2341,6 +2341,7 @@ open class BrowserActivity : FragmentActivity(),
         }
         missionWizardCard.visibility = VISIBLE
         val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, this)
+        ensureWizardPhaseFocus(state, step)
         val feedback = RuntimeToolkitTelemetry.evaluateMissionStepFeedback(this, state.wizardStepId)
         val displayName = step?.displayName?.ifBlank { state.wizardStepId } ?: state.wizardStepId
         missionWizardStepTitle.text = "$displayName (${state.wizardStepId})"
@@ -2434,6 +2435,25 @@ open class BrowserActivity : FragmentActivity(),
         )
     }
 
+    private fun ensureWizardPhaseFocus(
+        state: RuntimeToolkitTelemetry.MissionSessionState,
+        step: RuntimeToolkitMissionWizard.StepDefinition?,
+    ) {
+        val phaseId = step?.phaseId?.trim().orEmpty()
+        if (phaseId.isBlank()) return
+        val currentPhase = RuntimeToolkitTelemetry.activePhaseId(this)
+        val stepState = state.stepStates[state.wizardStepId].orEmpty()
+        if (stepState == RuntimeToolkitMissionWizard.SATURATION_SATURATED) return
+        if (currentPhase == phaseId) return
+        if (currentPhase != "background_noise") return
+        RuntimeToolkitTelemetry.logProbePhaseEvent(
+            context = this,
+            phaseId = phaseId,
+            transition = "resume",
+            payload = mapOf("source" to "wizard_overlay_focus"),
+        )
+    }
+
     private fun setMissionWizardOverlayMinimized(minimized: Boolean) {
         val state = RuntimeToolkitTelemetry.missionSessionState(this)
         if (state.missionId.isBlank()) {
@@ -2444,6 +2464,7 @@ open class BrowserActivity : FragmentActivity(),
         }
         if (missionWizardOverlayMinimized == minimized) return
         missionWizardOverlayMinimized = minimized
+        setMissionWizardCardDragFrameVisible(minimized)
         updateMissionWizardUi()
         EBToast.showShort(
             this,
@@ -2501,6 +2522,7 @@ open class BrowserActivity : FragmentActivity(),
 
     private fun isMissionWizardCardDragTouch(event: MotionEvent): Boolean {
         if (!this::missionWizardCard.isInitialized) return false
+        if (missionWizardOverlayMinimized) return true
         val width = missionWizardCard.width.toFloat()
         val height = missionWizardCard.height.toFloat()
         if (width <= 0f || height <= 0f) return false

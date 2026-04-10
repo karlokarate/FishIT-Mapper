@@ -56,7 +56,7 @@ object RuntimeToolkitSourcePipelineExporter {
 
     private data class EndpointAggregate(
         val endpointId: String,
-        val role: String,
+        var role: String,
         val method: String,
         val normalizedHost: String,
         val normalizedPath: String,
@@ -64,6 +64,8 @@ object RuntimeToolkitSourcePipelineExporter {
         val phaseRelevance: MutableSet<String> = linkedSetOf(),
         val requestEventIds: MutableList<String> = mutableListOf(),
         val responseEventIds: MutableList<String> = mutableListOf(),
+        val hostClassSignals: MutableSet<String> = linkedSetOf(),
+        val responseMimeTypes: MutableSet<String> = linkedSetOf(),
         val requiredHeaders: MutableSet<String> = linkedSetOf(),
         val optionalHeaders: MutableSet<String> = linkedSetOf(),
         val requiredCookies: MutableSet<String> = linkedSetOf(),
@@ -74,6 +76,7 @@ object RuntimeToolkitSourcePipelineExporter {
         val requiredBodyFields: MutableSet<String> = linkedSetOf(),
         val optionalBodyFields: MutableSet<String> = linkedSetOf(),
         var requestEvidenceCount: Int = 0,
+        var responseOkCount: Int = 0,
         var requiredReferer: String? = null,
         var requiredOrigin: String? = null,
         var confidence: Double = 0.6,
@@ -109,6 +112,39 @@ object RuntimeToolkitSourcePipelineExporter {
         "sectionName",
         "searchMapping",
         "detailMapping",
+    )
+
+    private val finalPhaseSet = setOf(
+        "home_probe",
+        "search_probe",
+        "detail_probe",
+        "playback_probe",
+        "auth_probe",
+        "replay_probe",
+    )
+
+    private val finalRoleSet = setOf(
+        "home",
+        "search",
+        "detail",
+        "playbackResolver",
+        "playback_resolver",
+        "auth",
+        "refresh",
+        "config",
+        "helper",
+    )
+
+    private val roleExportCaps = linkedMapOf(
+        "home" to 3,
+        "search" to 3,
+        "detail" to 3,
+        "playbackResolver" to 3,
+        "playback_resolver" to 3,
+        "auth" to 3,
+        "refresh" to 1,
+        "config" to 2,
+        "helper" to 2,
     )
 
     fun ensureSourcePipelineArtifacts(runtimeRoot: File, targetSiteHint: String = ""): ExportArtifacts {
@@ -233,6 +269,9 @@ object RuntimeToolkitSourcePipelineExporter {
                 )
             }
             endpoint.phaseRelevance += request.phaseId
+            if (request.hostClass.isNotBlank()) {
+                endpoint.hostClassSignals += request.hostClass
+            }
             endpoint.requestEventIds += request.eventId
 
             val provenanceInputs = linkedSetOf<String>()
@@ -303,6 +342,15 @@ object RuntimeToolkitSourcePipelineExporter {
 
             responsesByRequestId[request.requestId].orEmpty().forEach { response ->
                 endpoint.responseEventIds += response.eventId
+                if (response.hostClass.isNotBlank()) {
+                    endpoint.hostClassSignals += response.hostClass
+                }
+                if (response.mimeType.isNotBlank()) {
+                    endpoint.responseMimeTypes += response.mimeType.lowercase(Locale.ROOT)
+                }
+                if (response.statusCode in 200..399) {
+                    endpoint.responseOkCount += 1
+                }
             }
         }
 
@@ -315,18 +363,23 @@ object RuntimeToolkitSourcePipelineExporter {
                 else -> 0.5
             }
         }
-        val endpointsForBundle =
-            endpointById.values
-                .filter { shouldIncludeEndpointInBundle(it) }
-                .ifEmpty {
-                    endpointById.values.filter { endpoint ->
-                        val host = endpoint.normalizedHost.lowercase(Locale.ROOT)
-                        val path = endpoint.normalizedPath
-                        val loweredContext = "${endpoint.requestOperation} $host $path".lowercase(Locale.ROOT)
-                        !looksLikeNonContentOperation(loweredContext) &&
-                            !isLikelyStaticAssetPath(path, "https://$host$path")
-                    }
-                }
+        val selection = selectFinalEndpoints(
+            endpoints = endpointById.values,
+            responses = responses,
+        )
+        val exportWarnings = linkedSetOf<String>().apply { addAll(selection.warnings) }
+        val endpointsForBundle = selection.endpoints
+            .filter { normalizePhaseRelevanceForExport(it.phaseRelevance, it.role).isNotEmpty() }
+            .ifEmpty {
+                exportWarnings += "FINAL_BUNDLE_DEGRADED"
+                selection.endpoints
+            }
+        if (selection.endpoints.size != endpointsForBundle.size) {
+            exportWarnings += "PHASE_RELEVANCE_NORMALIZED"
+        }
+        if (exportWarnings.isNotEmpty()) {
+            exportWarnings += "FINAL_BUNDLE_DEGRADED"
+        }
         require(endpointsForBundle.isNotEmpty()) {
             "source pipeline export blocked: no endpoint templates survived filtering"
         }
@@ -340,6 +393,7 @@ object RuntimeToolkitSourcePipelineExporter {
             .forEach { endpoint ->
                 val stableRequiredQueryParams = endpoint.requiredQueryParams.filterTo(linkedSetOf()) { isStableRequiredInputName(it) }
                 val stableRequiredBodyFields = endpoint.requiredBodyFields.filterTo(linkedSetOf()) { isStableRequiredInputName(it) }
+                val phaseRelevance = normalizePhaseRelevanceForExport(endpoint.phaseRelevance, endpoint.role)
                 val templatePayload = buildEndpointTemplates(
                     role = endpoint.role,
                     normalizedPath = endpoint.normalizedPath,
@@ -364,7 +418,7 @@ object RuntimeToolkitSourcePipelineExporter {
                         put("queryTemplate", templatePayload.queryTemplate)
                         put("bodyTemplate", templatePayload.bodyTemplate)
                         put("variablePlaceholders", templatePayload.variablePlaceholders)
-                        put("phaseRelevance", JSONArray(endpoint.phaseRelevance.toList()))
+                        put("phaseRelevance", JSONArray(phaseRelevance))
                         put("requiredProvenanceInputs", JSONArray(endpoint.requiredProvenanceInputs.toList()))
                         put("sourceEvidenceRefs", JSONArray((endpoint.requestEventIds.map { "request:$it" } + endpoint.responseEventIds.map { "response:$it" }).take(20)))
                         put("confidence", endpoint.confidence)
@@ -445,12 +499,28 @@ object RuntimeToolkitSourcePipelineExporter {
             .mapNotNull { it.mimeType.takeIf { mime -> mime.isNotBlank() }?.lowercase(Locale.ROOT) }
             .distinct()
         val playbackContainers = inferStreamContainers(responses)
+        val hasResolverEvidence = endpointsForBundle.any { endpoint ->
+            val path = endpoint.normalizedPath.lowercase(Locale.ROOT)
+            val op = endpoint.requestOperation.lowercase(Locale.ROOT)
+            (endpoint.role == "playbackResolver" || endpoint.role == "playback_resolver") &&
+                (path.contains("/ptmd/") || path.contains("/tmd/") || op.contains("resolver"))
+        }
+        val selectedPlaybackIsManifest = selectedPlaybackEndpoints.any { endpoint ->
+            val path = endpoint.normalizedPath.lowercase(Locale.ROOT)
+            path.endsWith(".m3u8") || path.endsWith(".mpd")
+        }
+        if (!hasResolverEvidence && selectedPlaybackIsManifest) {
+            exportWarnings += "PLAYBACK_RESOLVER_DEGRADED_TO_MANIFEST"
+        }
 
         val allRequiredHeaders = endpointsForBundle.flatMap { it.requiredHeaders }.toSet()
         val allRequiredCookies = endpointsForBundle.flatMap { it.requiredCookies }.toSet()
         val authTokenInputs = endpointsForBundle.flatMap { it.requiredProvenanceInputs }.toSet()
         val authLifecycleInsights = collectTokenLifecycleInsights(runtimeRoot, responses)
         val authOrRefreshEndpoints = endpointsForBundle.filter { it.role == "auth" || it.role == "refresh" }
+        if (selection.warnings.any { it.startsWith("ENDPOINT_CAP_APPLIED:auth") || it.startsWith("ENDPOINT_CAP_APPLIED:refresh") }) {
+            exportWarnings += "AUTH_ENDPOINT_SET_MINIMIZED"
+        }
         val refreshEndpointId = authOrRefreshEndpoints
             .firstOrNull { isRefreshEndpointCandidate(it) }
             ?.endpointId
@@ -612,7 +682,7 @@ object RuntimeToolkitSourcePipelineExporter {
                     put("tokenTtlHints", JSONArray(authLifecycleInsights.ttlHints))
                 },
             )
-            put("warnings", JSONArray())
+            put("warnings", JSONArray(exportWarnings.toList().sorted()))
             put(
                 "confidence",
                 JSONObject().apply {
@@ -625,8 +695,10 @@ object RuntimeToolkitSourcePipelineExporter {
                         val row = fieldMappings.optJSONObject(i) ?: continue
                         fieldConf.put(row.optString("fieldName"), row.optDouble("confidence", 0.0))
                     }
-                    put("bundleConfidence", 0.75)
-                    put("determinismConfidence", 0.72)
+                    val bundleConfidence = if (exportWarnings.isEmpty()) 0.75 else 0.68
+                    val determinismConfidence = if (exportWarnings.isEmpty()) 0.72 else 0.66
+                    put("bundleConfidence", bundleConfidence)
+                    put("determinismConfidence", determinismConfidence)
                     put("endpointConfidenceByRole", endpointByRole)
                     put("playbackConfidence", if (supportsPlayback) 0.75 else 0.0)
                     put("authConfidence", if (requiresLogin) 0.7 else 0.95)
@@ -664,8 +736,8 @@ object RuntimeToolkitSourcePipelineExporter {
                         put("syncMode", "selection_scoped")
                         put("supportsFullSync", false)
                         put("supportsIncrementalSync", true)
-                        put("homeEndpointRefs", JSONArray(homeIds.take(10)))
-                        put("detailEnrichmentEndpointRefs", JSONArray(detailIds.take(10)))
+                        put("homeEndpointRefs", JSONArray(homeIds.take(3)))
+                        put("detailEnrichmentEndpointRefs", JSONArray(detailIds.take(3)))
                         put("defaultSelectionKeys", JSONArray().put(selectionKey))
                         put("syncConfidence", 0.7)
                     },
@@ -843,6 +915,17 @@ object RuntimeToolkitSourcePipelineExporter {
         endpointTemplates.forEach { endpoint ->
             val endpointRef = endpoint.optString("endpointId")
             if (endpointRef.isBlank()) return@forEach
+            val role = endpoint.optString("role").trim()
+            if (role.isNotBlank() && role !in finalRoleSet) {
+                failures += "endpoint '$endpointRef' has forbidden role '$role' in final export"
+            }
+            val phases = jsonStrings(endpoint.optJSONArray("phaseRelevance"))
+            if (phases.any { it == "background_noise" }) {
+                failures += "endpoint '$endpointRef' contains background_noise in phaseRelevance"
+            }
+            if (phases.any { it !in finalPhaseSet }) {
+                failures += "endpoint '$endpointRef' contains invalid phaseRelevance entries: ${phases.filter { it !in finalPhaseSet }}"
+            }
             val queryTemplateText = endpoint.opt("queryTemplate")?.toString().orEmpty()
             val bodyTemplateText = endpoint.opt("bodyTemplate")?.toString().orEmpty()
             val pathTemplate = endpoint.optString("pathTemplate")
@@ -2569,12 +2652,13 @@ object RuntimeToolkitSourcePipelineExporter {
         val normalizedOperation = endpoint.requestOperation.lowercase(Locale.ROOT)
         var score = 0
         if (endpoint.method == "GET") score += 10
-        if (normalizedOperation.contains("playback_manifest_fetch")) score += 120
-        if (normalizedPath.endsWith(".m3u8") || normalizedPath.endsWith(".mpd")) score += 110
-        if (normalizedPath.contains("/ptmd/")) score += 80
+        if (normalizedOperation.contains("playback_manifest_fetch")) score += 60
+        if (normalizedPath.endsWith(".m3u8") || normalizedPath.endsWith(".mpd")) score += 50
+        if (normalizedPath.contains("/ptmd/") || normalizedPath.contains("/tmd/")) score += 140
         if ("canonical" in endpoint.requiredQueryParams) score += 50
         if (normalizedOperation.contains("playback_history")) score -= 140
         if (normalizedPath.contains("/usage-data/user-histories/")) score -= 180
+        if (isPlaybackNoiseEndpoint(endpoint)) score -= 200
         if (endpoint.method == "OPTIONS" || endpoint.method == "PATCH") score -= 40
         score -= endpoint.requiredHeaders.size * 8
         return score
@@ -3235,8 +3319,14 @@ object RuntimeToolkitSourcePipelineExporter {
         if (lowered.contains("playback") || lowered.contains("resolver") || lowered.contains("manifest") || lowered.contains(".m3u8") || lowered.contains(".mpd") || lowered.contains("/ptmd/") || lowered.contains("/tmd/")) {
             return "playbackResolver"
         }
-        if (lowered.contains("auth") || lowered.contains("token") || lowered.contains("refresh") || lowered.contains("login")) {
+        if (lowered.contains("refresh") || lowered.contains("token_refresh") || lowered.contains("/refresh")) {
+            return "refresh"
+        }
+        if (lowered.contains("auth") || lowered.contains("token") || lowered.contains("login")) {
             return "auth"
+        }
+        if (lowered.contains("config") || lowered.contains("/settings") || lowered.contains("/configuration")) {
+            return "config"
         }
         if (lowered.contains("detail") || lowered.contains("episode") || lowered.contains("/content/") || lowered.contains("/video/") || lowered.contains("/serien/") || lowered.contains("/filme/")) {
             return "detail"
@@ -3340,6 +3430,8 @@ object RuntimeToolkitSourcePipelineExporter {
         if (path.endsWith(".png") || path.endsWith(".jpg") || path.endsWith(".jpeg") || path.endsWith(".webp") || path.endsWith(".gif") || path.endsWith(".svg") || path.endsWith(".ico")) return true
         if (path.endsWith(".woff") || path.endsWith(".woff2") || path.endsWith(".ttf") || path.endsWith(".otf")) return true
         if (path.endsWith(".mp3") || path.endsWith(".m4a") || path.endsWith(".m4s") || path.endsWith(".ts")) return true
+        if (path.endsWith(".vtt") || path.endsWith(".srt") || path.endsWith(".ttml") || path.endsWith(".webvtt")) return true
+        if (path.endsWith("/geo.txt")) return true
         if (
             loweredUrl.contains("tracksrv") ||
             loweredUrl.contains("sentry") ||
@@ -3361,6 +3453,194 @@ object RuntimeToolkitSourcePipelineExporter {
         return isLikelyStaticAssetPath(response.normalizedPath, response.url)
     }
 
+    private fun normalizePhaseRelevanceForExport(phaseIds: Set<String>, role: String): List<String> {
+        val normalized = phaseIds
+            .map { normalizePhaseId(it) }
+            .filter { it in finalPhaseSet }
+        if (normalized.isNotEmpty()) {
+            return normalized.distinct()
+        }
+        return when (role) {
+            "home" -> listOf("home_probe")
+            "search" -> listOf("search_probe")
+            "detail" -> listOf("detail_probe")
+            "playbackResolver", "playback_resolver" -> listOf("playback_probe")
+            "auth", "refresh" -> listOf("auth_probe")
+            else -> emptyList()
+        }
+    }
+
+    private fun isPlaybackNoiseEndpoint(endpoint: EndpointAggregate): Boolean {
+        val path = endpoint.normalizedPath.lowercase(Locale.ROOT)
+        val lowered = "${endpoint.requestOperation} ${endpoint.normalizedHost} $path".lowercase(Locale.ROOT)
+        if (path.contains("/usage-data/") || path.contains("/user-histories/")) return true
+        if (path.endsWith("/geo.txt") || lowered.contains("geo.txt")) return true
+        if (path.endsWith(".ts") || path.endsWith(".m4s") || path.endsWith(".aac") || path.endsWith(".mp4")) return true
+        if (path.endsWith(".vtt") || path.endsWith(".srt") || path.endsWith(".ttml") || path.endsWith(".webvtt")) return true
+        if (lowered.contains("subtitle") || lowered.contains("captions")) return true
+        return false
+    }
+
+    private fun isNoiseEndpoint(endpoint: EndpointAggregate): Boolean {
+        val host = endpoint.normalizedHost.lowercase(Locale.ROOT)
+        val path = endpoint.normalizedPath.lowercase(Locale.ROOT)
+        val loweredContext = "${endpoint.requestOperation} $host $path".lowercase(Locale.ROOT)
+        if (looksLikeNonContentOperation(loweredContext)) return true
+        if (isLikelyStaticAssetPath(path, "https://$host$path")) return true
+        if (host.contains("analytics") || host.contains("measurement") || host.contains("metrics")) return true
+        if (host.contains("sentry") || host.contains("tracksrv") || host.contains("googletagmanager")) return true
+        if (path.contains("/usage-data/") || path.contains("/user-histories/")) return true
+        if (path.endsWith("/geo.txt")) return true
+        if (path.contains("/nmrodam")) return true
+        return false
+    }
+
+    private fun endpointRoleSignalScore(endpoint: EndpointAggregate): Double {
+        val context = "${endpoint.requestOperation} ${endpoint.normalizedPath}".lowercase(Locale.ROOT)
+        val path = endpoint.normalizedPath.lowercase(Locale.ROOT)
+        return when (endpoint.role) {
+            "home" -> {
+                var score = 0.0
+                if (path == "/") score += 4.0
+                if (context.contains("home") || context.contains("start")) score += 2.5
+                if (context.contains("cluster") || context.contains("rail") || context.contains("recommend")) score += 2.5
+                if (context.contains("collection") || context.contains("teaser") || context.contains("stage")) score += 1.5
+                if (context.contains("detail") || context.contains("search") || context.contains("playback")) score -= 2.0
+                score
+            }
+            "search" -> {
+                var score = 0.0
+                if (context.contains("search") || context.contains("query") || context.contains("suggest")) score += 3.0
+                if (path.contains("/search")) score += 2.0
+                score
+            }
+            "detail" -> {
+                var score = 0.0
+                if (context.contains("detail") || context.contains("content") || context.contains("episode")) score += 2.5
+                if (path.contains("/content/") || path.contains("/video/") || path.contains("/episode/")) score += 2.0
+                score
+            }
+            "playbackResolver", "playback_resolver" -> {
+                var score = 0.0
+                if (path.contains("/ptmd/") || path.contains("/tmd/")) score += 4.0
+                if (context.contains("resolver") || context.contains("playback")) score += 2.5
+                if (path.endsWith(".m3u8") || path.endsWith(".mpd")) score += 1.0
+                if (context.contains("manifest")) score += 0.5
+                if (isPlaybackNoiseEndpoint(endpoint)) score -= 5.0
+                score
+            }
+            "auth", "refresh" -> {
+                var score = 0.0
+                if (isRefreshEndpointCandidate(endpoint)) score += 2.5
+                if (isLoginEndpointCandidate(endpoint)) score += 2.0
+                if (isValidationEndpointCandidate(endpoint)) score += 1.5
+                score
+            }
+            "config" -> {
+                if (context.contains("config") || context.contains("settings")) 1.0 else 0.0
+            }
+            else -> 0.0
+        }
+    }
+
+    private fun endpointScoreForRole(
+        endpoint: EndpointAggregate,
+        responseScore: Double,
+    ): Double {
+        var score = responseScore
+        score += endpoint.confidence * 5.0
+        score += endpoint.requestEvidenceCount * 0.4
+        score += endpoint.responseOkCount * 0.3
+        if (endpoint.hostClassSignals.any { it.startsWith("target_") }) score += 1.5
+        if (endpoint.responseMimeTypes.any { it.contains("json") }) score += 1.0
+        if (endpoint.responseMimeTypes.any { it.contains("html") }) score -= 0.4
+        if (endpoint.method == "OPTIONS") score -= 2.0
+        if (isNoiseEndpoint(endpoint)) score -= 4.0
+        score += endpointRoleSignalScore(endpoint)
+        val phaseAligned = normalizePhaseRelevanceForExport(endpoint.phaseRelevance, endpoint.role).any {
+            roleFromPhase(it) == endpoint.role || (endpoint.role == "playback_resolver" && it == "playback_probe")
+        }
+        if (phaseAligned) score += 1.0 else score -= 0.5
+        return score
+    }
+
+    private data class EndpointSelection(
+        val endpoints: List<EndpointAggregate>,
+        val warnings: List<String>,
+    )
+
+    private fun selectFinalEndpoints(
+        endpoints: Collection<EndpointAggregate>,
+        responses: List<ResponseEvent>,
+    ): EndpointSelection {
+        val warnings = linkedSetOf<String>()
+        val roleByEndpoint = endpoints.associate { it.endpointId to it.role }
+        val responseEndpointRefByEventId = buildMap<String, String> {
+            endpoints.forEach { endpoint ->
+                endpoint.responseEventIds.forEach { eventId ->
+                    putIfAbsent(eventId, endpoint.endpointId)
+                }
+            }
+        }
+        val responseScoreByEndpoint = scoreEndpointsByObservedResponses(
+            responses = responses,
+            roleByEndpoint = roleByEndpoint,
+            responseEndpointRefByEventId = responseEndpointRefByEventId,
+        )
+        val candidates = endpoints
+            .filter { it.role in finalRoleSet }
+            .filter { shouldIncludeEndpointInBundle(it) }
+            .filterNot { isNoiseEndpoint(it) }
+            .toMutableList()
+        if (candidates.isEmpty()) {
+            warnings += "NOISE_ENDPOINTS_DROPPED"
+            candidates += endpoints.filter { !looksLikeNonContentOperation("${it.requestOperation} ${it.normalizedHost} ${it.normalizedPath}") }
+        }
+
+        val homeEvidence = responses.any { response ->
+            val inferred = inferRole(response.phaseId, response.operation, response.normalizedPath, response.url)
+            response.statusCode in 200..399 && (response.routeKind == "home" || inferred == "home")
+        }
+
+        if (homeEvidence && candidates.none { it.role == "home" }) {
+            val homeCandidates = candidates
+                .filter { it.role == "helper" || it.role == "detail" || it.role == "search" }
+                .filterNot { isPlaybackNoiseEndpoint(it) }
+                .sortedByDescending { endpointScoreForRole(it, responseScoreByEndpoint[it.endpointId] ?: 0.0) }
+            if (homeCandidates.isNotEmpty()) {
+                homeCandidates.first().role = "home"
+                warnings += "HOME_ROLE_RECOVERED"
+            } else {
+                warnings += "HOME_ROLE_NOT_PROVEN"
+                warnings += "SUPPORTS_HOME_SYNC_DOWNGRADED"
+            }
+        }
+
+        val selected = mutableListOf<EndpointAggregate>()
+        roleExportCaps.forEach { (role, cap) ->
+            val roleCandidates = candidates.filter { it.role == role }
+            if (roleCandidates.isEmpty() || cap <= 0) return@forEach
+            val sorted = roleCandidates.sortedWith(
+                compareByDescending<EndpointAggregate> { endpointScoreForRole(it, responseScoreByEndpoint[it.endpointId] ?: 0.0) }
+                    .thenByDescending { it.confidence }
+                    .thenBy { it.endpointId.lowercase(Locale.ROOT) },
+            )
+            if (sorted.size > cap) {
+                warnings += "ENDPOINT_CAP_APPLIED:${role}"
+            }
+            selected += sorted.take(cap)
+        }
+
+        if (selected.size < candidates.size) {
+            warnings += "NOISE_ENDPOINTS_DROPPED"
+        }
+
+        return EndpointSelection(
+            endpoints = selected.distinctBy { it.endpointId },
+            warnings = warnings.toList().sorted(),
+        )
+    }
+
     private fun shouldIncludeEndpointInBundle(endpoint: EndpointAggregate): Boolean {
         val host = endpoint.normalizedHost.lowercase(Locale.ROOT)
         val path = endpoint.normalizedPath
@@ -3370,12 +3650,20 @@ object RuntimeToolkitSourcePipelineExporter {
             host.contains("tracksrv") ||
             host.contains("epg-image") ||
             host.contains("segments.") ||
-            host.contains("analytics")
+            host.contains("analytics") ||
+            host.contains("measurement") ||
+            host.contains("metrics")
         ) {
             return false
         }
+        if (path.contains("/usage-data/") || path.contains("/user-histories/")) return false
+        if (path.endsWith("/geo.txt")) return false
+        if (path.contains("/nmrodam")) return false
         if (looksLikeNonContentOperation(loweredContext)) return false
         if (isLikelyStaticAssetPath(path, "https://$host$path")) return false
+        if (endpoint.role == "playbackResolver" || endpoint.role == "playback_resolver") {
+            if (isPlaybackNoiseEndpoint(endpoint)) return false
+        }
         return true
     }
 

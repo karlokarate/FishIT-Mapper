@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260410T164440Z",
+  "generated_at_utc": "2026-04-10T16:44:40Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260410T164440Z"
+  },
+  "scope": "apk export hardening + wizard focus",
+  "highlights": [
+    "Android exporter now filters/caps endpoints and wizard auto-focus resets capture artifacts for clean mission exports"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": ".tmp/screens/Screenshot_20260410_104659_FishIT Mapper Lab.jpg",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "scripts/device/toolkit/termux-endpoint-smoke.sh",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitSourcePipelineExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitTelemetry.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/activity/BrowserActivity.kt",
+      "old_path": null
+    }
+  ]
+}

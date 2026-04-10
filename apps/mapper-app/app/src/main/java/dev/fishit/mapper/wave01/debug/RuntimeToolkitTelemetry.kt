@@ -1598,6 +1598,7 @@ object RuntimeToolkitTelemetry {
         missionId: String,
     ): MissionSessionState {
         RuntimeToolkitMissionWizard.ensureRegistryLoaded(context)
+        clearRuntimeArtifacts(context)
         val safeMission = missionId.trim().ifBlank { RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE }
         val firstStep = RuntimeToolkitMissionWizard.firstStepId(safeMission, context)
         val stepStates = linkedMapOf(firstStep to RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE)
@@ -2826,9 +2827,30 @@ object RuntimeToolkitTelemetry {
             }
     }
 
+    private fun parseInstant(value: String): Instant? {
+        val trimmed = value.trim()
+        if (trimmed.isBlank()) return null
+        return runCatching { Instant.parse(trimmed) }.getOrNull()
+    }
+
+    private fun isEventWithinMission(
+        state: MissionSessionState,
+        root: JSONObject,
+        payload: JSONObject,
+    ): Boolean {
+        val missionId = payload.optString("mission_id").trim()
+        if (missionId.isNotBlank() && state.missionId.isNotBlank() && missionId != state.missionId) {
+            return false
+        }
+        val startedAt = parseInstant(state.startedAt) ?: return true
+        val eventTime = parseInstant(root.optString("ts_utc")) ?: return true
+        return !eventTime.isBefore(startedAt)
+    }
+
     private fun collectResponseObservations(context: Context): List<ResponseObservation> {
         val file = eventFile(context)
         if (!file.exists()) return emptyList()
+        val session = missionSessionState(context)
         val observations = mutableListOf<ResponseObservation>()
         runCatching {
             file.forEachLine { line ->
@@ -2836,6 +2858,7 @@ object RuntimeToolkitTelemetry {
                 val root = runCatching { JSONObject(line) }.getOrNull() ?: return@forEachLine
                 if (root.optString("event_type") != "network_response_event") return@forEachLine
                 val payload = root.optJSONObject("payload") ?: JSONObject()
+                if (!isEventWithinMission(session, root, payload)) return@forEachLine
                 val phaseId = normalizePhaseId(payload.optString("phase_id")) ?: PHASE_BACKGROUND
                 val hostClass = payload.optString("host_class").ifBlank { "ignored" }
                 val routeKind = payload.optString("route_kind").trim().lowercase(Locale.ROOT)
@@ -2902,6 +2925,7 @@ object RuntimeToolkitTelemetry {
     private fun collectAuthEvidence(context: Context): Int {
         val file = eventFile(context)
         if (!file.exists()) return 0
+        val session = missionSessionState(context)
         var count = 0
         runCatching {
             file.forEachLine { line ->
@@ -2909,6 +2933,7 @@ object RuntimeToolkitTelemetry {
                 val root = runCatching { JSONObject(line) }.getOrNull() ?: return@forEachLine
                 if (root.optString("event_type") != "auth_event") return@forEachLine
                 val payload = root.optJSONObject("payload") ?: JSONObject()
+                if (!isEventWithinMission(session, root, payload)) return@forEachLine
                 val phaseId = normalizePhaseId(payload.optString("phase_id")) ?: PHASE_BACKGROUND
                 if (phaseId == "auth_probe") {
                     count += 1
@@ -2944,6 +2969,7 @@ object RuntimeToolkitTelemetry {
                 refreshTriggers = 0,
             )
         }
+        val session = missionSessionState(context)
         var loginResponses = 0
         var validationResponses = 0
         var refreshResponses = 0
@@ -2955,6 +2981,7 @@ object RuntimeToolkitTelemetry {
                 val root = runCatching { JSONObject(line) }.getOrNull() ?: return@forEachLine
                 val eventType = root.optString("event_type")
                 val payload = root.optJSONObject("payload") ?: JSONObject()
+                if (!isEventWithinMission(session, root, payload)) return@forEachLine
                 when (eventType) {
                     "auth_event" -> {
                         val phaseId = normalizePhaseId(payload.optString("phase_id")) ?: PHASE_BACKGROUND
@@ -3034,6 +3061,7 @@ object RuntimeToolkitTelemetry {
     private fun collectWizardReadyHitsByStep(context: Context): Map<String, Int> {
         val file = eventFile(context)
         if (!file.exists()) return emptyMap()
+        val session = missionSessionState(context)
         val counts = linkedMapOf<String, Int>()
         runCatching {
             file.forEachLine { line ->
@@ -3041,6 +3069,7 @@ object RuntimeToolkitTelemetry {
                 val root = runCatching { JSONObject(line) }.getOrNull() ?: return@forEachLine
                 if (root.optString("event_type") != "wizard_event") return@forEachLine
                 val payload = root.optJSONObject("payload") ?: JSONObject()
+                if (!isEventWithinMission(session, root, payload)) return@forEachLine
                 if (payload.optString("operation") != "wizard_ready_window_hit") return@forEachLine
                 val stepId = payload.optString("wizard_step_id").trim()
                 if (stepId.isBlank()) return@forEachLine
