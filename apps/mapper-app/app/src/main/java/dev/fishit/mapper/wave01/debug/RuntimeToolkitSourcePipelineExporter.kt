@@ -468,13 +468,15 @@ object RuntimeToolkitSourcePipelineExporter {
             requiredCookies = allRequiredCookies,
             tokenInputs = authTokenInputs,
         )
-        val hasCompleteAuthChain = !loginEndpointId.isNullOrBlank() &&
+        val hasDeterministicAuthChain = !loginEndpointId.isNullOrBlank() &&
             !validationEndpointId.isNullOrBlank() &&
+            setOf(loginEndpointId, validationEndpointId).size == 2
+        val hasCompleteAuthChain = hasDeterministicAuthChain &&
             !refreshEndpointId.isNullOrBlank() &&
             setOf(loginEndpointId, validationEndpointId, refreshEndpointId).size == 3
-        // Fail closed only when a complete auth chain is present.
-        // Partial auth-like artifacts alone are too noisy for anonymous-capable sites (for example ZDF).
-        val requiresLogin = hasCompleteAuthChain
+        // Deterministic auth is already available with login+validation.
+        // Refresh remains optional because many sites use long-lived sessions without a separate refresh endpoint.
+        val requiresLogin = hasDeterministicAuthChain
         val requiresBrowserSession = endpointsForBundle.any { it.requiredOrigin != null || it.requiredReferer != null }
         val capabilityClass = when {
             supportsPlayback && supportsSearch && supportsDetail -> "HYBRID"
@@ -554,8 +556,11 @@ object RuntimeToolkitSourcePipelineExporter {
                         JSONArray(
                             buildList {
                                 addAll(authLifecycleInsights.refreshTriggers)
-                                if (!hasCompleteAuthChain && (hasAuthRole || hasAuthEndpointRefs || hasAuthArtifactSignals)) {
+                                if (!hasDeterministicAuthChain && (hasAuthRole || hasAuthEndpointRefs || hasAuthArtifactSignals)) {
                                     add("auth_artifacts_detected_without_complete_chain")
+                                }
+                                if (hasDeterministicAuthChain && refreshEndpointId.isNullOrBlank()) {
+                                    add("auth_chain_without_refresh_endpoint")
                                 }
                                 if (loginEndpointId != null) add("login_endpoint_ref:$loginEndpointId")
                                 if (validationEndpointId != null) add("validation_endpoint_ref:$validationEndpointId")
@@ -785,15 +790,21 @@ object RuntimeToolkitSourcePipelineExporter {
         if (requiresLogin) {
             if (loginEndpointId.isNullOrBlank()) failures += "auth chain incomplete: missing login endpointRef"
             if (validationEndpointId.isNullOrBlank()) failures += "auth chain incomplete: missing validation endpointRef"
-            if (refreshEndpointId.isNullOrBlank()) failures += "auth chain incomplete: missing refresh endpointRef"
             if (sessionLoginRef.isBlank()) failures += "sessionAuth.loginEndpointRef missing while requiresLogin=true"
             if (sessionValidationRef.isBlank()) failures += "sessionAuth.validationEndpointRef missing while requiresLogin=true"
-            if (sessionRefreshRef.isBlank()) failures += "sessionAuth.refreshEndpointRef missing while requiresLogin=true"
-            val distinctRefs = listOf(sessionLoginRef, sessionValidationRef, sessionRefreshRef)
-                .filter { it.isNotBlank() }
-                .toSet()
-            if (distinctRefs.size != 3) {
-                failures += "auth chain must use distinct endpointRefs for login/validation/refresh"
+            if (sessionLoginRef.isNotBlank() &&
+                sessionValidationRef.isNotBlank() &&
+                sessionLoginRef == sessionValidationRef
+            ) {
+                failures += "auth chain must use distinct endpointRefs for login and validation"
+            }
+            if (sessionRefreshRef.isNotBlank()) {
+                val distinctRefs = listOf(sessionLoginRef, sessionValidationRef, sessionRefreshRef)
+                    .filter { it.isNotBlank() }
+                    .toSet()
+                if (distinctRefs.size != 3) {
+                    failures += "auth chain refresh endpointRef must differ from login/validation when present"
+                }
             }
         }
         // Incomplete auth chains are common on anonymous-capable sites.
@@ -973,7 +984,6 @@ object RuntimeToolkitSourcePipelineExporter {
         if (capabilities.optBoolean("requiresLogin")) {
             if (sessionLoginRef.isBlank()) failures += "sessionAuth.loginEndpointRef missing while requiresLogin=true"
             if (sessionValidationRef.isBlank()) failures += "sessionAuth.validationEndpointRef missing while requiresLogin=true"
-            if (sessionRefreshRef.isBlank()) failures += "sessionAuth.refreshEndpointRef missing while requiresLogin=true"
         }
 
         // Keep mapper-only gate consistent with generated endpoint map.
@@ -2747,7 +2757,7 @@ object RuntimeToolkitSourcePipelineExporter {
             requiredHeaders.isNotEmpty() && requiredCookies.isNotEmpty() -> "hybrid"
             requiredHeaders.isNotEmpty() -> "token"
             requiredCookies.isNotEmpty() -> "cookie"
-            else -> "none"
+            else -> "browser_required"
         }
     }
 
