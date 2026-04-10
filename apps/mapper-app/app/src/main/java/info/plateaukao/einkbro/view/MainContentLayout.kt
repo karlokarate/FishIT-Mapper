@@ -496,12 +496,17 @@ class MainContentLayout(
                 id = R.id.mapper_wizard_action_next,
                 labelRes = R.string.mapper_wizard_overlay_next
             )
+            val mapperWizardActionMinimize = createWizardActionButton(
+                id = R.id.mapper_wizard_action_minimize,
+                labelRes = R.string.mapper_wizard_overlay_minimize
+            )
             val actions = listOf(
                 mapperWizardActionStart,
                 mapperWizardActionReady,
                 mapperWizardActionCheck,
                 mapperWizardActionPause,
-                mapperWizardActionNext
+                mapperWizardActionNext,
+                mapperWizardActionMinimize
             )
             actions.forEachIndexed { index, button ->
                 wizardActionRow.addView(

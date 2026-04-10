@@ -667,6 +667,11 @@
     <string name="mapper_wizard_overlay_hold">Hold</string>
     <string name="mapper_wizard_overlay_next">Next</string>
     <string name="mapper_wizard_overlay_undo">Undo</string>
+    <string name="mapper_wizard_overlay_minimize">Min</string>
+    <string name="mapper_wizard_overlay_menu_minimize">Step-Fenster minimieren</string>
+    <string name="mapper_wizard_overlay_menu_restore">Step-Fenster wieder anzeigen</string>
+    <string name="mapper_wizard_overlay_minimized_toast">Wizard-Step-Fenster minimiert</string>
+    <string name="mapper_wizard_overlay_restored_toast">Wizard-Step-Fenster wieder sichtbar</string>
     <string name="mapper_wizard_overlay_missing_prefix">Missing: %1$s</string>
     <string name="mapper_wizard_overlay_hints_prefix">Hints: %1$s</string>
     <string name="mapper_wizard_overlay_status_idle">Capture guided by wizard steps.</string>

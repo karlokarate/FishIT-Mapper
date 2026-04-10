@@ -2139,6 +2139,8 @@ open class BrowserActivity : FragmentActivity(),
     private lateinit var missionWizardActionCheck: TextView
     private lateinit var missionWizardActionPause: TextView
     private lateinit var missionWizardActionNext: TextView
+    private lateinit var missionWizardActionMinimize: TextView
+    private var missionWizardOverlayMinimized: Boolean = false
     private var pendingWizardAutoAdvanceStepId: String? = null
     private var pendingWizardAutoAdvanceRunnable: Runnable? = null
     private var pendingWizardUndoState: RuntimeToolkitTelemetry.MissionSessionState? = null
@@ -2223,6 +2225,7 @@ open class BrowserActivity : FragmentActivity(),
         missionWizardActionCheck = findViewById(R.id.mapper_wizard_action_check)
         missionWizardActionPause = findViewById(R.id.mapper_wizard_action_pause)
         missionWizardActionNext = findViewById(R.id.mapper_wizard_action_next)
+        missionWizardActionMinimize = findViewById(R.id.mapper_wizard_action_minimize)
 
         missionWizardButton.visibility = VISIBLE
         missionWizardButton.text = getString(R.string.mapper_wizard_button_label)
@@ -2234,6 +2237,8 @@ open class BrowserActivity : FragmentActivity(),
             val session = RuntimeToolkitTelemetry.missionSessionState(this)
             if (session.missionId.isBlank()) {
                 showMissionLauncherDialog()
+            } else if (missionWizardOverlayMinimized) {
+                setMissionWizardOverlayMinimized(false)
             } else {
                 showMissionWizardPanel()
             }
@@ -2278,6 +2283,9 @@ open class BrowserActivity : FragmentActivity(),
                 moveToNextWizardStep(openWizardPanel = false)
             }
         }
+        missionWizardActionMinimize.setOnClickListener {
+            setMissionWizardOverlayMinimized(true)
+        }
         updateMissionWizardUi()
     }
 
@@ -2285,6 +2293,7 @@ open class BrowserActivity : FragmentActivity(),
         if (!this::missionWizardButton.isInitialized) return
         val state = RuntimeToolkitTelemetry.missionSessionState(this)
         if (state.missionId.isBlank()) {
+            missionWizardOverlayMinimized = false
             missionWizardButton.setTextColor(ContextCompat.getColor(this, android.R.color.holo_blue_dark))
             missionWizardButton.text = getString(R.string.mapper_wizard_button_label)
         } else {
@@ -2312,6 +2321,10 @@ open class BrowserActivity : FragmentActivity(),
         if (!this::missionWizardCard.isInitialized) return
         val state = RuntimeToolkitTelemetry.missionSessionState(this)
         if (state.missionId.isBlank()) {
+            missionWizardCard.visibility = GONE
+            return
+        }
+        if (missionWizardOverlayMinimized) {
             missionWizardCard.visibility = GONE
             return
         }
@@ -2385,6 +2398,35 @@ open class BrowserActivity : FragmentActivity(),
             } else {
                 R.string.mapper_wizard_overlay_next
             }
+        )
+        missionWizardActionMinimize.text = getString(
+            if (missionWizardOverlayMinimized) {
+                R.string.mapper_wizard_overlay_menu_restore
+            } else {
+                R.string.mapper_wizard_overlay_minimize
+            }
+        )
+    }
+
+    private fun setMissionWizardOverlayMinimized(minimized: Boolean) {
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        if (state.missionId.isBlank()) {
+            missionWizardOverlayMinimized = false
+            missionWizardCard.visibility = GONE
+            return
+        }
+        if (missionWizardOverlayMinimized == minimized) return
+        missionWizardOverlayMinimized = minimized
+        updateMissionWizardUi()
+        EBToast.showShort(
+            this,
+            getString(
+                if (minimized) {
+                    R.string.mapper_wizard_overlay_minimized_toast
+                } else {
+                    R.string.mapper_wizard_overlay_restored_toast
+                }
+            ),
         )
     }
 
@@ -2980,6 +3022,13 @@ open class BrowserActivity : FragmentActivity(),
             showMissionLauncherDialog()
             return
         }
+        val toggleOverlayAction = getString(
+            if (missionWizardOverlayMinimized) {
+                R.string.mapper_wizard_overlay_menu_restore
+            } else {
+                R.string.mapper_wizard_overlay_menu_minimize
+            }
+        )
         val actions = arrayOf(
             "Start step",
             "Ready (arm 90s)",
@@ -2992,6 +3041,7 @@ open class BrowserActivity : FragmentActivity(),
             "Anchor: Create",
             "Anchor: Label",
             "Anchor: Remove",
+            toggleOverlayAction,
             "Close",
         )
         AlertDialog.Builder(this)
@@ -3010,6 +3060,7 @@ open class BrowserActivity : FragmentActivity(),
                     8 -> promptCreateAnchor()
                     9 -> promptLabelAnchor()
                     10 -> promptRemoveAnchor()
+                    11 -> setMissionWizardOverlayMinimized(!missionWizardOverlayMinimized)
                     else -> Unit
                 }
             }

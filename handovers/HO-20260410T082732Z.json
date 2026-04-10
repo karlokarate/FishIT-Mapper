@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260410T082732Z",
+  "generated_at_utc": "2026-04-10T08:27:32Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260410T082732Z"
+  },
+  "scope": "wizard step overlay minimizable",
+  "highlights": [
+    "Wizard step window can now be minimized and restored without blocking browsing actions"
+  ],
+  "changed_files": [
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/activity/BrowserActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/view/MainContentLayout.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/res/values/ids.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/res/values/strings.xml",
+      "old_path": null
+    }
+  ]
+}
