@@ -1,6 +1,7 @@
 package info.plateaukao.einkbro.view
 
 import android.content.Context
+import android.os.Build
 import android.util.TypedValue
 import android.view.View
 import android.widget.FrameLayout
@@ -357,10 +358,13 @@ class MainContentLayout(
                 id = R.id.mapper_wizard_card
                 orientation = LinearLayout.VERTICAL
                 layoutParams = ConstraintLayout.LayoutParams(
-                    0, ConstraintLayout.LayoutParams.WRAP_CONTENT
+                    dpToPx(context, 320), ConstraintLayout.LayoutParams.WRAP_CONTENT
                 )
                 background = ContextCompat.getDrawable(context, R.drawable.background_with_border)
                 setPadding(dpToPx(context, 12), dpToPx(context, 10), dpToPx(context, 12), dpToPx(context, 10))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    elevation = dpToPx(context, 6).toFloat()
+                }
                 visibility = View.GONE
             }
             root.addView(mapperWizardCard)
@@ -674,13 +678,11 @@ class MainContentLayout(
             constraintSet.setMargin(mapperWizardBanner.id, ConstraintSet.END, dpToPx(context, 12))
             constraintSet.setMargin(mapperWizardBanner.id, ConstraintSet.TOP, dpToPx(context, 10))
 
-            // mapper_wizard_card: below banner
-            constraintSet.connect(mapperWizardCard.id, ConstraintSet.TOP, mapperWizardBanner.id, ConstraintSet.BOTTOM)
+            // mapper_wizard_card: floating overlay anchor (can be moved by translation)
+            constraintSet.connect(mapperWizardCard.id, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
             constraintSet.connect(mapperWizardCard.id, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START)
-            constraintSet.connect(mapperWizardCard.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
-            constraintSet.setMargin(mapperWizardCard.id, ConstraintSet.TOP, dpToPx(context, 8))
+            constraintSet.setMargin(mapperWizardCard.id, ConstraintSet.TOP, dpToPx(context, 56))
             constraintSet.setMargin(mapperWizardCard.id, ConstraintSet.START, dpToPx(context, 12))
-            constraintSet.setMargin(mapperWizardCard.id, ConstraintSet.END, dpToPx(context, 12))
 
             // translation_language: end to parent, bottom to parent
             constraintSet.connect(translationLanguage.id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
