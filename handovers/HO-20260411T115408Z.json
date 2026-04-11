@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260411T115408Z",
+  "generated_at_utc": "2026-04-11T11:54:08Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260411T115408Z"
+  },
+  "scope": "guided-capture-dock-yaml-recheck-bugfix",
+  "highlights": [
+    "Revalidated against YAML checklist, closed remaining touch/focus/consistency gaps, and re-ran build/tests/guards"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/controller/GuidedCaptureDockController.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/controller/GuidedCaptureDockHost.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/data/GuidedCaptureDockDataSource.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/format/GuidedCaptureDockFormatter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/state/CandidateDecisionStateMachine.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/state/DockShellStateMachine.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/state/MissionDockModels.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/state/StepGuidanceStateMachine.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/ui/GuidedCaptureDockBinder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/ui/GuidedCaptureDockViews.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/ui/MissionDockCandidateAdapter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/test/java/info/plateaukao/einkbro/mapper/missiondock/format/GuidedCaptureDockFormatterTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/test/java/info/plateaukao/einkbro/mapper/missiondock/state/CandidateDecisionStateMachineTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/test/java/info/plateaukao/einkbro/mapper/missiondock/state/DockShellStateMachineTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/test/java/info/plateaukao/einkbro/mapper/missiondock/state/StepGuidanceStateMachineTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "apps/mapper-app/app/src/test/java/info/plateaukao/einkbro/mapper/missiondock/ui/GuidedCaptureDockUiTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/guided_capture_dock_architecture_note.md",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260411T114626Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/build.gradle.kts",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/activity/BrowserActivity.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/view/MainContentLayout.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/res/values/ids.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/res/values/strings.xml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/decision_trace.json",
+      "old_path": null
+    }
+  ]
+}

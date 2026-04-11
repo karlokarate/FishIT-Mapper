@@ -9,6 +9,7 @@ import android.app.DownloadManager.Request
 import android.app.PictureInPictureParams
 import android.app.SearchManager
 import android.content.BroadcastReceiver
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -96,6 +97,9 @@ import info.plateaukao.einkbro.database.Highlight
 import info.plateaukao.einkbro.database.Record
 import info.plateaukao.einkbro.database.RecordDb
 import info.plateaukao.einkbro.mapper.Wave02SessionLogger
+import info.plateaukao.einkbro.mapper.missiondock.controller.GuidedCaptureDockController
+import info.plateaukao.einkbro.mapper.missiondock.controller.GuidedCaptureDockHost
+import info.plateaukao.einkbro.mapper.missiondock.state.DockMode
 import info.plateaukao.einkbro.view.MainActivityLayout
 import info.plateaukao.einkbro.epub.EpubManager
 import info.plateaukao.einkbro.preference.AlbumInfo
@@ -218,7 +222,8 @@ open class BrowserActivity : FragmentActivity(),
     MissionWizardSetupDialogFragment.Host,
     MissionExportSummaryDialogFragment.Host,
     MissionFixtureReplayDialogFragment.Host,
-    MissionExportHistoryDialogFragment.Host {
+    MissionExportHistoryDialogFragment.Host,
+    GuidedCaptureDockHost {
     private lateinit var progressBar: ProgressBar
     protected lateinit var ebWebView: EBWebView
     protected open var shouldRunClearService: Boolean = true
@@ -1438,6 +1443,9 @@ open class BrowserActivity : FragmentActivity(),
             updateCaptureToggleUi(RuntimeToolkitTelemetry.isCaptureEnabled(this))
         }
         if (this::missionWizardButton.isInitialized) {
+            if (this::missionDockController.isInitialized) {
+                missionDockController.onActivityStarted()
+            }
             updateMissionWizardUi()
         }
     }
@@ -1454,6 +1462,9 @@ open class BrowserActivity : FragmentActivity(),
         browserContainer.clear()
         clearPendingWizardAutoAdvance()
         clearWizardUndoWindow()
+        if (this::missionDockController.isInitialized) {
+            missionDockController.release()
+        }
         unregisterReceiver(downloadReceiver)
         wave02Logger.finish("activity_destroyed")
 
@@ -2133,33 +2144,6 @@ open class BrowserActivity : FragmentActivity(),
     private lateinit var captureToggleButton: TextView
     private lateinit var missionWizardButton: TextView
     private lateinit var missionWizardBanner: TextView
-    private lateinit var missionWizardCard: LinearLayout
-    private lateinit var missionWizardStepTitle: TextView
-    private lateinit var missionWizardStepState: TextView
-    private lateinit var missionWizardStepProgress: ProgressBar
-    private lateinit var missionWizardStepMissing: TextView
-    private lateinit var missionWizardStepHints: TextView
-    private lateinit var missionWizardStepStatus: TextView
-    private lateinit var missionWizardActionStart: TextView
-    private lateinit var missionWizardActionReady: TextView
-    private lateinit var missionWizardActionCheck: TextView
-    private lateinit var missionWizardActionPause: TextView
-    private lateinit var missionWizardActionNext: TextView
-    private lateinit var missionWizardActionMinimize: TextView
-    private lateinit var missionWizardLivePanel: LinearLayout
-    private lateinit var missionWizardLiveTitle: TextView
-    private lateinit var missionWizardLiveRefresh: TextView
-    private lateinit var missionWizardLiveToggle: TextView
-    private lateinit var missionWizardLiveContent: LinearLayout
-    private var missionWizardOverlayMinimized: Boolean = false
-    private var missionWizardCardDragActive: Boolean = false
-    private var missionWizardCardDragMoved: Boolean = false
-    private var missionWizardCardDragFrameVisible: Boolean = false
-    private var missionWizardCardDragStartRawX: Float = 0f
-    private var missionWizardCardDragStartRawY: Float = 0f
-    private var missionWizardCardDragStartTranslationX: Float = 0f
-    private var missionWizardCardDragStartTranslationY: Float = 0f
-    private val missionWizardCardDragEdgeDp: Float = 18f
     private var pendingWizardAutoAdvanceStepId: String? = null
     private var pendingWizardAutoAdvanceRunnable: Runnable? = null
     private var pendingWizardUndoState: RuntimeToolkitTelemetry.MissionSessionState? = null
@@ -2168,9 +2152,7 @@ open class BrowserActivity : FragmentActivity(),
     private var pendingMissionBannerUrl: String = ""
     private val wizardAutoAdvanceDelayMs: Long = 3_000L
     private val wizardReadyWindowSeconds: Long = 90L
-    private val wizardLiveRefreshIntervalMs: Long = 2_000L
-    private var missionWizardLivePanelVisible: Boolean = true
-    private var missionWizardLiveRefreshRunnable: Runnable? = null
+    private lateinit var missionDockController: GuidedCaptureDockController
 
     private fun initFAB() {
         fabImageViewController = FabImageViewController(
@@ -2235,24 +2217,12 @@ open class BrowserActivity : FragmentActivity(),
         RuntimeToolkitMissionWizard.ensureRegistryLoaded(this)
         missionWizardButton = findViewById(R.id.fab_mission_wizard)
         missionWizardBanner = findViewById(R.id.mapper_wizard_banner)
-        missionWizardCard = findViewById(R.id.mapper_wizard_card)
-        missionWizardStepTitle = findViewById(R.id.mapper_wizard_step_title)
-        missionWizardStepState = findViewById(R.id.mapper_wizard_step_state)
-        missionWizardStepProgress = findViewById(R.id.mapper_wizard_step_progress)
-        missionWizardStepMissing = findViewById(R.id.mapper_wizard_step_missing)
-        missionWizardStepHints = findViewById(R.id.mapper_wizard_step_hints)
-        missionWizardStepStatus = findViewById(R.id.mapper_wizard_step_status)
-        missionWizardActionStart = findViewById(R.id.mapper_wizard_action_start)
-        missionWizardActionReady = findViewById(R.id.mapper_wizard_action_ready)
-        missionWizardActionCheck = findViewById(R.id.mapper_wizard_action_check)
-        missionWizardActionPause = findViewById(R.id.mapper_wizard_action_pause)
-        missionWizardActionNext = findViewById(R.id.mapper_wizard_action_next)
-        missionWizardActionMinimize = findViewById(R.id.mapper_wizard_action_minimize)
-        missionWizardLivePanel = findViewById(R.id.mapper_wizard_live_panel)
-        missionWizardLiveTitle = findViewById(R.id.mapper_wizard_live_title)
-        missionWizardLiveRefresh = findViewById(R.id.mapper_wizard_live_refresh)
-        missionWizardLiveToggle = findViewById(R.id.mapper_wizard_live_toggle)
-        missionWizardLiveContent = findViewById(R.id.mapper_wizard_live_content)
+
+        missionDockController = GuidedCaptureDockController(
+            context = this,
+            host = this,
+        )
+        missionDockController.attach(binding.root)
 
         missionWizardButton.visibility = VISIBLE
         missionWizardButton.text = getString(R.string.mapper_wizard_button_label)
@@ -2264,10 +2234,12 @@ open class BrowserActivity : FragmentActivity(),
             val session = RuntimeToolkitTelemetry.missionSessionState(this)
             if (session.missionId.isBlank()) {
                 showMissionLauncherDialog()
-            } else if (missionWizardOverlayMinimized) {
-                setMissionWizardOverlayMinimized(false)
             } else {
-                showMissionWizardPanel()
+                when (missionDockController.currentDockMode()) {
+                    DockMode.Collapsed -> missionDockController.setDockMode(DockMode.Peek)
+                    DockMode.Peek -> missionDockController.setDockMode(DockMode.Expanded)
+                    DockMode.Expanded -> showMissionWizardPanel()
+                }
             }
         }
         missionWizardButton.setOnLongClickListener {
@@ -2289,38 +2261,6 @@ open class BrowserActivity : FragmentActivity(),
             missionWizardBanner.text = getString(R.string.mapper_wizard_banner_label)
             missionWizardBanner.visibility = VISIBLE
         }
-
-        missionWizardActionStart.setOnClickListener { beginCurrentWizardStep() }
-        missionWizardActionReady.setOnClickListener { armCurrentWizardReadyWindow() }
-        missionWizardActionCheck.setOnClickListener { checkCurrentWizardStepSaturation(openWizardPanel = false) }
-        missionWizardActionPause.setOnClickListener {
-            if (!holdPendingWizardAutoAdvance()) {
-                if (RuntimeToolkitTelemetry.isCaptureEnabled(this)) {
-                    RuntimeToolkitTelemetry.stopCaptureSession(this, source = "wizard_overlay_pause")
-                    updateCaptureToggleUi(false)
-                    EBToast.showShort(this, getString(R.string.mapper_capture_stopped))
-                }
-            }
-            updateMissionWizardUi()
-        }
-        missionWizardActionNext.setOnClickListener {
-            if (isWizardUndoWindowActive()) {
-                undoLastWizardAutoAdvance()
-            } else {
-                moveToNextWizardStep(openWizardPanel = false)
-            }
-        }
-        missionWizardActionMinimize.setOnClickListener {
-            setMissionWizardOverlayMinimized(!missionWizardOverlayMinimized)
-        }
-        missionWizardLiveRefresh.setOnClickListener { updateMissionWizardLivePanel(forceRefresh = true) }
-        missionWizardLiveToggle.setOnClickListener {
-            missionWizardLivePanelVisible = !missionWizardLivePanelVisible
-            updateMissionWizardLivePanel(forceRefresh = true)
-        }
-        missionWizardCard.setOnTouchListener { _, event ->
-            handleMissionWizardCardDrag(event)
-        }
         updateMissionWizardUi()
     }
 
@@ -2328,12 +2268,12 @@ open class BrowserActivity : FragmentActivity(),
         if (!this::missionWizardButton.isInitialized) return
         val state = RuntimeToolkitTelemetry.missionSessionState(this)
         if (state.missionId.isBlank()) {
-            missionWizardOverlayMinimized = false
-            missionWizardCard.translationX = 0f
-            missionWizardCard.translationY = 0f
-            setMissionWizardCardDragFrameVisible(false)
             missionWizardButton.setTextColor(ContextCompat.getColor(this, android.R.color.holo_blue_dark))
             missionWizardButton.text = getString(R.string.mapper_wizard_button_label)
+            missionWizardButton.alpha = 1f
+            if (this::missionDockController.isInitialized) {
+                missionDockController.setDockMode(DockMode.Collapsed)
+            }
         } else {
             val stepLabel = when {
                 state.wizardStepId.startsWith("home") -> "HOME"
@@ -2351,437 +2291,38 @@ open class BrowserActivity : FragmentActivity(),
                 android.R.color.holo_orange_dark
             }
             missionWizardButton.setTextColor(ContextCompat.getColor(this, color))
+            missionWizardButton.alpha = if (state.saturationState == RuntimeToolkitMissionWizard.SATURATION_BLOCKED) 0.92f else 1f
+            ensureMissionWizardStepPhaseFocus(state)
         }
-        updateMissionWizardCard()
-        updateMissionWizardLivePanel()
+        if (this::missionDockController.isInitialized) {
+            missionDockController.onMissionUiTick(force = false)
+        }
     }
 
-    private fun updateMissionWizardCard() {
-        if (!this::missionWizardCard.isInitialized) return
-        val state = RuntimeToolkitTelemetry.missionSessionState(this)
-        if (state.missionId.isBlank()) {
-            missionWizardCard.visibility = GONE
-            return
-        }
-        missionWizardCard.visibility = VISIBLE
-        val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, this)
-        ensureWizardPhaseFocus(state, step)
-        val feedback = RuntimeToolkitTelemetry.evaluateMissionStepFeedback(this, state.wizardStepId)
-        val displayName = step?.displayName?.ifBlank { state.wizardStepId } ?: state.wizardStepId
-        missionWizardStepTitle.text = "$displayName (${state.wizardStepId})"
-        val optionalSuffix = if (step?.optional == true) " | optional" else ""
-        missionWizardStepState.text = "${feedback.state} | ${feedback.progressPercent}%$optionalSuffix"
-        val stateColor = when (feedback.state) {
-            RuntimeToolkitMissionWizard.SATURATION_SATURATED -> android.R.color.holo_green_dark
-            RuntimeToolkitMissionWizard.SATURATION_BLOCKED -> android.R.color.holo_red_dark
-            RuntimeToolkitMissionWizard.SATURATION_NEEDS_MORE_EVIDENCE -> android.R.color.holo_orange_dark
-            else -> android.R.color.black
-        }
-        missionWizardStepState.setTextColor(ContextCompat.getColor(this, stateColor))
-        missionWizardStepProgress.progress = feedback.progressPercent
-        val missingSignals = feedback.missingSignals.take(3)
-        val hints = feedback.userHints.take(3)
-        missionWizardStepMissing.text = if (missingSignals.isEmpty()) {
-            getString(R.string.mapper_wizard_overlay_missing_prefix, "-")
-        } else {
-            getString(R.string.mapper_wizard_overlay_missing_prefix, missingSignals.joinToString(", "))
-        }
-        missionWizardStepHints.text = if (hints.isEmpty()) {
-            getString(R.string.mapper_wizard_overlay_hints_prefix, "-")
-        } else {
-            getString(
-                R.string.mapper_wizard_overlay_hints_prefix,
-                hints.joinToString(" | ")
-            )
-        }
-
-        val readyWindow = RuntimeToolkitTelemetry.readyWindowState(this)
-        val readyHit = RuntimeToolkitTelemetry.latestReadyHitState(this)
-        val now = System.currentTimeMillis()
-        val readySecondsLeft = if (readyWindow.withinWindow) {
-            ((readyWindow.expiresAtEpochMillis - now).coerceAtLeast(0L) / 1000L).toInt()
-        } else {
-            0
-        }
-        val statusText = when {
-            pendingWizardAutoAdvanceStepId != null -> getString(R.string.mapper_wizard_overlay_status_auto_advance)
-            isWizardUndoWindowActive() -> {
-                val secondsLeft = ((pendingWizardUndoExpiresAtMs - now).coerceAtLeast(0L) / 1000L).toInt()
-                getString(R.string.mapper_wizard_overlay_status_undo, secondsLeft)
-            }
-            readyWindow.withinWindow -> getString(
-                R.string.mapper_wizard_overlay_status_ready_window,
-                readySecondsLeft,
-                readyWindow.armedStepId,
-            )
-            readyHit.recent -> getString(R.string.mapper_wizard_overlay_status_ready_hit)
-            else -> "${getString(R.string.mapper_wizard_overlay_status_idle)} (${wizardReasonLabel(feedback.reason)})"
-        }
-        val compactMode = missionWizardOverlayMinimized
-        if (compactMode) {
-            missionWizardStepTitle.text = "Focus: $displayName (${state.wizardStepId})"
-        }
-        missionWizardStepStatus.text = if (compactMode) {
-            "Minimized | Focus ${feedback.progressPercent}% | $statusText"
-        } else {
-            statusText
-        }
-
-        missionWizardStepProgress.visibility = if (compactMode) GONE else VISIBLE
-        missionWizardStepMissing.visibility = if (compactMode) GONE else VISIBLE
-        missionWizardStepHints.visibility = if (compactMode) GONE else VISIBLE
-        missionWizardActionStart.visibility = if (compactMode) GONE else VISIBLE
-        missionWizardActionReady.visibility =
-            if (!compactMode && RuntimeToolkitTelemetry.isReadyActionStep(state.wizardStepId)) VISIBLE else GONE
-        missionWizardActionCheck.visibility = if (compactMode) GONE else VISIBLE
-        missionWizardActionPause.visibility = if (compactMode) GONE else VISIBLE
-        missionWizardActionNext.visibility = if (compactMode) GONE else VISIBLE
-        missionWizardActionPause.text = getString(
-            if (pendingWizardAutoAdvanceStepId != null) {
-                R.string.mapper_wizard_overlay_hold
-            } else {
-                R.string.mapper_wizard_overlay_pause
-            }
-        )
-        missionWizardActionNext.text = getString(
-            if (isWizardUndoWindowActive()) {
-                R.string.mapper_wizard_overlay_undo
-            } else {
-                R.string.mapper_wizard_overlay_next
-            }
-        )
-        missionWizardActionMinimize.text = getString(
-            if (missionWizardOverlayMinimized) {
-                R.string.mapper_wizard_overlay_menu_restore
-            } else {
-                R.string.mapper_wizard_overlay_minimize
-            }
-        )
-    }
-
-    private fun updateMissionWizardLivePanel(forceRefresh: Boolean = false) {
-        if (!this::missionWizardLivePanel.isInitialized) return
-        val state = RuntimeToolkitTelemetry.missionSessionState(this)
-        if (state.missionId.isBlank()) {
-            missionWizardLivePanel.visibility = GONE
-            cancelWizardLivePanelRefresh()
-            return
-        }
-        missionWizardLivePanel.visibility = VISIBLE
-        missionWizardLiveToggle.text = getString(
-            if (missionWizardLivePanelVisible) {
-                R.string.mapper_wizard_live_hide
-            } else {
-                R.string.mapper_wizard_live_show
-            }
-        )
-        missionWizardLiveContent.visibility = if (missionWizardLivePanelVisible) VISIBLE else GONE
-        if (!missionWizardLivePanelVisible) {
-            cancelWizardLivePanelRefresh()
-            return
-        }
-
-        val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, this)
-        val stepLabel = step?.displayName?.ifBlank { state.wizardStepId } ?: state.wizardStepId
-        missionWizardLiveTitle.text = "${getString(R.string.mapper_wizard_live_title)} · $stepLabel"
-        val snapshot = RuntimeToolkitTelemetry.buildLiveWizardSnapshot(this)
-        val overrides = RuntimeToolkitTelemetry.readEndpointOverrides(this)
-        val feedback = RuntimeToolkitTelemetry.evaluateMissionStepFeedback(this, state.wizardStepId)
-
-        missionWizardLiveContent.removeAllViews()
-        addLivePanelSectionHeader(missionWizardLiveContent, getString(R.string.mapper_wizard_live_section_status))
-        addLivePanelTextLine(
-            missionWizardLiveContent,
-            "Step: $stepLabel (${state.wizardStepId})",
-        )
-        addLivePanelTextLine(
-            missionWizardLiveContent,
-            "Saturation: ${feedback.state} ${feedback.progressPercent}%",
-        )
-        val missingSignals = if (feedback.missingSignals.isEmpty()) "-" else feedback.missingSignals.joinToString(", ")
-        addLivePanelTextLine(
-            missionWizardLiveContent,
-            "Missing: $missingSignals",
-            dim = feedback.missingSignals.isEmpty(),
-        )
-        addLivePanelTextLine(
-            missionWizardLiveContent,
-            "Phase: ${snapshot.phaseId}",
-        )
-
-        addLivePanelSectionHeader(missionWizardLiveContent, getString(R.string.mapper_wizard_live_section_feed))
-        val summary = snapshot.correlationSummary.take(6)
-        if (summary.isEmpty() && snapshot.recentCorrelated.isEmpty()) {
-            addLivePanelTextLine(missionWizardLiveContent, getString(R.string.mapper_wizard_live_empty), dim = true)
-        } else {
-            summary.forEach { row ->
-                addLivePanelTextLine(
-                    missionWizardLiveContent,
-                    "${row.phaseId} | ${row.routeKind} | ${row.statusBucket} | ${row.hostClass} (${row.count})",
-                    dim = true,
-                )
-            }
-            snapshot.recentCorrelated.takeLast(6).forEach { entry ->
-                addLivePanelTextLine(
-                    missionWizardLiveContent,
-                    "${entry.statusCode} ${entry.routeKind} ${entry.operation} ${entry.normalizedHost}${entry.normalizedPath}",
-                )
-            }
-        }
-
-        addLivePanelSectionHeader(missionWizardLiveContent, getString(R.string.mapper_wizard_live_section_candidates))
-        if (snapshot.endpointCandidates.isEmpty()) {
-            addLivePanelTextLine(missionWizardLiveContent, getString(R.string.mapper_wizard_live_empty), dim = true)
-        } else {
-            snapshot.endpointCandidates.forEach { (role, candidates) ->
-                addLivePanelRoleHeader(missionWizardLiveContent, role)
-                candidates.take(5).forEach { candidate ->
-                    addLivePanelCandidateRow(
-                        container = missionWizardLiveContent,
-                        candidate = candidate,
-                        overrides = overrides,
-                    )
-                }
-            }
-        }
-
-        if (forceRefresh) {
-            cancelWizardLivePanelRefresh()
-        }
-        scheduleWizardLivePanelRefresh()
-    }
-
-    private fun scheduleWizardLivePanelRefresh() {
-        if (!missionWizardLivePanelVisible) return
-        if (!this::missionWizardLivePanel.isInitialized) return
-        if (missionWizardLiveRefreshRunnable != null) return
-        val runnable = Runnable {
-            missionWizardLiveRefreshRunnable = null
-            updateMissionWizardLivePanel()
-        }
-        missionWizardLiveRefreshRunnable = runnable
-        missionWizardLivePanel.postDelayed(runnable, wizardLiveRefreshIntervalMs)
-    }
-
-    private fun cancelWizardLivePanelRefresh() {
-        missionWizardLiveRefreshRunnable?.let { runnable ->
-            missionWizardLivePanel.removeCallbacks(runnable)
-        }
-        missionWizardLiveRefreshRunnable = null
-    }
-
-    private fun addLivePanelSectionHeader(container: LinearLayout, title: String) {
-        val header = TextView(this).apply {
-            text = title
-            textSize = 12f
-            setTextColor(ContextCompat.getColor(this@BrowserActivity, android.R.color.black))
-        }
-        container.addView(
-            header,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                topMargin = ViewUnit.dpToPixel(8).toInt()
-            },
-        )
-    }
-
-    private fun addLivePanelRoleHeader(container: LinearLayout, role: String) {
-        val header = TextView(this).apply {
-            text = role.uppercase(Locale.ROOT)
-            textSize = 11f
-            setTextColor(ContextCompat.getColor(this@BrowserActivity, android.R.color.holo_blue_dark))
-        }
-        container.addView(
-            header,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                topMargin = ViewUnit.dpToPixel(6).toInt()
-            },
-        )
-    }
-
-    private fun addLivePanelTextLine(container: LinearLayout, text: String, dim: Boolean = false) {
-        val line = TextView(this).apply {
-            this.text = text
-            textSize = 11f
-            setTextColor(
-                ContextCompat.getColor(
-                    this@BrowserActivity,
-                    if (dim) android.R.color.darker_gray else android.R.color.black,
-                ),
-            )
-        }
-        container.addView(
-            line,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ),
-        )
-    }
-
-    private fun addLivePanelCandidateRow(
-        container: LinearLayout,
-        candidate: RuntimeToolkitTelemetry.LiveEndpointCandidate,
-        overrides: RuntimeToolkitTelemetry.EndpointOverrides,
+    private fun ensureMissionWizardStepPhaseFocus(
+        state: RuntimeToolkitTelemetry.MissionSessionState,
     ) {
-        val isSelected = overrides.selectedEndpointByRole[candidate.role] == candidate.endpointId
-        val isExcluded = overrides.excludedEndpoints.contains(candidate.endpointId)
-        val testResult = overrides.lastTestResults[candidate.endpointId]
-
-        val wrapper = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        val title = TextView(this).apply {
-            text = "${candidate.method} ${candidate.normalizedPath}"
-            textSize = 11f
-            setTextColor(
-                ContextCompat.getColor(
-                    this@BrowserActivity,
-                    when {
-                        isExcluded -> android.R.color.holo_red_dark
-                        isSelected -> android.R.color.holo_green_dark
-                        else -> android.R.color.black
-                    },
-                ),
-            )
-        }
-        wrapper.addView(title)
-        val meta = TextView(this).apply {
-            text = "score=${candidate.score.toInt()} conf=${"%.2f".format(candidate.confidence)} ev=${candidate.evidenceCount} op=${candidate.requestOperation}"
-            textSize = 10f
-            setTextColor(ContextCompat.getColor(this@BrowserActivity, android.R.color.darker_gray))
-        }
-        wrapper.addView(meta)
-        if (testResult != null) {
-            val testLine = TextView(this).apply {
-                val sizeLabel = formatBytes(testResult.sizeBytes)
-                val okLabel = if (testResult.ok) "ok" else "fail"
-                text = "test: ${testResult.status} ${testResult.durationMillis}ms $sizeLabel ${testResult.mimeType} ($okLabel)"
-                textSize = 10f
-                setTextColor(ContextCompat.getColor(this@BrowserActivity, android.R.color.darker_gray))
-            }
-            wrapper.addView(testLine)
-        }
-
-        val actionRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.START
-        }
-        val selectLabel = if (isSelected) {
-            getString(R.string.mapper_wizard_live_selected)
-        } else {
-            getString(R.string.mapper_wizard_live_select)
-        }
-        val selectButton = createLivePanelButton(selectLabel, enabled = !isSelected && !isExcluded)
-        selectButton.setOnClickListener {
-            val state = RuntimeToolkitTelemetry.missionSessionState(this)
-            RuntimeToolkitTelemetry.setEndpointOverrideSelection(this, candidate.role, candidate.endpointId)
-            RuntimeToolkitTelemetry.logWizardEvent(
-                context = this,
-                operation = "wizard_endpoint_selected",
-                missionId = state.missionId,
-                wizardStepId = state.wizardStepId,
-                saturationState = state.saturationState,
-                payload = mapOf(
-                    "role" to candidate.role,
-                    "endpoint_id" to candidate.endpointId,
-                    "score" to candidate.score,
-                ),
-            )
-            updateMissionWizardLivePanel(forceRefresh = true)
-        }
-        actionRow.addView(selectButton)
-
-        val excludeLabel = if (isExcluded) {
-            getString(R.string.mapper_wizard_live_include)
-        } else {
-            getString(R.string.mapper_wizard_live_exclude)
-        }
-        val excludeButton = createLivePanelButton(excludeLabel, enabled = true)
-        excludeButton.setOnClickListener {
-            val state = RuntimeToolkitTelemetry.missionSessionState(this)
-            RuntimeToolkitTelemetry.setEndpointExcluded(this, candidate.endpointId, !isExcluded)
-            RuntimeToolkitTelemetry.logWizardEvent(
-                context = this,
-                operation = "wizard_endpoint_excluded",
-                missionId = state.missionId,
-                wizardStepId = state.wizardStepId,
-                saturationState = state.saturationState,
-                payload = mapOf(
-                    "endpoint_id" to candidate.endpointId,
-                    "excluded" to (!isExcluded),
-                ),
-            )
-            updateMissionWizardLivePanel(forceRefresh = true)
-        }
-        actionRow.addView(excludeButton)
-
-        val testButton = createLivePanelButton(getString(R.string.mapper_wizard_live_test), enabled = !isExcluded)
-        testButton.setOnClickListener {
-            runLiveEndpointTest(candidate)
-        }
-        actionRow.addView(testButton)
-
-        wrapper.addView(
-            actionRow,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                topMargin = ViewUnit.dpToPixel(4).toInt()
-            },
-        )
-
-        container.addView(
-            wrapper,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                topMargin = ViewUnit.dpToPixel(6).toInt()
-            },
+        val step = RuntimeToolkitMissionWizard.stepById(state.missionId, state.wizardStepId, this) ?: return
+        val phaseId = step.phaseId?.trim().orEmpty()
+        if (phaseId.isBlank()) return
+        if (state.stepStates[state.wizardStepId] == RuntimeToolkitMissionWizard.SATURATION_SATURATED) return
+        val activePhase = RuntimeToolkitTelemetry.activePhaseId(this)
+        if (activePhase == phaseId || activePhase != "background_noise") return
+        RuntimeToolkitTelemetry.logProbePhaseEvent(
+            context = this,
+            phaseId = phaseId,
+            transition = "resume",
+            payload = mapOf("source" to "wizard_dock_focus"),
         )
     }
 
-    private fun createLivePanelButton(label: String, enabled: Boolean): TextView {
-        return TextView(this).apply {
-            text = label
-            textSize = 10f
-            gravity = Gravity.CENTER
-            background = ContextCompat.getDrawable(this@BrowserActivity, R.drawable.roundcorner)
-            setPadding(
-                ViewUnit.dpToPixel(6).toInt(),
-                ViewUnit.dpToPixel(4).toInt(),
-                ViewUnit.dpToPixel(6).toInt(),
-                ViewUnit.dpToPixel(4).toInt(),
-            )
-            setTextColor(
-                ContextCompat.getColor(
-                    this@BrowserActivity,
-                    if (enabled) android.R.color.black else android.R.color.darker_gray,
-                ),
-            )
-            isEnabled = enabled
-        }
-    }
-
-    private fun formatBytes(sizeBytes: Int): String {
-        if (sizeBytes < 0) return "0B"
-        if (sizeBytes < 1024) return "${sizeBytes}B"
-        val kb = sizeBytes / 1024.0
-        if (kb < 1024) return String.format(Locale.ROOT, "%.1fKB", kb)
-        val mb = kb / 1024.0
-        return String.format(Locale.ROOT, "%.1fMB", mb)
-    }
-
-    private fun runLiveEndpointTest(candidate: RuntimeToolkitTelemetry.LiveEndpointCandidate) {
+    private fun runLiveEndpointTest(
+        candidate: RuntimeToolkitTelemetry.LiveEndpointCandidate,
+        onFinished: () -> Unit = {},
+    ) {
         if (isUnsafeLiveTestCandidate(candidate)) {
             EBToast.showShort(this, getString(R.string.mapper_wizard_live_test_skip))
+            onFinished()
             return
         }
         EBToast.showShort(this, getString(R.string.mapper_wizard_live_test_started))
@@ -2792,12 +2333,21 @@ open class BrowserActivity : FragmentActivity(),
                     title = getString(R.string.mapper_wizard_live_test_confirm_post_title),
                     message = getString(R.string.mapper_wizard_live_test_confirm_post_message),
                 )
-                if (!confirmed) return@launch
+                if (!confirmed) {
+                    onFinished()
+                    return@launch
+                }
             }
 
-            val queryParams = resolveLiveTestQueryParams(candidate) ?: return@launch
+            val queryParams = resolveLiveTestQueryParams(candidate) ?: run {
+                onFinished()
+                return@launch
+            }
             val body = if (method == "POST") resolveLiveTestBody() else null
-            if (method == "POST" && body == null) return@launch
+            if (method == "POST" && body == null) {
+                onFinished()
+                return@launch
+            }
 
             val baseUrl = resolveLiveTestBaseUrl(candidate)
             val headers = buildLiveTestHeaders(baseUrl)
@@ -2837,8 +2387,9 @@ open class BrowserActivity : FragmentActivity(),
                     ok = false,
                 )
                 EBToast.showShort(this@BrowserActivity, getString(R.string.mapper_wizard_live_test_failed))
-                updateMissionWizardLivePanel(forceRefresh = true)
+                updateMissionWizardUi()
                 Log.w("PIPELAB/WIZ", "Live endpoint test failed", failure)
+                onFinished()
                 return@launch
             }
 
@@ -2888,7 +2439,8 @@ open class BrowserActivity : FragmentActivity(),
                     "ok" to response.succeeded,
                 ),
             )
-            updateMissionWizardLivePanel(forceRefresh = true)
+            updateMissionWizardUi()
+            onFinished()
         }
     }
 
@@ -2982,143 +2534,6 @@ open class BrowserActivity : FragmentActivity(),
             if (cookie.isNotBlank()) headers["cookie"] = cookie
         }
         return headers
-    }
-
-    private fun ensureWizardPhaseFocus(
-        state: RuntimeToolkitTelemetry.MissionSessionState,
-        step: RuntimeToolkitMissionWizard.StepDefinition?,
-    ) {
-        val phaseId = step?.phaseId?.trim().orEmpty()
-        if (phaseId.isBlank()) return
-        val currentPhase = RuntimeToolkitTelemetry.activePhaseId(this)
-        val stepState = state.stepStates[state.wizardStepId].orEmpty()
-        if (stepState == RuntimeToolkitMissionWizard.SATURATION_SATURATED) return
-        if (currentPhase == phaseId) return
-        if (currentPhase != "background_noise") return
-        RuntimeToolkitTelemetry.logProbePhaseEvent(
-            context = this,
-            phaseId = phaseId,
-            transition = "resume",
-            payload = mapOf("source" to "wizard_overlay_focus"),
-        )
-    }
-
-    private fun setMissionWizardOverlayMinimized(minimized: Boolean) {
-        val state = RuntimeToolkitTelemetry.missionSessionState(this)
-        if (state.missionId.isBlank()) {
-            missionWizardOverlayMinimized = false
-            missionWizardCard.visibility = GONE
-            setMissionWizardCardDragFrameVisible(false)
-            return
-        }
-        if (missionWizardOverlayMinimized == minimized) return
-        missionWizardOverlayMinimized = minimized
-        setMissionWizardCardDragFrameVisible(minimized)
-        updateMissionWizardUi()
-        EBToast.showShort(
-            this,
-            getString(
-                if (minimized) {
-                    R.string.mapper_wizard_overlay_minimized_toast
-                } else {
-                    R.string.mapper_wizard_overlay_restored_toast
-                }
-            ),
-        )
-    }
-
-    private fun handleMissionWizardCardDrag(event: MotionEvent): Boolean {
-        if (!this::missionWizardCard.isInitialized) return false
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                if (!isMissionWizardCardDragTouch(event)) return false
-                missionWizardCardDragActive = true
-                missionWizardCardDragMoved = false
-                missionWizardCardDragStartRawX = event.rawX
-                missionWizardCardDragStartRawY = event.rawY
-                missionWizardCardDragStartTranslationX = missionWizardCard.translationX
-                missionWizardCardDragStartTranslationY = missionWizardCard.translationY
-                setMissionWizardCardDragFrameVisible(true)
-                missionWizardCard.parent?.requestDisallowInterceptTouchEvent(true)
-                return true
-            }
-
-            MotionEvent.ACTION_MOVE -> {
-                if (!missionWizardCardDragActive) return false
-                val dx = event.rawX - missionWizardCardDragStartRawX
-                val dy = event.rawY - missionWizardCardDragStartRawY
-                if (!missionWizardCardDragMoved && (abs(dx) > 6f || abs(dy) > 6f)) {
-                    missionWizardCardDragMoved = true
-                }
-                updateMissionWizardCardTranslation(
-                    desiredTranslationX = missionWizardCardDragStartTranslationX + dx,
-                    desiredTranslationY = missionWizardCardDragStartTranslationY + dy,
-                )
-                return true
-            }
-
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                val moved = missionWizardCardDragMoved
-                missionWizardCardDragActive = false
-                missionWizardCardDragMoved = false
-                setMissionWizardCardDragFrameVisible(false)
-                missionWizardCard.parent?.requestDisallowInterceptTouchEvent(false)
-                return moved
-            }
-        }
-        return false
-    }
-
-    private fun isMissionWizardCardDragTouch(event: MotionEvent): Boolean {
-        if (!this::missionWizardCard.isInitialized) return false
-        if (missionWizardOverlayMinimized) return true
-        val width = missionWizardCard.width.toFloat()
-        val height = missionWizardCard.height.toFloat()
-        if (width <= 0f || height <= 0f) return false
-        val edgePx = missionWizardCardDragEdgeDp * resources.displayMetrics.density
-        val x = event.x
-        val y = event.y
-        return x <= edgePx ||
-            y <= edgePx ||
-            x >= (width - edgePx) ||
-            y >= (height - edgePx)
-    }
-
-    private fun setMissionWizardCardDragFrameVisible(visible: Boolean) {
-        if (!this::missionWizardCard.isInitialized) return
-        if (missionWizardCardDragFrameVisible == visible) return
-        missionWizardCardDragFrameVisible = visible
-        val backgroundRes = if (visible) {
-            R.drawable.mapper_wizard_drag_border
-        } else {
-            R.drawable.background_with_border
-        }
-        missionWizardCard.background = ContextCompat.getDrawable(this, backgroundRes)
-    }
-
-    private fun updateMissionWizardCardTranslation(
-        desiredTranslationX: Float,
-        desiredTranslationY: Float,
-    ) {
-        if (!this::missionWizardCard.isInitialized) return
-        val rootView = binding.root
-        if (rootView.width <= 0 || rootView.height <= 0 || missionWizardCard.width <= 0 || missionWizardCard.height <= 0) {
-            missionWizardCard.translationX = desiredTranslationX
-            missionWizardCard.translationY = desiredTranslationY
-            return
-        }
-        val minLeft = 0f
-        val maxLeft = (rootView.width - missionWizardCard.width).toFloat().coerceAtLeast(0f)
-        val minTop = 0f
-        val maxTop = (rootView.height - missionWizardCard.height).toFloat().coerceAtLeast(0f)
-
-        val desiredLeft = missionWizardCard.left + desiredTranslationX
-        val desiredTop = missionWizardCard.top + desiredTranslationY
-        val clampedLeft = desiredLeft.coerceIn(minLeft, maxLeft)
-        val clampedTop = desiredTop.coerceIn(minTop, maxTop)
-
-        missionWizardCard.translationX = clampedLeft - missionWizardCard.left
-        missionWizardCard.translationY = clampedTop - missionWizardCard.top
     }
 
     private fun isWizardUndoWindowActive(nowMs: Long = System.currentTimeMillis()): Boolean {
@@ -3685,81 +3100,16 @@ open class BrowserActivity : FragmentActivity(),
         return lines.joinToString("\n")
     }
 
-    private fun wizardReasonLabel(reason: String): String {
-        return when (reason.trim()) {
-            "target_url_bound" -> "target URL confirmed"
-            "target_url_missing" -> "target URL missing"
-            "home_probe_evidence_ok" -> "home evidence captured"
-            "missing_home_target_response" -> "home traffic missing"
-            "home_probe_low_quality_candidates" -> "home candidates still noisy"
-            "search_probe_saturated" -> "search evidence saturated"
-            "search_probe_needs_more_variants" -> "run another search variant"
-            "search_probe_low_quality_candidates" -> "search candidates still noisy"
-            "detail_probe_evidence_ok" -> "detail evidence captured"
-            "missing_detail_target_response" -> "open at least one detail page"
-            "detail_probe_low_quality_candidates" -> "detail candidates still noisy"
-            "playback_probe_evidence_ok" -> "playback evidence captured"
-            "missing_playback_manifest_or_resolver" -> "playback resolver/manifest missing"
-            "playback_probe_low_quality_candidates" -> "playback candidates still noisy"
-            "auth_chain_complete" -> "auth chain complete"
-            "auth_chain_incomplete" -> "collect login/validation/refresh"
-            "auth_optional_not_collected" -> "auth optional not collected yet"
-            "mission_ready_for_export" -> "ready for export"
-            "final_validation_incomplete" -> "final validation incomplete"
-            "export_gate_blocked" -> "export blocked by fail-closed gate"
-            else -> reason.ifBlank { "awaiting evidence" }
-        }
-    }
-
     private fun showMissionWizardPanel() {
         val state = RuntimeToolkitTelemetry.missionSessionState(this)
         if (state.missionId.isBlank()) {
             showMissionLauncherDialog()
             return
         }
-        val toggleOverlayAction = getString(
-            if (missionWizardOverlayMinimized) {
-                R.string.mapper_wizard_overlay_menu_restore
-            } else {
-                R.string.mapper_wizard_overlay_menu_minimize
-            }
-        )
-        val actions = arrayOf(
-            "Start step",
-            "Ready (arm 90s)",
-            "Check saturation",
-            "Next",
-            "Retry",
-            "Skip optional",
-            "Finish",
-            "Export summary",
-            "Anchor: Create",
-            "Anchor: Label",
-            "Anchor: Remove",
-            toggleOverlayAction,
-            "Close",
-        )
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.mapper_wizard_status_title))
-            .setMessage(formatWizardStatus(state))
-            .setItems(actions) { _, which ->
-                when (which) {
-                    0 -> beginCurrentWizardStep()
-                    1 -> armCurrentWizardReadyWindow()
-                    2 -> checkCurrentWizardStepSaturation(openWizardPanel = true)
-                    3 -> moveToNextWizardStep(openWizardPanel = true)
-                    4 -> retryCurrentWizardStep()
-                    5 -> skipOptionalCurrentWizardStep()
-                    6 -> finishMissionWizard()
-                    7 -> showMissionExportSummaryDialog()
-                    8 -> promptCreateAnchor()
-                    9 -> promptLabelAnchor()
-                    10 -> promptRemoveAnchor()
-                    11 -> setMissionWizardOverlayMinimized(!missionWizardOverlayMinimized)
-                    else -> Unit
-                }
-            }
-            .show()
+        if (this::missionDockController.isInitialized) {
+            missionDockController.setDockMode(DockMode.Expanded)
+        }
+        updateMissionWizardUi()
     }
 
     private fun beginCurrentWizardStep() {
@@ -5282,9 +4632,123 @@ open class BrowserActivity : FragmentActivity(),
         actionModeMenuViewModel.show()
     }
 
+    override fun runStepStart() {
+        beginCurrentWizardStep()
+    }
+
+    override fun runStepReady() {
+        armCurrentWizardReadyWindow()
+    }
+
+    override fun runStepCheck() {
+        checkCurrentWizardStepSaturation(openWizardPanel = false)
+    }
+
+    override fun runStepPauseOrHold() {
+        if (!holdPendingWizardAutoAdvance()) {
+            if (RuntimeToolkitTelemetry.isCaptureEnabled(this)) {
+                RuntimeToolkitTelemetry.stopCaptureSession(this, source = "wizard_overlay_pause")
+                updateCaptureToggleUi(false)
+                EBToast.showShort(this, getString(R.string.mapper_capture_stopped))
+            }
+        }
+        updateMissionWizardUi()
+    }
+
+    override fun runStepNextOrUndo() {
+        if (isWizardUndoWindowActive()) {
+            undoLastWizardAutoAdvance()
+        } else {
+            moveToNextWizardStep(openWizardPanel = false)
+        }
+    }
+
+    override fun runStepRetry() {
+        retryCurrentWizardStep()
+    }
+
+    override fun runStepSkipOptional() {
+        skipOptionalCurrentWizardStep(openWizardPanel = false)
+    }
+
+    override fun runStepFinish() {
+        finishMissionWizard()
+    }
+
+    override fun runExportSummary() {
+        showMissionExportSummaryDialog()
+    }
+
+    override fun runAnchorCreate() {
+        promptCreateAnchor()
+    }
+
+    override fun runAnchorLabel() {
+        promptLabelAnchor()
+    }
+
+    override fun runAnchorRemove() {
+        promptRemoveAnchor()
+    }
+
+    override fun selectEndpoint(role: String, endpointId: String, score: Double) {
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        RuntimeToolkitTelemetry.setEndpointOverrideSelection(this, role, endpointId)
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = this,
+            operation = "wizard_endpoint_selected",
+            missionId = state.missionId,
+            wizardStepId = state.wizardStepId,
+            saturationState = state.saturationState,
+            payload = mapOf(
+                "role" to role,
+                "endpoint_id" to endpointId,
+                "score" to score,
+            ),
+        )
+        updateMissionWizardUi()
+    }
+
+    override fun excludeEndpoint(endpointId: String, excluded: Boolean) {
+        val state = RuntimeToolkitTelemetry.missionSessionState(this)
+        RuntimeToolkitTelemetry.setEndpointExcluded(this, endpointId, excluded)
+        RuntimeToolkitTelemetry.logWizardEvent(
+            context = this,
+            operation = "wizard_endpoint_excluded",
+            missionId = state.missionId,
+            wizardStepId = state.wizardStepId,
+            saturationState = state.saturationState,
+            payload = mapOf(
+                "endpoint_id" to endpointId,
+                "excluded" to excluded,
+            ),
+        )
+        updateMissionWizardUi()
+    }
+
+    override fun testEndpoint(
+        candidate: RuntimeToolkitTelemetry.LiveEndpointCandidate,
+        onFinished: () -> Unit,
+    ) {
+        runLiveEndpointTest(candidate, onFinished)
+    }
+
+    override fun copyToClipboard(label: String, value: String) {
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText(label, value))
+        EBToast.showShort(this, getString(R.string.mapper_wizard_live_copied))
+    }
+
+    override fun toast(message: String) {
+        EBToast.showShort(this, message)
+    }
+
     override fun onPause() {
         super.onPause()
         actionModeMenuViewModel.finish()
+        if (this::missionDockController.isInitialized) {
+            missionDockController.onActivityStopped()
+        }
         if (!config.continueMedia && !isMeetPipCriteria()) {
             if (this::ebWebView.isInitialized) {
                 ebWebView.pauseTimers()

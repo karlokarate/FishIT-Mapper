@@ -357,6 +357,20 @@
       ],
       "superseded_by": null,
       "summary": "Exporter and live wizard now share role-specific ranking/noise filters, enforce compact per-role caps, keep PTMD/TMD resolver precedence over manifest/media helpers, derive required provenance inputs only from effective required replay/template usage, and gate step saturation on high-quality role candidates so READY no longer reaches 100% with noisy endpoints."
+    },
+    {
+      "id": "DEC-0026",
+      "aliases": [
+        "ADR-0026",
+        "MAPPER-GUIDED-CAPTURE-DOCK-STATE-MACHINES",
+        "MAPPER-WIZARD-MONOLITH-SPLIT"
+      ],
+      "title": "Guided capture wizard UI runs as a right-docked state-machine controller with diff-based live rendering",
+      "status": "accepted",
+      "date": "2026-04-11",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Wizard/live interactions are orchestrated by explicit DockShell, StepGuidance, and CandidateDecision state machines via a dedicated missiondock controller; polling is lifecycle- and mode-gated (expanded 2s, peek 4s, collapsed/off), candidate rendering is RecyclerView+DiffUtil with stable ids and expansion persistence, and secondary wizard actions move into dock overflow while preserving existing fail-closed telemetry/export contracts."
     }
   ]
 }
