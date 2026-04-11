@@ -4,9 +4,9 @@ import info.plateaukao.einkbro.mapper.missiondock.state.CandidateCardViewState
 import info.plateaukao.einkbro.mapper.missiondock.state.GuidedCaptureDockPanelState
 import java.util.Locale
 
-object GuidedCaptureDockFormatter {
+object CandidateClipboardFormatter {
 
-    fun formatCandidate(candidate: CandidateCardViewState): String {
+    fun format(candidate: CandidateCardViewState): String {
         val warnings = candidate.warnings.joinToString(",").ifBlank { "none" }
         val fieldHits = candidate.fieldHits.joinToString(",").ifBlank { "none" }
         val operationLine = candidate.operation.trim().takeIf { it.isNotBlank() }?.let {
@@ -58,8 +58,11 @@ object GuidedCaptureDockFormatter {
             }
         }
     }
+}
 
-    fun formatSummary(state: GuidedCaptureDockPanelState): String {
+object PanelSummaryClipboardFormatter {
+
+    fun format(state: GuidedCaptureDockPanelState): String {
         val phase = state.probe.phaseId.ifBlank { "unknown" }
         val topCandidates = state.candidates.take(6).joinToString("\n") { candidate ->
             "- ${candidate.role} ${candidate.method} ${candidate.path} score=${String.format(Locale.ROOT, "%.1f", candidate.score)}"
@@ -102,5 +105,16 @@ object GuidedCaptureDockFormatter {
             append("blockers_if_any=")
             append(blockers)
         }
+    }
+}
+
+object GuidedCaptureDockFormatter {
+
+    fun formatCandidate(candidate: CandidateCardViewState): String {
+        return CandidateClipboardFormatter.format(candidate)
+    }
+
+    fun formatSummary(state: GuidedCaptureDockPanelState): String {
+        return PanelSummaryClipboardFormatter.format(state)
     }
 }

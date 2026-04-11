@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260411T162433Z",
+  "generated_at_utc": "2026-04-11T16:24:33Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260411T162433Z"
+  },
+  "scope": "guided-capture-dock-ux-1to1-yaml",
+  "highlights": [
+    "Unified right-docked panel now has explicit top-candidate section, card-header actions, structured detail blocks, responsive width, and validated contract/build gates"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "contracts/tasks/guided_capture_panel_visual_restructure_from_current_ui.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/controller/GuidedCaptureDockController.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/format/GuidedCaptureDockFormatter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/state/MissionDockModels.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/ui/GuidedCaptureDockBinder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/ui/GuidedCaptureDockViews.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/ui/MissionDockCandidateAdapter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/test/java/info/plateaukao/einkbro/mapper/missiondock/format/GuidedCaptureDockFormatterTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/test/java/info/plateaukao/einkbro/mapper/missiondock/ui/GuidedCaptureDockUiTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/decision_trace.json",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/guided_capture_dock_architecture_note.md",
+      "old_path": null
+    }
+  ]
+}

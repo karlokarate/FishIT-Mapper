@@ -369,8 +369,24 @@
       "status": "accepted",
       "date": "2026-04-11",
       "supersedes": [],
-      "superseded_by": null,
+      "superseded_by": "DEC-0027",
       "summary": "Wizard/live interactions are orchestrated by explicit DockShell, StepGuidance, and CandidateDecision state machines via a dedicated missiondock controller; polling is lifecycle- and mode-gated (expanded 2s, peek 4s, collapsed/off), candidate rendering is RecyclerView+DiffUtil with stable ids and expansion persistence, and secondary wizard actions move into dock overflow while preserving existing fail-closed telemetry/export contracts."
+    },
+    {
+      "id": "DEC-0027",
+      "aliases": [
+        "ADR-0027",
+        "MAPPER-GUIDED-CAPTURE-DOCK-UX-CONSOLIDATION",
+        "MAPPER-GUIDED-CARD-BLOCK-STRUCTURE"
+      ],
+      "title": "Guided capture dock UX is consolidated into one touch-first panel with explicit top-candidate and structured card blocks",
+      "status": "accepted",
+      "date": "2026-04-11",
+      "supersedes": [
+        "DEC-0026"
+      ],
+      "superseded_by": null,
+      "summary": "The right-docked guided capture panel now uses responsive width, persistent handle gestures, two-row header controls, an explicit top-candidate summary section between step guidance and candidate list, and card-header one-tap actions with structured detail blocks so wizard guidance and endpoint decisions stay in one continuous Android-friendly flow without restoring split overlays."
     }
   ]
 }

@@ -14,7 +14,7 @@ class GuidedCaptureDockFormatterTest {
 
     @Test
     fun candidateCopyIncludesRequiredContractFields() {
-        val text = GuidedCaptureDockFormatter.formatCandidate(sampleCandidate())
+        val text = CandidateClipboardFormatter.format(sampleCandidate())
 
         assertTrue(text.contains("role=search"))
         assertTrue(text.contains("generalized_template=GET https://api.example.org/suche"))
@@ -28,7 +28,7 @@ class GuidedCaptureDockFormatterTest {
 
     @Test
     fun panelSummaryCopyIncludesStepStatusHintsCandidatesAndBlockers() {
-        val summary = GuidedCaptureDockFormatter.formatSummary(
+        val summary = PanelSummaryClipboardFormatter.format(
             GuidedCaptureDockPanelState(
                 shell = DockShellState(dockMode = DockMode.Peek),
                 step = StepGuidanceViewState(

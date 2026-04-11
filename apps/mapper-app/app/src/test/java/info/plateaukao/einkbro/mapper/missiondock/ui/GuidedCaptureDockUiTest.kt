@@ -1,6 +1,7 @@
 package info.plateaukao.einkbro.mapper.missiondock.ui
 
 import android.os.Looper
+import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -11,6 +12,7 @@ import info.plateaukao.einkbro.mapper.missiondock.state.DockMode
 import info.plateaukao.einkbro.mapper.missiondock.state.DockShellState
 import info.plateaukao.einkbro.mapper.missiondock.state.FeedMode
 import info.plateaukao.einkbro.mapper.missiondock.state.GuidedCaptureDockPanelState
+import info.plateaukao.einkbro.mapper.missiondock.state.PanelSummaryViewState
 import info.plateaukao.einkbro.mapper.missiondock.state.ProbeSummaryViewState
 import info.plateaukao.einkbro.mapper.missiondock.state.StepGuidanceViewState
 import org.junit.Assert.assertEquals
@@ -35,6 +37,8 @@ class GuidedCaptureDockUiTest {
         val views = GuidedCaptureDockViewsFactory.attach(context, parent)
 
         var handleTapCount = 0
+        var handleSwipeCount = 0
+        var copySummaryCount = 0
         var startCount = 0
         var readyCount = 0
         var checkCount = 0
@@ -52,9 +56,9 @@ class GuidedCaptureDockUiTest {
         binder.bindHandlers(
             GuidedCaptureDockBinder.Callbacks(
                 onHandleTap = { handleTapCount += 1 },
-                onHandleSwipe = {},
+                onHandleSwipe = { handleSwipeCount += 1 },
                 onRefresh = {},
-                onCopySummary = {},
+                onCopySummary = { copySummaryCount += 1 },
                 onCollapse = {},
                 onModeTap = {},
                 onFeedToggle = {},
@@ -73,6 +77,8 @@ class GuidedCaptureDockUiTest {
         assertTrue(views.actionCheck.minHeight >= 48)
         assertTrue(views.actionPause.minHeight >= 48)
         assertTrue(views.actionNext.minHeight >= 48)
+        val panelWidthDp = views.panel.layoutParams.width / context.resources.displayMetrics.density
+        assertTrue(panelWidthDp in 280f..360f)
 
         views.handle.performClick()
         views.actionStart.performClick()
@@ -80,8 +86,13 @@ class GuidedCaptureDockUiTest {
         views.actionCheck.performClick()
         views.actionPause.performClick()
         views.actionNext.performClick()
+        views.copySummary.performClick()
+        views.handle.dispatchTouchEvent(MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, 120f, 0f, 0))
+        views.handle.dispatchTouchEvent(MotionEvent.obtain(0L, 10L, MotionEvent.ACTION_UP, 40f, 0f, 0))
 
         assertEquals(1, handleTapCount)
+        assertEquals(1, handleSwipeCount)
+        assertEquals(1, copySummaryCount)
         assertEquals(1, startCount)
         assertEquals(1, readyCount)
         assertEquals(1, checkCount)
@@ -114,6 +125,7 @@ class GuidedCaptureDockUiTest {
         binder.render(panelState(mode = DockMode.Expanded, feedMode = FeedMode.Expanded))
         assertEquals(View.VISIBLE, views.feedContainer.visibility)
         assertTrue(views.feedSummary.text.toString().contains("search_probe"))
+        assertTrue(views.topCandidateHeader.text.toString().contains("Top candidate"))
     }
 
     @Test
@@ -162,8 +174,10 @@ class GuidedCaptureDockUiTest {
         visualAdapter.submitList(listOf(sampleCandidate(expanded = true, top = false, lowQuality = true)))
         shadowOf(Looper.getMainLooper()).idle()
         visualAdapter.onBindViewHolder(visualHolder, 0)
-        assertEquals(View.VISIBLE, visualHolder.detail.visibility)
+        assertEquals(View.VISIBLE, visualHolder.detailContainer.visibility)
         assertTrue(visualHolder.root.alpha < 1f)
+        assertTrue(visualHolder.observedExamples.text.toString().contains("Observed examples"))
+        assertTrue(visualHolder.runtimeViability.text.toString().contains("Runtime viability"))
     }
 
     private fun panelState(mode: DockMode, feedMode: FeedMode): GuidedCaptureDockPanelState {
@@ -201,6 +215,12 @@ class GuidedCaptureDockUiTest {
                         phaseId = "search_probe",
                     ),
                 ),
+            ),
+            panelSummary = PanelSummaryViewState(
+                topCandidateHeader = "Top candidate: SEARCH · GET",
+                topCandidateDetails = "api.example.org/suche",
+                topCandidateWeaknesses = listOf("LOW_CONFIDENCE"),
+                blockers = listOf("missing:search_variants>=2"),
             ),
             candidates = listOf(sampleCandidate(expanded = false, top = true, lowQuality = false)),
         )

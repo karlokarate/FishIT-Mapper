@@ -19,6 +19,7 @@ import info.plateaukao.einkbro.mapper.missiondock.state.DockShellState
 import info.plateaukao.einkbro.mapper.missiondock.state.DockShellStateMachine
 import info.plateaukao.einkbro.mapper.missiondock.state.GuidedCaptureDockPanelState
 import info.plateaukao.einkbro.mapper.missiondock.state.MissionState
+import info.plateaukao.einkbro.mapper.missiondock.state.PanelSummaryViewState
 import info.plateaukao.einkbro.mapper.missiondock.state.ProbeSummaryViewState
 import info.plateaukao.einkbro.mapper.missiondock.state.StepGuidanceStateMachine
 import info.plateaukao.einkbro.mapper.missiondock.state.StepGuidanceViewState
@@ -256,11 +257,23 @@ class GuidedCaptureDockController(
         }
 
         val bestCard = cards.firstOrNull { it.topCandidate } ?: cards.firstOrNull()
+        val blockers = buildBlockers(stepState.missingSignals, bestCard)
+        val topWeaknesses = buildTopCandidateWeaknesses(bestCard)
+        val panelSummary = PanelSummaryViewState(
+            topCandidateHeader = bestCard?.let {
+                "Top candidate: ${it.role.uppercase(Locale.ROOT)} · ${it.method}"
+            } ?: "Top candidate: -",
+            topCandidateDetails = bestCard?.let {
+                "${it.host}${it.path} | score=${it.score.toInt()} conf=${"%.2f".format(Locale.ROOT, it.confidence)} ev=${it.evidenceCount}"
+            } ?: "Template: -",
+            topCandidateWeaknesses = topWeaknesses,
+            blockers = blockers,
+        )
         stepState = stepState.copy(
             topCandidateSummary = bestCard?.let {
                 "${it.role} ${it.method} ${it.path} (${it.score.toInt()}|${"%.2f".format(Locale.ROOT, it.confidence)})"
             }.orEmpty(),
-            blockersSummary = buildBlockersSummary(stepState.missingSignals, bestCard),
+            blockersSummary = blockers.joinToString(" | "),
         )
 
         val probeState = ProbeSummaryViewState(
@@ -272,6 +285,7 @@ class GuidedCaptureDockController(
             shell = shellState,
             step = stepState,
             probe = probeState,
+            panelSummary = panelSummary,
             candidates = cards,
         )
         panelState = result
@@ -369,18 +383,27 @@ class GuidedCaptureDockController(
         return links.distinct()
     }
 
-    private fun buildBlockersSummary(
+    private fun buildTopCandidateWeaknesses(bestCard: CandidateCardViewState?): List<String> {
+        if (bestCard == null) return listOf("no_candidate_detected")
+        val weaknesses = mutableListOf<String>()
+        if (bestCard.lowQuality) weaknesses += "low_quality"
+        if (bestCard.warnings.isNotEmpty()) weaknesses += bestCard.warnings.take(3)
+        if (bestCard.runtimeViability == "weak_signal") weaknesses += "runtime_viability_weak_signal"
+        return weaknesses.distinct()
+    }
+
+    private fun buildBlockers(
         missingSignals: List<String>,
         bestCard: CandidateCardViewState?,
-    ): String {
+    ): List<String> {
         val blockers = mutableListOf<String>()
-        if (missingSignals.isNotEmpty()) blockers += "missing:${missingSignals.take(2).joinToString(",")}"
+        if (missingSignals.isNotEmpty()) blockers += "missing:${missingSignals.take(3).joinToString(",")}"
         if (bestCard != null) {
             if (bestCard.lowQuality) blockers += "top_candidate_low_quality"
             if (bestCard.warnings.isNotEmpty()) blockers += "top_warnings:${bestCard.warnings.take(2).joinToString(",")}"
             if (bestCard.missingProof.isEmpty() && missingSignals.isNotEmpty()) blockers += "top_candidate_not_covering_missing_proof"
         }
-        return blockers.joinToString(" | ")
+        return blockers.distinct()
     }
 
     private fun render(state: GuidedCaptureDockPanelState) {

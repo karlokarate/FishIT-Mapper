@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.drawable.Drawable
 import android.view.Gravity
 import android.view.View
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -36,7 +35,10 @@ data class GuidedCaptureDockViews(
     val stepHints: TextView,
     val stepStatus: TextView,
     val stepExportReadiness: TextView,
-    val stepCandidateInsight: TextView,
+    val topCandidateHeader: TextView,
+    val topCandidateDetails: TextView,
+    val topCandidateWeaknesses: TextView,
+    val topCandidateBlockers: TextView,
     val actionStart: TextView,
     val actionReady: TextView,
     val actionCheck: TextView,
@@ -87,7 +89,7 @@ object GuidedCaptureDockViewsFactory {
         }
         root.addView(
             panel,
-            LinearLayout.LayoutParams(dp(context, 336), LinearLayout.LayoutParams.WRAP_CONTENT),
+            LinearLayout.LayoutParams(resolvePanelWidthPx(context), LinearLayout.LayoutParams.WRAP_CONTENT),
         )
 
         val header = LinearLayout(context).apply {
@@ -150,6 +152,7 @@ object GuidedCaptureDockViewsFactory {
                 setPadding(dp(context, 6), dp(context, 4), dp(context, 6), dp(context, 4))
                 setTextColor(ContextCompat.getColor(context, android.R.color.black))
                 minHeight = dp(context, 48)
+                minWidth = dp(context, 58)
             }
         }
 
@@ -159,12 +162,33 @@ object GuidedCaptureDockViewsFactory {
         val mode = headerButton(R.id.guided_capture_dock_mode, safeString(context, R.string.mapper_wizard_dock_mode_peek, "Peek"))
         val feedToggle = headerButton(R.id.guided_capture_dock_feed_toggle, safeString(context, R.string.mapper_wizard_live_show, "Show"))
         val overflow = headerButton(R.id.guided_capture_dock_overflow, "Menu")
-        header.addView(refresh, headerButtonParams(context))
-        header.addView(copySummary, headerButtonParams(context))
-        header.addView(collapse, headerButtonParams(context))
-        header.addView(mode, headerButtonParams(context))
-        header.addView(feedToggle, headerButtonParams(context))
-        header.addView(overflow, headerButtonParams(context))
+        val headerButtons = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END
+        }
+        val headerRowPrimary = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+        }
+        val headerRowSecondary = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+        }
+        headerButtons.addView(headerRowPrimary)
+        headerButtons.addView(
+            headerRowSecondary,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(context, 4) },
+        )
+        header.addView(headerButtons)
+        headerRowPrimary.addView(refresh, headerButtonParams(context))
+        headerRowPrimary.addView(copySummary, headerButtonParams(context))
+        headerRowPrimary.addView(collapse, headerButtonParams(context))
+        headerRowSecondary.addView(mode, headerButtonParams(context))
+        headerRowSecondary.addView(feedToggle, headerButtonParams(context))
+        headerRowSecondary.addView(overflow, headerButtonParams(context))
 
         val peekSummary = TextView(context).apply {
             textSize = 10f
@@ -172,6 +196,13 @@ object GuidedCaptureDockViewsFactory {
             visibility = View.GONE
         }
         panel.addView(peekSummary, fillWrap(top = 4, context = context))
+
+        val stepSectionHeader = TextView(context).apply {
+            text = safeString(context, R.string.mapper_wizard_live_section_status, "Step Status")
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(context, android.R.color.black))
+        }
+        panel.addView(stepSectionHeader, fillWrap(top = 6, context = context))
 
         val stepTitle = TextView(context).apply {
             textSize = 12f
@@ -198,12 +229,10 @@ object GuidedCaptureDockViewsFactory {
         val stepHints = TextView(context).apply { textSize = 10f }
         val stepStatus = TextView(context).apply { textSize = 10f }
         val stepExportReadiness = TextView(context).apply { textSize = 10f }
-        val stepCandidateInsight = TextView(context).apply { textSize = 10f }
         panel.addView(stepMissing, fillWrap(top = 4, context = context))
         panel.addView(stepHints, fillWrap(top = 2, context = context))
         panel.addView(stepStatus, fillWrap(top = 2, context = context))
         panel.addView(stepExportReadiness, fillWrap(top = 2, context = context))
-        panel.addView(stepCandidateInsight, fillWrap(top = 2, context = context))
 
         val actionRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -219,6 +248,7 @@ object GuidedCaptureDockViewsFactory {
                 background = safeDrawable(context, R.drawable.roundcorner)
                 setPadding(dp(context, 6), dp(context, 4), dp(context, 6), dp(context, 4))
                 minHeight = dp(context, 48)
+                minWidth = dp(context, 56)
             }
         }
         val actionStart = actionButton(R.id.guided_capture_dock_action_start, R.string.mapper_wizard_overlay_start)
@@ -231,6 +261,35 @@ object GuidedCaptureDockViewsFactory {
         actionRow.addView(actionCheck, rowSpacing(context))
         actionRow.addView(actionPause, rowSpacing(context))
         actionRow.addView(actionNext, rowSpacing(context))
+
+        val topCandidateSection = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            background = safeDrawable(context, R.drawable.background_with_border)
+            setPadding(dp(context, 8), dp(context, 6), dp(context, 8), dp(context, 6))
+        }
+        panel.addView(topCandidateSection, fillWrap(top = 8, context = context))
+
+        val topCandidateHeader = TextView(context).apply {
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(context, android.R.color.holo_blue_dark))
+            text = "Top candidate: -"
+        }
+        val topCandidateDetails = TextView(context).apply {
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(context, android.R.color.black))
+        }
+        val topCandidateWeaknesses = TextView(context).apply {
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(context, android.R.color.holo_orange_dark))
+        }
+        val topCandidateBlockers = TextView(context).apply {
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(context, android.R.color.holo_red_dark))
+        }
+        topCandidateSection.addView(topCandidateHeader)
+        topCandidateSection.addView(topCandidateDetails, fillWrap(top = 2, context = context))
+        topCandidateSection.addView(topCandidateWeaknesses, fillWrap(top = 2, context = context))
+        topCandidateSection.addView(topCandidateBlockers, fillWrap(top = 2, context = context))
 
         val listHeader = TextView(context).apply {
             text = safeString(context, R.string.mapper_wizard_live_section_candidates, "Endpoint Candidates")
@@ -306,7 +365,10 @@ object GuidedCaptureDockViewsFactory {
             stepHints = stepHints,
             stepStatus = stepStatus,
             stepExportReadiness = stepExportReadiness,
-            stepCandidateInsight = stepCandidateInsight,
+            topCandidateHeader = topCandidateHeader,
+            topCandidateDetails = topCandidateDetails,
+            topCandidateWeaknesses = topCandidateWeaknesses,
+            topCandidateBlockers = topCandidateBlockers,
             actionStart = actionStart,
             actionReady = actionReady,
             actionCheck = actionCheck,
@@ -339,6 +401,13 @@ object GuidedCaptureDockViewsFactory {
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
         ).apply { marginStart = dp(context, 4) }
+    }
+
+    private fun resolvePanelWidthPx(context: Context): Int {
+        val density = context.resources.displayMetrics.density
+        val screenWidthDp = context.resources.displayMetrics.widthPixels / density
+        val desiredDp = (screenWidthDp * 0.78f).toInt().coerceIn(280, 360)
+        return dp(context, desiredDp)
     }
 
     private fun dp(context: Context, value: Int): Int {

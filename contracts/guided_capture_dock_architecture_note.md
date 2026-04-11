@@ -3,6 +3,12 @@
 ## Purpose
 The wizard step overlay and the former live panel are merged into one right-docked Guided Capture Dock so capture guidance and endpoint decisions happen in one continuous flow.
 
+## Migration Map
+- Former `wizard step overlay` content is now rendered in `step_guidance` + `probe_action_bar` at the top of the dock.
+- Former `live candidate panel` content is now rendered as `top_candidate_summary` + `candidate_cards` + `collapsible_correlation_feed`.
+- The old split rendering path is removed from primary UX; `BrowserActivity` delegates to one `GuidedCaptureDockController`.
+- Status badges, missing proof, hints, and step actions stay preserved but are co-located with candidate decisions.
+
 ## Runtime Structure
 - `GuidedCaptureDockController` is the only UI orchestrator between `BrowserActivity`, telemetry data, and dock rendering.
 - `DockShellStateMachine` controls shell visibility and mode transitions.
@@ -23,13 +29,20 @@ The wizard step overlay and the former live panel are merged into one right-dock
 ## Candidate Cards
 - Cards are rendered with `RecyclerView + ListAdapter + DiffUtil` and stable endpoint IDs.
 - Each card keeps independent expand/collapse state.
-- Card header exposes role/template/score/confidence/evidence plus actions: `Select`, `Exclude`, `Test`, `Copy`.
-- Card details expose structured fields: observed examples, rank reasons, field hits, runtime viability, warnings, missing proof links, export readiness.
+- Card header exposes role plus one-tap actions: `Select`, `Exclude`, `Test`, `Copy`.
+- Card body keeps template + score/confidence/evidence visible without expansion.
+- Card details expose structured blocks: observed examples, rank reasons, field hits, runtime viability, warnings, missing proof links, export readiness, endpoint info, and last test result.
 
 ## Correlation Feed
 - Feed is secondary and collapsed by default.
 - Feed can be expanded on demand in expanded mode only.
 - Candidate decision area remains the primary focus.
+
+## Touch and Layout Behavior
+- Dock is right-docked with a persistent handle and responsive width (phone-friendly bounds).
+- Handle supports both tap and swipe expand/collapse gestures.
+- Header controls are split into two rows to avoid dense touch clusters.
+- Browser content remains interactive outside dock bounds; no full-screen modal blocker is used.
 
 ## Clipboard Behavior
 - Candidate copy is one tap and uses `GuidedCaptureDockFormatter.formatCandidate(...)`.

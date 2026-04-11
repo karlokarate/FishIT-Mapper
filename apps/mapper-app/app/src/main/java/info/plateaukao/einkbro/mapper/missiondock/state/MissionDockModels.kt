@@ -68,6 +68,13 @@ data class ProbeSummaryViewState(
     val recentCorrelated: List<RuntimeToolkitTelemetry.LiveCorrelationEntry> = emptyList(),
 )
 
+data class PanelSummaryViewState(
+    val topCandidateHeader: String = "",
+    val topCandidateDetails: String = "",
+    val topCandidateWeaknesses: List<String> = emptyList(),
+    val blockers: List<String> = emptyList(),
+)
+
 data class CandidateCardViewState(
     val endpointId: String,
     val role: String,
@@ -136,5 +143,6 @@ data class GuidedCaptureDockPanelState(
     val shell: DockShellState,
     val step: StepGuidanceViewState,
     val probe: ProbeSummaryViewState,
+    val panelSummary: PanelSummaryViewState = PanelSummaryViewState(),
     val candidates: List<CandidateCardViewState>,
 )

@@ -59,47 +59,34 @@ class MissionDockCandidateAdapter(
             }
         }
 
+        val headerRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        root.addView(
+            headerRow,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
         val title = TextView(context).apply {
             textSize = 11f
             setTextColor(ContextCompat.getColor(context, android.R.color.black))
         }
-        root.addView(title)
-
-        val meta = TextView(context).apply {
-            textSize = 10f
-            setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
-        }
-        root.addView(meta)
-
-        val badges = TextView(context).apply {
-            textSize = 10f
-            setTextColor(ContextCompat.getColor(context, android.R.color.holo_orange_dark))
-        }
-        root.addView(
-            badges,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = dp(context, 2) },
+        headerRow.addView(
+            title,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = dp(context, 4)
+            },
         )
-
-        val detail = TextView(context).apply {
-            textSize = 10f
-            visibility = View.GONE
-        }
-        root.addView(detail)
 
         val actionRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.START
+            gravity = Gravity.END
         }
-        root.addView(
-            actionRow,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = dp(context, 4) },
-        )
+        headerRow.addView(actionRow)
 
         val selectButton = createButton(context)
         val excludeButton = createButton(context)
@@ -110,12 +97,65 @@ class MissionDockCandidateAdapter(
         actionRow.addView(testButton, buttonParams(context))
         actionRow.addView(copyButton, buttonParams(context))
 
+        val template = TextView(context).apply {
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(context, android.R.color.black))
+        }
+        root.addView(template, topMargin(context, 3))
+
+        val metrics = TextView(context).apply {
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
+        }
+        root.addView(metrics, topMargin(context, 2))
+
+        val badges = TextView(context).apply {
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(context, android.R.color.holo_orange_dark))
+        }
+        root.addView(badges, topMargin(context, 2))
+
+        val detailContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        root.addView(detailContainer, topMargin(context, 4))
+
+        val observedExamples = detailBlock(context)
+        val rankReasons = detailBlock(context)
+        val fieldHits = detailBlock(context)
+        val runtimeViability = detailBlock(context)
+        val warnings = detailBlock(context)
+        val missingProof = detailBlock(context)
+        val exportReadiness = detailBlock(context)
+        val endpointInfo = detailBlock(context)
+        val testResult = detailBlock(context)
+        detailContainer.addView(observedExamples)
+        detailContainer.addView(rankReasons, topMargin(context, 2))
+        detailContainer.addView(fieldHits, topMargin(context, 2))
+        detailContainer.addView(runtimeViability, topMargin(context, 2))
+        detailContainer.addView(warnings, topMargin(context, 2))
+        detailContainer.addView(missingProof, topMargin(context, 2))
+        detailContainer.addView(exportReadiness, topMargin(context, 2))
+        detailContainer.addView(endpointInfo, topMargin(context, 2))
+        detailContainer.addView(testResult, topMargin(context, 2))
+
         return CandidateViewHolder(
             root = root,
             title = title,
-            meta = meta,
+            template = template,
+            metrics = metrics,
             badges = badges,
-            detail = detail,
+            detailContainer = detailContainer,
+            observedExamples = observedExamples,
+            rankReasons = rankReasons,
+            fieldHits = fieldHits,
+            runtimeViability = runtimeViability,
+            warnings = warnings,
+            missingProof = missingProof,
+            exportReadiness = exportReadiness,
+            endpointInfo = endpointInfo,
+            testResult = testResult,
             selectButton = selectButton,
             excludeButton = excludeButton,
             testButton = testButton,
@@ -133,17 +173,16 @@ class MissionDockCandidateAdapter(
             else -> "CANDIDATE"
         }
         holder.title.text = "$rolePrefix · ${item.role.uppercase(Locale.ROOT)}"
-        holder.meta.text = buildString {
-            append(item.generalizedTemplate)
-            append('\n')
+        holder.template.text = item.generalizedTemplate
+        holder.metrics.text = buildString {
             append("score=")
             append(item.score.toInt())
-            append(" conf=")
+            append("  conf=")
             append(String.format(Locale.ROOT, "%.2f", item.confidence))
-            append(" ev=")
+            append("  ev=")
             append(item.evidenceCount)
             if (item.operation.isNotBlank()) {
-                append(" op=")
+                append("  op=")
                 append(item.operation)
             }
         }
@@ -174,38 +213,17 @@ class MissionDockCandidateAdapter(
             ColorStateList.valueOf(ContextCompat.getColor(context, tint)),
         )
 
-        holder.detail.visibility = if (item.expanded) View.VISIBLE else View.GONE
-        holder.detail.text = buildString {
-            append("observed_examples=")
-            append(item.observedExamples.joinToString(" | ").ifBlank { "-" })
-            append('\n')
-            append("rank_reasons=")
-            append(item.rankReasons.joinToString(", ").ifBlank { "-" })
-            append('\n')
-            append("field_hits=")
-            append(item.fieldHits.joinToString(", ").ifBlank { "-" })
-            append('\n')
-            append("runtime_viability=")
-            append(item.runtimeViability)
-            append('\n')
-            append("warnings=")
-            append(item.warnings.joinToString(", ").ifBlank { "-" })
-            append('\n')
-            append("missing_proof=")
-            append(item.missingProof.joinToString(", ").ifBlank { "-" })
-            append('\n')
-            append("export_readiness=")
-            append(item.exportReadiness)
-            append('\n')
-            append("host=")
-            append(item.host)
-            append(" path=")
-            append(item.path)
-            append('\n')
-            append("operation=")
-            append(item.operation.ifBlank { "-" })
-            append('\n')
-            append("test=")
+        holder.detailContainer.visibility = if (item.expanded) View.VISIBLE else View.GONE
+        holder.observedExamples.text = "Observed examples: ${item.observedExamples.joinToString(" | ").ifBlank { "-" }}"
+        holder.rankReasons.text = "Rank reasons: ${item.rankReasons.joinToString(", ").ifBlank { "-" }}"
+        holder.fieldHits.text = "Field hits: ${item.fieldHits.joinToString(", ").ifBlank { "-" }}"
+        holder.runtimeViability.text = "Runtime viability: ${item.runtimeViability}"
+        holder.warnings.text = "Warnings: ${item.warnings.joinToString(", ").ifBlank { "-" }}"
+        holder.missingProof.text = "Missing proof linkage: ${item.missingProof.joinToString(", ").ifBlank { "-" }}"
+        holder.exportReadiness.text = "Export readiness: ${item.exportReadiness}"
+        holder.endpointInfo.text = "Endpoint: ${item.method.uppercase(Locale.ROOT)} ${item.host}${item.path} | operation=${item.operation.ifBlank { "-" }}"
+        holder.testResult.text = buildString {
+            append("Last test: ")
             item.testResult?.let { result ->
                 append("${result.status} ${result.durationMillis}ms size=${result.sizeBytes} mime=${result.mimeType} ok=${result.ok}")
             } ?: append("-")
@@ -249,9 +267,19 @@ class MissionDockCandidateAdapter(
     class CandidateViewHolder(
         val root: LinearLayout,
         val title: TextView,
-        val meta: TextView,
+        val template: TextView,
+        val metrics: TextView,
         val badges: TextView,
-        val detail: TextView,
+        val detailContainer: LinearLayout,
+        val observedExamples: TextView,
+        val rankReasons: TextView,
+        val fieldHits: TextView,
+        val runtimeViability: TextView,
+        val warnings: TextView,
+        val missingProof: TextView,
+        val exportReadiness: TextView,
+        val endpointInfo: TextView,
+        val testResult: TextView,
         val selectButton: TextView,
         val excludeButton: TextView,
         val testButton: TextView,
@@ -266,7 +294,22 @@ class MissionDockCandidateAdapter(
             setPadding(dp(context, 6), dp(context, 4), dp(context, 6), dp(context, 4))
             setTextColor(ContextCompat.getColor(context, android.R.color.black))
             minHeight = dp(context, 48)
+            minWidth = dp(context, 58)
         }
+    }
+
+    private fun detailBlock(context: Context): TextView {
+        return TextView(context).apply {
+            textSize = 10f
+            setTextColor(ContextCompat.getColor(context, android.R.color.black))
+        }
+    }
+
+    private fun topMargin(context: Context, value: Int): LinearLayout.LayoutParams {
+        return LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(context, value) }
     }
 
     private fun buttonParams(context: Context): LinearLayout.LayoutParams {

@@ -44,8 +44,8 @@ class GuidedCaptureDockBinder(
                         downX = event.rawX
                     }
                     MotionEvent.ACTION_UP -> {
-                        val delta = downX - event.rawX
-                        if (delta > 28f * context.resources.displayMetrics.density) {
+                        val delta = kotlin.math.abs(downX - event.rawX)
+                        if (delta > 24f * context.resources.displayMetrics.density) {
                             callbacks.onHandleSwipe()
                             return true
                         }
@@ -132,6 +132,7 @@ class GuidedCaptureDockBinder(
 
     private fun renderStepState(state: GuidedCaptureDockPanelState) {
         val step = state.step
+        val panelSummary = state.panelSummary
         views.title.text = "${safeString(R.string.mapper_wizard_live_title, "Live Panel")} · ${step.stepTitle}"
         views.statusBadge.text = step.saturationState
         views.saturationPercent.text = "${step.progress}%"
@@ -163,17 +164,18 @@ class GuidedCaptureDockBinder(
         }
         views.stepStatus.text = step.statusText
         views.stepExportReadiness.text = "Export: ${step.exportReadiness}"
-        views.stepCandidateInsight.text = buildString {
-            if (step.topCandidateSummary.isNotBlank()) {
-                append("Top candidate: ")
-                append(step.topCandidateSummary)
-            }
-            if (step.blockersSummary.isNotBlank()) {
-                if (isNotBlank()) append(" | ")
-                append("Blockers: ")
-                append(step.blockersSummary)
-            }
-        }.ifBlank { "Top candidate: -" }
+        views.topCandidateHeader.text = panelSummary.topCandidateHeader.ifBlank { "Top candidate: -" }
+        views.topCandidateDetails.text = panelSummary.topCandidateDetails.ifBlank { "Template: -" }
+        views.topCandidateWeaknesses.text = if (panelSummary.topCandidateWeaknesses.isEmpty()) {
+            "Weaknesses: -"
+        } else {
+            "Weaknesses: ${panelSummary.topCandidateWeaknesses.joinToString(", ")}"
+        }
+        views.topCandidateBlockers.text = if (panelSummary.blockers.isEmpty()) {
+            "Blockers: -"
+        } else {
+            "Blockers: ${panelSummary.blockers.joinToString(" | ")}"
+        }
         val stateColor = when (step.saturationState) {
             RuntimeToolkitMissionWizard.SATURATION_SATURATED -> android.R.color.holo_green_dark
             RuntimeToolkitMissionWizard.SATURATION_BLOCKED -> android.R.color.holo_red_dark

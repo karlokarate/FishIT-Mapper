@@ -1,0 +1,410 @@
+task:
+  id: guided_capture_panel_visual_restructure_from_current_ui
+  title: Bestehendes Mapper-UI visuell und strukturell in ein einziges Guided Capture Dock Panel überführen
+  type: implementation
+  priority: high
+  objective: >
+    Nimm das aktuell bestehende UI mit separatem Wizard-/Step-Fenster und separatem
+    Live-/Kandidatenfenster als Grundlage und baue es in ein einziges, rechtsseitiges,
+    einklappbares Guided Capture Dock Panel um. Das neue Panel muss die vorhandenen
+    Funktionen bewahren, aber die Bedienung auf Android deutlich flüssiger machen,
+    den Browser nicht mehr blockieren und Step-Status, Missing Proof, Hints,
+    Kandidatenauswahl und Actions in einem einzigen durchgehenden Arbeitsfluss vereinen.
+
+  context:
+    current_ui_observations:
+      - separate_wizard_step_window_exists
+      - separate_live_candidate_window_exists
+      - both_windows_overlap_functionally
+      - overlays_block_browser_navigation_too_much
+      - step_guidance_and_candidate_selection_are_visually_separated
+      - candidate_information_is_useful_but_not_structured_enough_for_fast_decisions
+      - android_touch_usage_is_possible_but_not_fluid_enough
+    target_outcome:
+      - one_guided_capture_panel
+      - right_docked
+      - collapsible
+      - browser_remains_usable
+      - step_guidance_and_candidate_selection_in_one_flow
+      - copy_to_clipboard_in_one_tap
+
+  scope:
+    includes:
+      - current_wizard_window
+      - current_live_panel_window
+      - current_candidate_rendering
+      - current_probe_actions
+      - current_correlation_feed
+      - current_missing_proof_rendering
+      - current_status_badges
+      - current_touch_interaction_model
+      - current_clipboard_related_ui_if_any
+    excludes:
+      - analyzer_logic_refactor
+      - candidate_scoring_refactor
+      - builder_logic_refactor
+      - fishit_player_changes
+      - backend_api_refactor
+      - unrelated_theme_cleanup
+
+  constraints:
+    - preserve_existing_probe_logic
+    - preserve_existing_candidate_actions_select_exclude_test
+    - preserve_existing_step_actions_start_ready_check_pause_next
+    - browser_must_remain_visible_and_interactable
+    - do_not_keep_two_separate_primary_overlays
+    - do_not_require_adb_or_external_control
+    - ui_must_be_android_touch_friendly
+    - copy_to_clipboard_must_be_one_tap
+    - changes_must_be_incremental_from_current_ui_not_total_rewrite
+
+  success_criteria:
+    - current_wizard_window_is_absorbed_into_new_panel
+    - current_live_window_is_absorbed_into_new_panel
+    - no_second_primary_overlay_remains
+    - browser_can_be_used_while_panel_is_open
+    - top_step_information_is_always_visible
+    - candidates_are_structured_as_expandable_cards
+    - candidate_details_are_collapsible_individually
+    - panel_can_be_collapsed_to_a_visible_handle
+    - panel_can_be_reopened_quickly
+    - copy_candidate_and_copy_summary_are_one_tap
+    - mobile_touch_interaction_is_practical
+
+  deliverables:
+    required:
+      - guided_capture_dock_panel
+      - merged_step_guidance_section
+      - merged_candidate_section
+      - dock_handle
+      - candidate_cards
+      - candidate_card_details
+      - panel_header_actions
+      - clipboard_actions
+      - updated_layouts_or_composables
+      - updated_interaction_logic
+      - focused_ui_tests
+      - ui_architecture_note
+    optional:
+      - peek_mode
+      - compact_top_candidate_summary
+      - compare_mode_for_top_two_candidates
+
+  design_decisions:
+    keep_from_current_ui:
+      - step_status
+      - saturation_percent
+      - missing_proof
+      - hints
+      - step_actions_start_ready_check_pause_next
+      - correlation_feed
+      - candidate_list
+      - select_exclude_test_actions
+    remove_or_transform:
+      - separate_modal_wizard_window
+      - separate_modal_live_window
+      - full_browser_blocking_overlay_behavior
+      - raw_dense_candidate_text_blobs
+      - default_expanded_everything_behavior
+    new_structure:
+      - header
+      - step_guidance_section
+      - probe_action_bar
+      - top_candidate_summary
+      - candidate_card_list
+      - collapsible_correlation_feed
+      - copy_summary_action
+      - collapse_handle
+
+  tasks:
+    - id: 1
+      title: Bestehende Wizard- und Live-Overlay-Struktur inventarisieren und Migrationspunkte markieren
+      done_when:
+        - all_current_wizard_components_are_listed
+        - all_current_live_panel_components_are_listed
+        - retained_vs_removed_vs_merged_elements_are_mapped
+        - no_unclear_overlap_between_old_windows_remains
+
+    - id: 2
+      title: Neuen gemeinsamen Container GuidedCaptureDockPanel einführen
+      done_when:
+        - one_primary_panel_container_exists
+        - current_wizard_content_can_render_inside_it
+        - current_live_content_can_render_inside_it
+        - old_overlay_roots_are_not_the_primary_path_anymore
+
+    - id: 3
+      title: Rechtes Docking statt zentriertem Overlay umsetzen
+      done_when:
+        - panel_is_docked_to_right_edge
+        - panel_no_longer_opens_in_center_as_main_mode
+        - browser_remains_visible
+        - layout_behaves_on_phone_width
+
+    - id: 4
+      title: Kollabierbaren Handle-Zustand einführen
+      done_when:
+        - collapsed_handle_exists
+        - handle_is_always_visible
+        - handle_shows_current_probe_status
+        - tap_or_swipe_reopens_panel
+
+    - id: 5
+      title: Step-Guidance aus dem alten Wizard in festen oberen Panelbereich verschieben
+      done_when:
+        - step_name_is_visible
+        - status_badge_is_visible
+        - saturation_percent_is_visible
+        - missing_proof_is_visible
+        - hints_are_visible
+        - export_or_probe_readiness_is_visible_if_available
+
+    - id: 6
+      title: Bestehende Step-Actions in eine kompakte ProbeActionBar übernehmen
+      done_when:
+        - start_button_exists
+        - ready_button_exists
+        - check_button_exists
+        - pause_button_exists
+        - next_button_exists
+        - actions_are_easy_to_tap
+        - actions_work_from_within_the_new_panel
+
+    - id: 7
+      title: Kandidatenbereich aus dem bisherigen Live-Fenster in Card-basiertes Layout überführen
+      done_when:
+        - each_candidate_is_a_card
+        - each_card_has_clear_header
+        - candidate_role_template_score_confidence_are_visible
+        - visual_density_is_reduced
+
+    - id: 8
+      title: Kandidaten-Details pro Card individuell auf- und zuklappbar machen
+      done_when:
+        - each_card_has_independent_expand_state
+        - each_card_has_independent_collapse_state
+        - opening_one_card_does_not_open_all_cards
+        - long_candidate_content_is_scrollable
+
+    - id: 9
+      title: Kandidaten-Card-Inhalt in Entscheidungsblöcke strukturieren
+      done_when:
+        - generalized_template_is_visible
+        - observed_examples_are_visible
+        - rank_reasons_are_visible
+        - field_hits_are_visible
+        - runtime_viability_is_visible
+        - warnings_are_visible
+        - missing_proof_linkage_is_visible
+        - export_readiness_or_candidate_quality_is_visible
+
+    - id: 10
+      title: Aktionen Select, Exclude, Test und Copy in den Card-Header integrieren
+      done_when:
+        - select_action_is_present
+        - exclude_action_is_present
+        - test_action_is_present
+        - copy_action_is_present
+        - actions_are_touch_friendly
+
+    - id: 11
+      title: Copy-to-Clipboard pro Kandidat als strukturierte Ein-Klick-Aktion implementieren
+      done_when:
+        - candidate_copy_works_in_one_tap
+        - copied_payload_is_structured_and_useful
+        - visual_feedback_confirms_copy
+        - no_manual_text_selection_is_needed
+
+    - id: 12
+      title: Copy Summary für den gesamten aktuellen Step integrieren
+      done_when:
+        - copy_summary_action_exists_in_header
+        - copied_summary_contains_step_status_missing_proof_hints_top_candidates_and_blockers
+        - copied_summary_is_useful_for_chat_or_codex
+        - visual_feedback_confirms_copy
+
+    - id: 13
+      title: Top-Candidate-Summary zwischen Step-Guidance und Kandidatenliste einführen
+      done_when:
+        - top_candidate_is_highlighted
+        - top_candidate_weaknesses_can_be_shown
+        - missing_proof_can_be_related_to_top_candidate_quality
+        - wizard_context_and_candidate_context_feel_connected
+
+    - id: 14
+      title: Correlation Feed aus dem bisherigen Live-Fenster in einen sekundären, einklappbaren Bereich überführen
+      done_when:
+        - correlation_feed_is_collapsed_by_default
+        - feed_can_be_expanded
+        - feed_is_below_candidates_or_low_priority
+        - feed_no_longer_pushes_important_decision_ui_out_of_view
+
+    - id: 15
+      title: Touch-Interaktion auf Android gezielt härten
+      done_when:
+        - tap_targets_are_large_enough
+        - drag_or_swipe_for_panel_expand_collapse_is_practical
+        - panel_can_be_used_one_handed
+        - no_precise_pointer_behavior_is_required_for_basic_use
+
+    - id: 16
+      title: Browser bleibt parallel benutzbar
+      done_when:
+        - browser_can_be_scrolled_while_panel_is_open
+        - panel_captures_only_its_own_touch_area
+        - taps_outside_panel_do_not_break_navigation
+        - panel_can_stay_open_while_user_moves_through_site
+
+    - id: 17
+      title: Status-, Blocker- und Missing-Proof-Darstellung strukturieren
+      done_when:
+        - blocked_state_is_clear
+        - degraded_state_is_clear
+        - missing_proof_items_are_listed_cleanly
+        - reasons_why_export_or_step_is_not_ready_are_readable
+
+    - id: 18
+      title: Datenmodell für den neuen UI-Fluss vereinheitlichen
+      done_when:
+        - guided_capture_dock_panel_state_exists
+        - step_guidance_view_state_exists
+        - candidate_card_view_state_exists
+        - panel_summary_view_state_exists
+        - ui_primary_rendering_no_longer_depends_on_raw_text_dump
+
+    - id: 19
+      title: Clipboard-Formatierung in eigene Formatter-Schicht auslagern
+      done_when:
+        - candidate_clipboard_formatter_exists
+        - panel_summary_clipboard_formatter_exists
+        - ui_widgets_do_not_build_copy_payloads_inline
+
+    - id: 20
+      title: Dokumentation und UI-Tests ergänzen
+      done_when:
+        - architecture_note_added
+        - merged_panel_behavior_documented
+        - collapse_expand_behavior_tested
+        - card_actions_tested
+        - step_actions_tested
+        - copy_actions_tested
+        - mobile_touch_use_cases_tested
+
+  required_sections_in_final_panel:
+    - header
+    - step_guidance
+    - probe_action_bar
+    - top_candidate_summary
+    - candidate_cards
+    - collapsible_correlation_feed
+
+  required_candidate_card_fields:
+    header:
+      - role
+      - generalizedTemplate
+      - score
+      - confidence
+      - evidenceCount
+      - actionSelect
+      - actionExclude
+      - actionTest
+      - actionCopy
+    details:
+      - observedExamples
+      - rankReasons
+      - fieldHits
+      - runtimeViability
+      - warnings
+      - missingProof
+      - exportReadiness
+
+  required_step_guidance_fields:
+    - stepName
+    - status
+    - saturationPercent
+    - missingProof
+    - hints
+    - exportReadiness
+    - actionsStartReadyCheckPauseNext
+
+  clipboard_contract:
+    candidate_copy_minimum:
+      - role
+      - generalized_template
+      - operation_name_if_present
+      - confidence
+      - evidence_count
+      - field_hits
+      - runtime_viability
+      - warnings
+    panel_summary_copy_minimum:
+      - probe_name
+      - status
+      - saturation_percent
+      - missing_proof
+      - hints
+      - top_candidates
+      - blockers_if_any
+
+  ui_behavior_rules:
+    - panel_defaults_to_collapsed_or_peek_not_full_modal
+    - step_guidance_section_is_above_candidate_list
+    - correlation_feed_defaults_to_collapsed
+    - candidate_cards_default_to_collapsed_details
+    - top_candidate_should_be_visible_without_scrolling_when_possible
+    - copy_actions_must_not_require_text_selection
+    - browser_navigation_must_remain_possible_while_panel_is_open
+    - step_actions_must_be_accessible_without_opening_a_second_window
+
+  anti_patterns_to_remove:
+    - separate_modal_wizard_window
+    - separate_modal_live_panel_window
+    - full_screen_modal_overlay_blocking_browser
+    - one_large_text_blob_for_candidates
+    - correlation_feed_above_everything_else_by_default
+    - no_copy_to_clipboard_path
+    - all_candidates_expanded_at_once
+    - requiring_manual_copy_from_raw_text
+
+  review_checklist:
+    - id: R1
+      check: wizard_and_live_panel_no_longer_exist_as_separate_windows
+    - id: R2
+      check: panel_no_longer_blocks_entire_browser
+    - id: R3
+      check: collapsed_handle_visible_and_reopenable
+    - id: R4
+      check: candidate_cards_expand_independently
+    - id: R5
+      check: copy_candidate_works_in_one_tap
+    - id: R6
+      check: copy_panel_summary_works_in_one_tap
+    - id: R7
+      check: touch_interactions_are_practical_on_android
+    - id: R8
+      check: select_exclude_test_actions_still_work
+    - id: R9
+      check: feed_is_secondary_and_collapsible
+    - id: R10
+      check: top_candidate_is_easy_to_compare_against_others
+    - id: R11
+      check: blocked_or_missing_proof_reasons_are_structured_and_readable
+    - id: R12
+      check: step_actions_are_integrated_in_same_panel_as_candidates
+
+  final_report_requirements:
+    - list_all_changed_files
+    - explain_new_panel_states_collapsed_peek_expanded
+    - explain_how_wizard_and_live_panel_were_merged
+    - explain_new_step_guidance_section
+    - explain_new_candidate_card_structure
+    - explain_copy_to_clipboard_behavior
+    - explain_mobile_touch_behavior_changes
+    - explain_any_remaining_limitations
+
+  success_definition: >
+    The task is successful only if the previous separate wizard window and live panel are replaced
+    by one right-docked collapsible Guided Capture Dock Panel, browser navigation remains possible
+    while it is open, step guidance and candidate selection are presented in one continuous flow,
+    candidate details are independently collapsible, and both per-candidate and whole-panel summaries
+    are copyable to the clipboard in one action.
