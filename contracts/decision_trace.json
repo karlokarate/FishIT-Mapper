@@ -387,6 +387,20 @@
       ],
       "superseded_by": null,
       "summary": "The right-docked guided capture panel now uses responsive width, persistent handle gestures, two-row header controls, an explicit top-candidate summary section between step guidance and candidate list, and card-header one-tap actions with structured detail blocks so wizard guidance and endpoint decisions stay in one continuous Android-friendly flow without restoring split overlays."
+    },
+    {
+      "id": "DEC-0028",
+      "aliases": [
+        "ADR-0028",
+        "MAPPER-FEED-COLLECTION-FIRST-MODELING",
+        "MAPPER-CATALOG-FIRST-SELECTION-SYNC-DERIVATION"
+      ],
+      "title": "Source-pipeline derivation is feed-/collection-first and maps richer internal catalog signals into final runtime roles",
+      "status": "accepted",
+      "date": "2026-04-11",
+      "supersedes": [],
+      "superseded_by": null,
+      "summary": "Exporter and live telemetry now infer internal signal types (entry_surface, collection_feed, item_summary, item_detail, playback_resolution, search_results, account_or_policy) plus topology hints, derive selection/sync entities from entry surfaces and collection-feed evidence, emit catalog_model layers in endpoint_candidates.json, and tighten role inference so browse surfaces stay catalog-first while detail/playback remain true enrichment and resolver-chain outputs."
     }
   ]
 }

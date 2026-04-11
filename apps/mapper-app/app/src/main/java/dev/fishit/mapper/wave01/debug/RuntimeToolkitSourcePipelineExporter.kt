@@ -62,6 +62,8 @@ object RuntimeToolkitSourcePipelineExporter {
         val normalizedPath: String,
         val requestOperation: String,
         val phaseRelevance: MutableSet<String> = linkedSetOf(),
+        val internalSignals: MutableSet<String> = linkedSetOf(),
+        val topologyHints: MutableSet<String> = linkedSetOf(),
         val requestEventIds: MutableList<String> = mutableListOf(),
         val responseEventIds: MutableList<String> = mutableListOf(),
         val hostClassSignals: MutableSet<String> = linkedSetOf(),
@@ -145,6 +147,38 @@ object RuntimeToolkitSourcePipelineExporter {
         "refresh" to 1,
         "config" to 1,
         "helper" to 0,
+    )
+
+    private val entrySurfacePaths = setOf(
+        "/",
+        "/suche",
+        "/kategorien",
+        "/serien",
+        "/dokus",
+        "/kinder",
+        "/live-tv",
+        "/mein-zdf",
+    )
+
+    private val browseRootSegments = setOf(
+        "kategorien",
+        "serien",
+        "dokus",
+        "kinder",
+        "live-tv",
+        "livetv",
+        "themen",
+        "rubriken",
+        "mein-zdf",
+    )
+
+    private data class CatalogSelectionEntity(
+        val selectionKey: String,
+        val displayName: String,
+        val surfaceKind: String,
+        val linkedEndpointRefs: List<String>,
+        val collectionFeedRefs: List<String>,
+        val confidence: Double,
     )
 
     fun ensureSourcePipelineArtifacts(runtimeRoot: File, targetSiteHint: String = ""): ExportArtifacts {
@@ -269,6 +303,17 @@ object RuntimeToolkitSourcePipelineExporter {
                 )
             }
             endpoint.phaseRelevance += request.phaseId
+            endpoint.internalSignals += inferInternalSignalsForRequest(
+                role = role,
+                phaseId = request.phaseId,
+                operation = request.operation,
+                path = request.normalizedPath,
+                url = request.url,
+            )
+            endpoint.topologyHints += inferTopologyHints(
+                operation = request.operation,
+                path = request.normalizedPath,
+            )
             if (request.hostClass.isNotBlank()) {
                 endpoint.hostClassSignals += request.hostClass
             }
@@ -346,6 +391,11 @@ object RuntimeToolkitSourcePipelineExporter {
                 if (response.hostClass.isNotBlank()) {
                     endpoint.hostClassSignals += response.hostClass
                 }
+                endpoint.internalSignals += inferInternalSignalsFromResponse(response)
+                endpoint.topologyHints += inferTopologyHints(
+                    operation = response.operation,
+                    path = response.normalizedPath,
+                )
                 if (response.mimeType.isNotBlank()) {
                     endpoint.responseMimeTypes += response.mimeType.lowercase(Locale.ROOT)
                 }
@@ -438,7 +488,14 @@ object RuntimeToolkitSourcePipelineExporter {
                         put("requiredProvenanceInputs", JSONArray(effectiveRequiredProvenanceInputs.toList()))
                         put("sourceEvidenceRefs", JSONArray((endpoint.requestEventIds.map { "request:$it" } + endpoint.responseEventIds.map { "response:$it" }).take(20)))
                         put("confidence", endpoint.confidence)
-                        put("notes", JSONArray())
+                        put(
+                            "notes",
+                            JSONArray(
+                                (endpoint.internalSignals.map { "signal:$it" } + endpoint.topologyHints.map { "topology:$it" })
+                                    .distinct()
+                                    .sorted(),
+                            ),
+                        )
                     },
                 )
 
@@ -741,25 +798,46 @@ object RuntimeToolkitSourcePipelineExporter {
             if (supportsHome) {
                 val homeIds = roleById.entries.filter { it.value == "home" }.map { it.key }
                 val detailIds = roleById.entries.filter { it.value == "detail" }.map { it.key }
-                val selectionKey = "/"
+                val selectionEntities = buildCatalogSelectionEntities(
+                    requests = requests,
+                    endpointsForBundle = endpointsForBundle,
+                )
+                val defaultSelectionKeys = selectionEntities
+                    .filter { it.selectionKey.isNotBlank() }
+                    .map { it.selectionKey }
+                    .ifEmpty { listOf("/") }
+                val collectionFeedRefs = selectionEntities
+                    .flatMap { it.collectionFeedRefs }
+                    .distinct()
+                    .sorted()
                 put(
                     "selectionModel",
                     JSONObject().apply {
                         put("selectionMode", "route")
                         put(
                             "selectionEntities",
-                            JSONArray().put(
-                                JSONObject().apply {
-                                    put("entityType", "home_route")
-                                    put("selectionKey", selectionKey)
-                                    put("displayName", "Default Home")
-                                    put("defaultSelected", true)
-                                    put("linkedEndpointRefs", JSONArray(homeIds.take(3)))
-                                },
-                            ),
+                            JSONArray().apply {
+                                selectionEntities.forEachIndexed { index, entity ->
+                                    put(
+                                        JSONObject().apply {
+                                            put("entityType", entity.surfaceKind)
+                                            put("selectionKey", entity.selectionKey)
+                                            put("displayName", entity.displayName)
+                                            put("defaultSelected", index == 0)
+                                            put("linkedEndpointRefs", JSONArray(entity.linkedEndpointRefs))
+                                            put("collectionFeedRefs", JSONArray(entity.collectionFeedRefs))
+                                            put("confidence", entity.confidence)
+                                        },
+                                    )
+                                }
+                            },
                         )
-                        put("defaultSelectionKeys", JSONArray().put(selectionKey))
-                        put("selectionConfidence", 0.7)
+                        put("defaultSelectionKeys", JSONArray(defaultSelectionKeys))
+                        put(
+                            "selectionConfidence",
+                            (selectionEntities.map { it.confidence }.average().takeIf { !it.isNaN() } ?: 0.7)
+                                .coerceIn(0.5, 0.95),
+                        )
                     },
                 )
                 put(
@@ -770,8 +848,13 @@ object RuntimeToolkitSourcePipelineExporter {
                         put("supportsIncrementalSync", true)
                         put("homeEndpointRefs", JSONArray(homeIds.take(3)))
                         put("detailEnrichmentEndpointRefs", JSONArray(detailIds.take(3)))
-                        put("defaultSelectionKeys", JSONArray().put(selectionKey))
-                        put("syncConfidence", 0.7)
+                        put("collectionFeedRefs", JSONArray(collectionFeedRefs))
+                        put("defaultSelectionKeys", JSONArray(defaultSelectionKeys))
+                        put(
+                            "syncConfidence",
+                            ((if (collectionFeedRefs.isNotEmpty()) 0.78 else 0.68) + (if (detailIds.isNotEmpty()) 0.06 else 0.0))
+                                .coerceIn(0.55, 0.9),
+                        )
                     },
                 )
             }
@@ -837,6 +920,72 @@ object RuntimeToolkitSourcePipelineExporter {
             manifestPath = manifestPath,
             sourcePluginBundleZipPath = sourcePluginBundleZipPath,
         )
+    }
+
+    private fun buildCatalogSelectionEntities(
+        requests: List<RequestEvent>,
+        endpointsForBundle: List<EndpointAggregate>,
+    ): List<CatalogSelectionEntity> {
+        val homeEndpointRefs = endpointsForBundle
+            .filter { canonicalRole(it.role) == "home" }
+            .sortedByDescending { it.confidence }
+            .map { it.endpointId }
+
+        val collectionFeeds = endpointsForBundle
+            .filter { "collection_feed" in it.internalSignals || "item_summary" in it.internalSignals }
+            .sortedByDescending { endpoint ->
+                endpoint.confidence + (endpoint.responseOkCount * 0.05) + (if ("entry_surface" in endpoint.internalSignals) 0.08 else 0.0)
+            }
+            .map { it.endpointId }
+
+        val byPath = requests
+            .asSequence()
+            .filter { it.method == "GET" }
+            .filter { !isLikelyStaticAssetPath(it.normalizedPath, it.url) }
+            .filter { !isTrackingSignal(it.operation, it.normalizedPath) }
+            .filter { isCollectionBrowsePath(it.normalizedPath) }
+            .groupBy { it.normalizedPath }
+
+        val inferredEntities = byPath.entries.map { (path, items) ->
+            val hints = items.flatMap { inferTopologyHints(it.operation, it.normalizedPath) }
+            val surfaceKind = inferEntrySurfaceKind(path)
+            val linked = homeEndpointRefs.filter { endpointId ->
+                val endpoint = endpointsForBundle.firstOrNull { it.endpointId == endpointId } ?: return@filter false
+                endpoint.normalizedPath == path || endpoint.normalizedPath == "/" || "entry_surface" in endpoint.internalSignals
+            }.take(3)
+            val feedRefs = collectionFeeds.filter { endpointId ->
+                val endpoint = endpointsForBundle.firstOrNull { it.endpointId == endpointId } ?: return@filter false
+                endpoint.normalizedPath == path || hints.any { hint -> hint in endpoint.topologyHints } || endpoint.phaseRelevance.contains("home_probe")
+            }.take(4)
+            CatalogSelectionEntity(
+                selectionKey = path,
+                displayName = surfaceLabelFromPath(path),
+                surfaceKind = surfaceKind,
+                linkedEndpointRefs = linked.ifEmpty { homeEndpointRefs.take(3) },
+                collectionFeedRefs = feedRefs.ifEmpty { collectionFeeds.take(3) },
+                confidence = (0.62 + (items.size.coerceAtMost(6) * 0.04) + (if (path == "/") 0.14 else 0.0)).coerceIn(0.5, 0.95),
+            )
+        }
+
+        val defaultEntity = CatalogSelectionEntity(
+            selectionKey = "/",
+            displayName = "Home",
+            surfaceKind = "home",
+            linkedEndpointRefs = homeEndpointRefs.take(3),
+            collectionFeedRefs = collectionFeeds.take(4),
+            confidence = if (homeEndpointRefs.isNotEmpty()) 0.8 else 0.65,
+        )
+
+        val merged = (listOf(defaultEntity) + inferredEntities)
+            .groupBy { it.selectionKey }
+            .mapNotNull { (_, entries) -> entries.maxByOrNull { it.confidence } }
+            .sortedWith(
+                compareByDescending<CatalogSelectionEntity> { if (it.selectionKey == "/") 1 else 0 }
+                    .thenByDescending { it.confidence }
+                    .thenBy { it.selectionKey.lowercase(Locale.ROOT) },
+            )
+
+        return merged.take(6)
     }
 
     private fun validateExportGates(
@@ -1340,10 +1489,11 @@ object RuntimeToolkitSourcePipelineExporter {
         val authMode = sessionAuth.optString("authMode", "none")
 
         val providerEndpointTemplates = JSONArray()
+        val catalogTemplateInputs = JSONArray()
         endpointTemplates.forEach { endpoint ->
             val endpointId = endpoint.optString("endpointId")
+            if (endpointId.isBlank()) return@forEach
             val providerRole = bundleRoleToProviderRole(endpoint.optString("role"))
-            if (endpointId.isBlank() || providerRole.isBlank()) return@forEach
 
             val queryTemplate = JSONObject()
             val bodyTemplate = JSONObject()
@@ -1369,11 +1519,58 @@ object RuntimeToolkitSourcePipelineExporter {
                     ref.startsWith("response:") -> responseIds.put(ref.removePrefix("response:"))
                 }
             }
+            val internalSignals = jsonStrings(endpoint.optJSONArray("notes"))
+                .filter { it.startsWith("signal:") }
+                .map { it.removePrefix("signal:") }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .sorted()
+            val topologyHints = jsonStrings(endpoint.optJSONArray("notes"))
+                .filter { it.startsWith("topology:") }
+                .map { it.removePrefix("topology:") }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .sorted()
             val requiredPhase = jsonStrings(endpoint.optJSONArray("phaseRelevance"))
                 .firstOrNull()
                 ?.ifBlank { null }
                 ?: "background_noise"
 
+            val catalogRole = bundleRoleToCatalogRole(endpoint.optString("role"))
+            if (catalogRole.isNotBlank()) {
+                catalogTemplateInputs.put(
+                    JSONObject().apply {
+                        put("template_id", endpointId)
+                        put("endpoint_role", catalogRole)
+                        put("normalized_host", endpoint.optString("normalizedHost"))
+                        put("normalized_path", endpoint.optString("normalizedPath"))
+                        put("method", endpoint.optString("method", "GET"))
+                        put("request_operation", endpoint.optString("requestOperation"))
+                        endpoint.opt("graphqlOperationName")
+                            ?.takeIf { it != JSONObject.NULL }
+                            ?.toString()
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { put("graphql_operation_name", it) }
+                        put("internal_signal_types", JSONArray(internalSignals))
+                        put("route_topology_hints", JSONArray(topologyHints))
+                        if (queryTemplate.length() > 0) put("stable_query_template", queryTemplate)
+                        if (bodyTemplate.length() > 0) put("stable_body_template", bodyTemplate)
+                        put("variable_placeholders", variablePlaceholders)
+                        put("required_phase_relevance", requiredPhase)
+                        put("required_provenance_inputs", endpoint.optJSONArray("requiredProvenanceInputs") ?: JSONArray())
+                        put("confidence", endpoint.optDouble("confidence", 0.0))
+                        put(
+                            "source_evidence_refs",
+                            JSONObject().apply {
+                                put("request_ids", requestIds)
+                                put("response_ids", responseIds)
+                            },
+                        )
+                    },
+                )
+            }
+
+            if (providerRole.isBlank()) return@forEach
             providerEndpointTemplates.put(
                 JSONObject().apply {
                     put("template_id", endpointId)
@@ -1387,6 +1584,8 @@ object RuntimeToolkitSourcePipelineExporter {
                         ?.toString()
                         ?.takeIf { it.isNotBlank() }
                         ?.let { put("graphql_operation_name", it) }
+                    put("internal_signal_types", JSONArray(internalSignals))
+                    put("route_topology_hints", JSONArray(topologyHints))
                     if (queryTemplate.length() > 0) put("stable_query_template", queryTemplate)
                     if (bodyTemplate.length() > 0) put("stable_body_template", bodyTemplate)
                     put("variable_placeholders", variablePlaceholders)
@@ -1608,6 +1807,7 @@ object RuntimeToolkitSourcePipelineExporter {
                 put("generated_at_utc", generatedAt)
                 put("target_site_id", targetSiteId)
                 put("candidates", providerEndpointTemplates)
+                put("catalog_model", buildCatalogModelFromProviderTemplates(catalogTemplateInputs))
             },
         )
         writeJson(
@@ -1637,6 +1837,257 @@ object RuntimeToolkitSourcePipelineExporter {
         writeJson(runtimeRoot, "replay_bundle.json", replayBundle)
         writeJson(runtimeRoot, "response_index.json", responseIndex)
         writeJson(runtimeRoot, "fixture_manifest.json", fixtureManifest)
+    }
+
+    private fun buildCatalogModelFromProviderTemplates(providerEndpointTemplates: JSONArray): JSONObject {
+        data class TemplateInfo(
+            val templateId: String,
+            val role: String,
+            val path: String,
+            val host: String,
+            val signals: Set<String>,
+            val topology: Set<String>,
+            val confidence: Double,
+            val hasStableQueryTemplate: Boolean,
+            val requiredRuntimeInputs: JSONArray,
+        )
+
+        data class SurfaceAccumulator(
+            val surfaceId: String,
+            val routePattern: String,
+            var displayLabel: String,
+            var surfaceKind: String,
+            var contentBearing: Boolean,
+            val linkedCollectionFeedRefs: LinkedHashSet<String> = linkedSetOf(),
+        )
+
+        val templates = jsonObjects(providerEndpointTemplates)
+            .sortedBy { it.optString("template_id").lowercase(Locale.ROOT) }
+            .mapNotNull { template ->
+                val templateId = template.optString("template_id").trim()
+                if (templateId.isBlank()) return@mapNotNull null
+                TemplateInfo(
+                    templateId = templateId,
+                    role = template.optString("endpoint_role").trim(),
+                    path = normalizeRoutePath(template.optString("normalized_path")),
+                    host = template.optString("normalized_host").trim(),
+                    signals = jsonStrings(template.optJSONArray("internal_signal_types")).toSet(),
+                    topology = jsonStrings(template.optJSONArray("route_topology_hints")).toSet(),
+                    confidence = template.optDouble("confidence", 0.0),
+                    hasStableQueryTemplate = (template.optJSONObject("stable_query_template")?.length() ?: 0) > 0,
+                    requiredRuntimeInputs = template.optJSONArray("required_provenance_inputs") ?: JSONArray(),
+                )
+            }
+
+        val surfacesById = linkedMapOf<String, SurfaceAccumulator>()
+        val surfaceIdByRoute = linkedMapOf<String, String>()
+
+        fun ensureSurface(routePatternRaw: String, explicitKind: String? = null): String {
+            val routePattern = normalizeRoutePath(routePatternRaw)
+            val surfaceId = surfaceIdByRoute[routePattern] ?: "surface_${shortHash("route|$routePattern")}"
+            val existing = surfacesById[surfaceId]
+            if (existing != null) {
+                if (explicitKind != null && existing.surfaceKind == "unknown") {
+                    existing.surfaceKind = explicitKind
+                }
+                existing.contentBearing = true
+                surfaceIdByRoute.putIfAbsent(routePattern, surfaceId)
+                return surfaceId
+            }
+            val kind = explicitKind ?: inferEntrySurfaceKind(routePattern)
+            val created = SurfaceAccumulator(
+                surfaceId = surfaceId,
+                routePattern = routePattern,
+                displayLabel = surfaceLabelFromPath(routePattern),
+                surfaceKind = kind,
+                contentBearing = true,
+            )
+            surfacesById[surfaceId] = created
+            surfaceIdByRoute[routePattern] = surfaceId
+            return surfaceId
+        }
+
+        fun inferSurfaceRoute(info: TemplateInfo): String {
+            if ("entry_surface" in info.signals && info.path in entrySurfacePaths) return info.path
+            if (info.path in entrySurfacePaths) return info.path
+            return when {
+                info.role == "search" || "search_results" in info.signals || info.path.contains("/suche") || info.path.contains("/search") -> "/suche"
+                info.path.contains("/kategorien") -> "/kategorien"
+                info.path.contains("/serien") -> "/serien"
+                info.path.contains("/dokus") -> "/dokus"
+                info.path.contains("/kinder") -> "/kinder"
+                info.path.contains("/live-tv") || info.path.contains("/livetv") -> "/live-tv"
+                info.path.contains("/mein-zdf") || info.role == "auth_or_refresh" || "account_or_policy" in info.signals -> "/mein-zdf"
+                else -> "/"
+            }
+        }
+
+        fun collectionKind(info: TemplateInfo): String {
+            return when {
+                "search_results" in info.signals || info.role == "search" -> "search_results_collection"
+                "tabbed_collection" in info.topology -> "tabbed_collection"
+                "faceted_collection" in info.topology -> "faceted_collection"
+                "grid_collection" in info.topology -> "grid"
+                "category_collection" in info.topology -> "category_collection"
+                "row_or_rail" in info.topology -> "row"
+                inferSurfaceRoute(info) == "/live-tv" -> "live_collection"
+                else -> "row"
+            }
+        }
+
+        templates
+            .filter { "entry_surface" in it.signals }
+            .forEach { info ->
+                ensureSurface(info.path, inferEntrySurfaceKind(info.path))
+            }
+        if (templates.any { "collection_feed" in it.signals || "item_summary" in it.signals || it.role == "home" }) {
+            ensureSurface("/")
+        }
+        if (templates.any { it.role == "search" || "search_results" in it.signals }) {
+            ensureSurface("/suche", "search_entry")
+        }
+        listOf("/kategorien", "/serien", "/dokus", "/kinder", "/live-tv", "/mein-zdf")
+            .forEach { route ->
+                if (templates.any { inferSurfaceRoute(it) == route }) {
+                    ensureSurface(route, inferEntrySurfaceKind(route))
+                }
+            }
+
+        val collectionFeeds = linkedMapOf<String, JSONObject>()
+        fun feedIdFor(info: TemplateInfo): String = "feed_${shortHash("${info.templateId}|${info.path}")}"
+        fun ensureCollectionFeed(info: TemplateInfo): String {
+            val feedId = feedIdFor(info)
+            if (collectionFeeds.containsKey(feedId)) return feedId
+            val sourceSurfaceRoute = inferSurfaceRoute(info)
+            val sourceSurfaceRef = ensureSurface(sourceSurfaceRoute, inferEntrySurfaceKind(sourceSurfaceRoute))
+            collectionFeeds[feedId] = JSONObject().apply {
+                put("collectionFeedId", feedId)
+                put("sourceSurfaceRef", sourceSurfaceRef)
+                put("collectionKind", collectionKind(info))
+                put("displayLabel", surfaceLabelFromPath(sourceSurfaceRoute))
+                put("routeOrEndpointRef", info.templateId)
+                put("itemSummaryShape", if ("item_summary" in info.signals) "title+image+canonical" else "unknown")
+                put("filterModel", if (info.role == "search" || "search_results" in info.signals) "query_driven" else "none")
+                put("paginationModel", if (info.hasStableQueryTemplate) "query_param" else "unknown")
+                put("confidence", info.confidence)
+            }
+            surfacesById[sourceSurfaceRef]?.linkedCollectionFeedRefs?.add(feedId)
+            return feedId
+        }
+
+        templates
+            .filter { "collection_feed" in it.signals || "search_results" in it.signals }
+            .forEach { ensureCollectionFeed(it) }
+
+        val itemSummarySources = JSONArray()
+        templates
+            .filter { "item_summary" in it.signals }
+            .forEach { info ->
+                val sourceFeedRef = ensureCollectionFeed(info)
+                itemSummarySources.put(
+                    JSONObject().apply {
+                        put("itemSummarySourceId", "summary_${shortHash("${info.templateId}|${info.path}")}")
+                        put("sourceCollectionFeedRef", sourceFeedRef)
+                        put("endpointRef", info.templateId)
+                        put("summaryHints", JSONArray(listOf("title", "artwork", "canonicalOrRoute", "badges")))
+                        put("confidence", info.confidence)
+                    },
+                )
+            }
+
+        val detailSources = JSONArray()
+        templates
+            .filter { "item_detail" in it.signals || it.role == "detail" }
+            .forEach { info ->
+                detailSources.put(
+                    JSONObject().apply {
+                        put("detailSourceId", "detail_${shortHash("${info.templateId}|${info.path}")}")
+                        put("canonicalKey", "canonical")
+                        put("detailEndpointRef", info.templateId)
+                        put("detailFieldMap", JSONArray(listOf("title", "description", "metadata")))
+                        put("confidence", info.confidence)
+                    },
+                )
+            }
+
+        val playbackSources = JSONArray()
+        templates
+            .filter {
+                "playback_resolution" in it.signals ||
+                    it.role == "playback_resolver" ||
+                    it.role == "playback"
+            }
+            .forEach { info ->
+                playbackSources.put(
+                    JSONObject().apply {
+                        put("playbackSourceId", "playback_${shortHash("${info.templateId}|${info.path}")}")
+                        put("playbackHintSource", if (info.path.contains("/ptmd/") || info.path.contains("/tmd/")) "resolver" else "manifest")
+                        put("resolverEndpointRef", info.templateId)
+                        put("manifestRefs", JSONArray())
+                        put("requiredRuntimeInputs", info.requiredRuntimeInputs)
+                        put("browserContextRequired", false)
+                        put("confidence", info.confidence)
+                    },
+                )
+            }
+
+        val accountPolicySources = JSONArray()
+        templates
+            .filter { "account_or_policy" in it.signals || it.role == "auth_or_refresh" || it.role == "config" }
+            .forEach { info ->
+                accountPolicySources.put(
+                    JSONObject().apply {
+                        put("sourceId", "account_${shortHash("${info.templateId}|${info.path}")}")
+                        put("endpointRef", info.templateId)
+                        put("authMode", if (info.role == "auth_or_refresh") "session_or_token" else "none")
+                        put("confidence", info.confidence)
+                    },
+                )
+            }
+
+        val entrySurfaces = JSONArray()
+        surfacesById.values
+            .sortedWith(
+                compareBy<SurfaceAccumulator> { it.routePattern != "/" }
+                    .thenBy { it.routePattern.lowercase(Locale.ROOT) },
+            )
+            .forEach { surface ->
+                entrySurfaces.put(
+                    JSONObject().apply {
+                        put("surfaceId", surface.surfaceId)
+                        put("routePattern", surface.routePattern)
+                        put("displayLabel", surface.displayLabel)
+                        put("surfaceKind", surface.surfaceKind)
+                        put("contentBearing", surface.contentBearing)
+                        put("linkedCollectionFeedRefs", JSONArray(surface.linkedCollectionFeedRefs.toList().sorted()))
+                    },
+                )
+            }
+
+        val collectionFeedArray = JSONArray()
+        collectionFeeds.values.forEach { collectionFeedArray.put(it) }
+
+        return JSONObject().apply {
+            put("entry_surfaces", dedupeJsonObjects(entrySurfaces, "surfaceId"))
+            put("collection_feeds", dedupeJsonObjects(collectionFeedArray, "collectionFeedId"))
+            put("item_summary_sources", dedupeJsonObjects(itemSummarySources, "itemSummarySourceId"))
+            put("item_detail_sources", dedupeJsonObjects(detailSources, "detailSourceId"))
+            put("playback_resolution_sources", dedupeJsonObjects(playbackSources, "playbackSourceId"))
+            put("account_policy_sources", dedupeJsonObjects(accountPolicySources, "sourceId"))
+        }
+    }
+
+    private fun dedupeJsonObjects(input: JSONArray, idKey: String): JSONArray {
+        val out = JSONArray()
+        val seen = linkedSetOf<String>()
+        for (idx in 0 until input.length()) {
+            val item = input.optJSONObject(idx) ?: continue
+            val key = item.optString(idKey).ifBlank { shortHash(item.toString()) }
+            if (seen.add(key)) {
+                out.put(item)
+            }
+        }
+        return out
     }
 
     private fun toProviderFieldMatrix(
@@ -1953,6 +2404,15 @@ object RuntimeToolkitSourcePipelineExporter {
             "detail" -> "detail"
             "playbackResolver", "playback_resolver" -> "playback_resolver"
             "auth", "refresh" -> "auth_or_refresh"
+            else -> ""
+        }
+    }
+
+    private fun bundleRoleToCatalogRole(role: String): String {
+        return when (role.trim()) {
+            "playbackResolver", "playback_resolver" -> "playback_resolver"
+            "auth", "refresh" -> "auth_or_refresh"
+            "home", "search", "detail", "config", "helper" -> role.trim()
             else -> ""
         }
     }
@@ -3445,19 +3905,20 @@ object RuntimeToolkitSourcePipelineExporter {
     private fun isDetailSignal(operation: String, path: String): Boolean {
         val op = operation.lowercase(Locale.ROOT)
         val loweredPath = path.lowercase(Locale.ROOT)
+        if (isCollectionBrowsePath(loweredPath)) return false
         return op.contains("detail") ||
             op.contains("episode") ||
             op.contains("canonical") ||
             op.contains("video") ||
             op.contains("content") ||
+            op.contains("media_by_canonical") ||
+            op.contains("getvideo") ||
             loweredPath.contains("/detail") ||
             loweredPath.contains("/content/") ||
             loweredPath.contains("/video/") ||
             loweredPath.contains("/episode/") ||
-            loweredPath.contains("/reportagen/") ||
-            loweredPath.contains("/dokus/") ||
             loweredPath.contains("/filme/") ||
-            loweredPath.contains("/serien/")
+            looksLikeSingleItemPath(loweredPath)
     }
 
     private fun isHomeSignal(operation: String, path: String): Boolean {
@@ -3496,6 +3957,257 @@ object RuntimeToolkitSourcePipelineExporter {
             context.contains("/event")
     }
 
+    private fun normalizeRoutePath(path: String): String {
+        val trimmed = path.trim().ifBlank { "/" }
+        if (trimmed == "/") return "/"
+        return "/" + trimmed.trim('/').lowercase(Locale.ROOT)
+    }
+
+    private fun routeSegments(path: String): List<String> {
+        return normalizeRoutePath(path)
+            .trim('/')
+            .split('/')
+            .filter { it.isNotBlank() }
+    }
+
+    private fun isCollectionBrowsePath(path: String): Boolean {
+        val normalized = normalizeRoutePath(path)
+        if (normalized in entrySurfacePaths) return true
+        val segments = routeSegments(path)
+        if (segments.isEmpty()) return normalized == "/"
+        val first = segments.first()
+        if (first in browseRootSegments && segments.size == 1) return true
+        if (first in browseRootSegments && segments.size == 2 && segments.last() in setOf("alle", "neu", "top", "beliebt")) return true
+        return false
+    }
+
+    private fun looksLikeSingleItemPath(path: String): Boolean {
+        val segments = routeSegments(path)
+        if (segments.size < 2) return false
+        if (isCollectionBrowsePath(path)) return false
+        val last = segments.last()
+        if (last in setOf("index", "overview", "alle", "top", "neu")) return false
+        if (Regex(".*-\\d{2,}$").matches(last)) return true
+        val contentPrefix = segments.dropLast(1).lastOrNull().orEmpty()
+        if (contentPrefix in setOf("reportagen", "dokus", "filme", "serien", "video", "videos", "episode", "episoden")) {
+            return last.length >= 8 && last.any { it.isDigit() }
+        }
+        return false
+    }
+
+    private fun hasCollectionPayloadHints(body: String): Boolean {
+        if (body.isBlank()) return false
+        return body.contains("\"rows\"") ||
+            body.contains("\"rails\"") ||
+            body.contains("\"clusters\"") ||
+            body.contains("\"teasers\"") ||
+            body.contains("\"results\"") ||
+            body.contains("\"items\":[{") ||
+            body.contains("\"edges\":[{")
+    }
+
+    private fun hasSingleItemPayloadHints(body: String): Boolean {
+        if (body.isBlank()) return false
+        val hasIdentity =
+            body.contains("\"canonical\"") ||
+                body.contains("\"canonicalid\"") ||
+                body.contains("\"contentid\"") ||
+                body.contains("\"videoid\"")
+        val hasTitle = body.contains("\"title\"") || body.contains("\"headline\"")
+        val looksCollection = hasCollectionPayloadHints(body)
+        return hasIdentity && hasTitle && !looksCollection
+    }
+
+    private fun inferInternalSignalsForRequest(
+        role: String,
+        phaseId: String,
+        operation: String,
+        path: String,
+        url: String,
+    ): Set<String> {
+        val signals = linkedSetOf<String>()
+        val normalizedRole = canonicalRole(role)
+        val op = operation.lowercase(Locale.ROOT)
+        val normalizedPath = path.lowercase(Locale.ROOT)
+        val context = "$op $normalizedPath $url".lowercase(Locale.ROOT)
+
+        val entrySurface = normalizedPath in entrySurfacePaths
+        val searchSignal = isSearchSignal(op, normalizedPath)
+        val detailSignal = isDetailSignal(op, normalizedPath)
+        val collectionSignal =
+            op.contains("collection") ||
+                op.contains("rail") ||
+                op.contains("row") ||
+                op.contains("cluster") ||
+                op.contains("teaser") ||
+                op.contains("facet") ||
+                op.contains("tab") ||
+                op.contains("grid") ||
+                op.contains("catalog") ||
+                isCollectionBrowsePath(normalizedPath)
+        val playbackSignal =
+            context.contains("/ptmd/") ||
+                context.contains("/tmd/") ||
+                context.contains("resolver") ||
+                context.contains("manifest") ||
+                normalizedPath.endsWith(".m3u8") ||
+                normalizedPath.endsWith(".mpd")
+        val accountPolicySignal =
+            normalizedRole in setOf("auth", "refresh", "config", "helper") ||
+                context.contains("auth") ||
+                context.contains("login") ||
+                context.contains("token") ||
+                context.contains("identity") ||
+                context.contains("geo") ||
+                context.contains("policy") ||
+                context.contains("fsk")
+
+        if (entrySurface) signals += "entry_surface"
+        if (collectionSignal && !playbackSignal) signals += "collection_feed"
+        if ((searchSignal || normalizedRole == "search") && !playbackSignal) signals += "search_results"
+        if (detailSignal && !collectionSignal && !playbackSignal && !searchSignal) signals += "item_detail"
+        if (playbackSignal) signals += "playback_resolution"
+        if (accountPolicySignal) signals += "account_or_policy"
+        if ((collectionSignal || searchSignal || entrySurface) && !playbackSignal && !accountPolicySignal) {
+            signals += "item_summary"
+        }
+
+        val normalizedPhase = normalizePhaseId(phaseId)
+        if (signals.isEmpty() && normalizedPhase == "home_probe") {
+            val homeLikeRoute = isCollectionBrowsePath(normalizedPath)
+            val homeLikeOperation =
+                op.contains("home") ||
+                    op.contains("start") ||
+                    op.contains("collection") ||
+                    op.contains("rail") ||
+                    op.contains("row") ||
+                    op.contains("cluster") ||
+                    op.contains("teaser") ||
+                    op.contains("category")
+            if (homeLikeRoute) signals += "entry_surface"
+            if (homeLikeRoute || homeLikeOperation) signals += "collection_feed"
+        } else if (signals.isEmpty() && normalizedPhase == "search_probe") {
+            signals += "search_results"
+            signals += "item_summary"
+        } else if (signals.isEmpty() && normalizedPhase == "detail_probe") {
+            signals += "item_detail"
+        } else if (signals.isEmpty() && normalizedPhase == "playback_probe") {
+            signals += "playback_resolution"
+        } else if (signals.isEmpty() && normalizedPhase == "auth_probe") {
+            signals += "account_or_policy"
+        }
+
+        return signals
+    }
+
+    private fun inferInternalSignalsFromResponse(response: ResponseEvent): Set<String> {
+        val signals = linkedSetOf<String>()
+        val op = response.operation.lowercase(Locale.ROOT)
+        val path = response.normalizedPath.lowercase(Locale.ROOT)
+        val route = response.routeKind.lowercase(Locale.ROOT)
+        val body = response.bodyPreview.lowercase(Locale.ROOT)
+        val collectionPayload = hasCollectionPayloadHints(body)
+        val singleItemPayload = hasSingleItemPayloadHints(body)
+        if (path in entrySurfacePaths) signals += "entry_surface"
+        if (
+            route.contains("home") ||
+                route.contains("category") ||
+                route.contains("search") ||
+                op.contains("collection") ||
+                op.contains("rail") ||
+                op.contains("cluster")
+        ) {
+            signals += "collection_feed"
+        }
+        if (collectionPayload) signals += "collection_feed"
+        if (
+            route.contains("search") ||
+                op.contains("search") ||
+                body.contains("\"results\"") ||
+                body.contains("\"search\"")
+        ) {
+            signals += "search_results"
+        }
+        if (
+            body.contains("\"title\"") &&
+                (body.contains("\"canonical") || body.contains("\"teaser") || body.contains("\"image")) &&
+                ("collection_feed" in signals || "search_results" in signals || collectionPayload)
+        ) {
+            signals += "item_summary"
+        }
+        if (
+            (op.contains("detail") || route.contains("detail") || singleItemPayload || looksLikeSingleItemPath(path)) &&
+            !route.contains("category") &&
+            "collection_feed" !in signals &&
+            !collectionPayload &&
+            !isCollectionBrowsePath(path)
+        ) {
+            signals += "item_detail"
+        }
+        if (
+            path.contains("/ptmd/") ||
+                path.contains("/tmd/") ||
+                op.contains("resolver") ||
+                body.contains("manifesturl") ||
+                path.endsWith(".m3u8") ||
+                path.endsWith(".mpd")
+        ) {
+            signals += "playback_resolution"
+        }
+        if (
+            route.contains("auth") ||
+                op.contains("auth") ||
+                op.contains("login") ||
+                op.contains("token") ||
+                path.contains("/auth/") ||
+                path.contains("/oauth/")
+        ) {
+            signals += "account_or_policy"
+        }
+        return signals
+    }
+
+    private fun inferTopologyHints(operation: String, path: String): Set<String> {
+        val hints = linkedSetOf<String>()
+        val op = operation.lowercase(Locale.ROOT)
+        val normalizedPath = path.lowercase(Locale.ROOT)
+        if (op.contains("row") || op.contains("rail") || op.contains("cluster")) hints += "row_or_rail"
+        if (op.contains("tab") || normalizedPath.contains("/tabs")) hints += "tabbed_collection"
+        if (op.contains("facet") || op.contains("filter")) hints += "faceted_collection"
+        if (op.contains("grid") || normalizedPath.contains("/grid")) hints += "grid_collection"
+        if (normalizedPath.contains("/kategorien") || normalizedPath.contains("/serien") || normalizedPath.contains("/dokus") || normalizedPath.contains("/kinder") || op.contains("category")) {
+            hints += "category_collection"
+        }
+        if (normalizedPath in entrySurfacePaths) hints += "entry_surface_route"
+        return hints
+    }
+
+    private fun inferEntrySurfaceKind(path: String): String {
+        return when (path.lowercase(Locale.ROOT)) {
+            "/" -> "home"
+            "/suche" -> "search_entry"
+            "/kategorien" -> "categories_entry"
+            "/mein-zdf" -> "account_entry"
+            "/live-tv" -> "live_entry"
+            "/serien", "/dokus", "/kinder" -> "vertical_entry"
+            else -> "unknown"
+        }
+    }
+
+    private fun surfaceLabelFromPath(path: String): String {
+        return when (path.lowercase(Locale.ROOT)) {
+            "/" -> "Home"
+            "/suche" -> "Suche"
+            "/kategorien" -> "Kategorien"
+            "/serien" -> "Serien"
+            "/dokus" -> "Dokus"
+            "/kinder" -> "Kinder"
+            "/live-tv" -> "Live TV"
+            "/mein-zdf" -> "Mein ZDF"
+            else -> path.trim('/').replace('-', ' ').replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
+        }.ifBlank { "Entry" }
+    }
+
     private fun inferRole(phaseId: String, operation: String, normalizedPath: String, url: String): String {
         val loweredOperation = operation.lowercase(Locale.ROOT)
         val loweredPath = normalizedPath.lowercase(Locale.ROOT)
@@ -3523,13 +4235,13 @@ object RuntimeToolkitSourcePipelineExporter {
         if (lowered.contains("config") || lowered.contains("/settings") || lowered.contains("/configuration")) {
             return "config"
         }
-        if (isDetailSignal(loweredOperation, loweredPath)) {
-            return "detail"
-        }
         if (isSearchSignal(loweredOperation, loweredPath)) {
             return "search"
         }
-        if (isHomeSignal(loweredOperation, loweredPath)) return "home"
+        if (isHomeSignal(loweredOperation, loweredPath) || isCollectionBrowsePath(loweredPath)) return "home"
+        if (isDetailSignal(loweredOperation, loweredPath)) {
+            return "detail"
+        }
         val byPhase = roleFromPhase(phaseId)
         if (byPhase != "helper") return byPhase
         return "helper"
@@ -3738,11 +4450,29 @@ object RuntimeToolkitSourcePipelineExporter {
         val operation = endpoint.requestOperation.lowercase(Locale.ROOT)
         val path = endpoint.normalizedPath.lowercase(Locale.ROOT)
         val context = "$operation $path"
+        val signals = endpoint.internalSignals
         return when (role) {
-            "home" -> isSearchSignal(operation, path) || isDetailSignal(operation, path) || isLiveOrCategorySignal(operation, path) || isTrackingSignal(operation, path)
-            "search" -> isLiveOrCategorySignal(operation, path) || isDetailSignal(operation, path) || operation.contains("live_catalog") || isTrackingSignal(operation, path)
-            "detail" -> isSearchSignal(operation, path) || isLiveOrCategorySignal(operation, path) || context.contains("playback_manifest") || context.contains("/ptmd/") || context.contains("/tmd/") || isTrackingSignal(operation, path)
-            "playbackResolver" -> isPlaybackNoiseEndpoint(endpoint) || isTrackingSignal(operation, path)
+            "home" -> {
+                isTrackingSignal(operation, path) ||
+                    "playback_resolution" in signals ||
+                    ("item_detail" in signals && "collection_feed" !in signals)
+            }
+            "search" -> {
+                isTrackingSignal(operation, path) ||
+                    "playback_resolution" in signals ||
+                    ("item_detail" in signals && "search_results" !in signals)
+            }
+            "detail" -> {
+                isTrackingSignal(operation, path) ||
+                    "playback_resolution" in signals ||
+                    "collection_feed" in signals ||
+                    "entry_surface" in signals ||
+                    isCollectionBrowsePath(path) ||
+                    context.contains("playback_manifest") ||
+                    context.contains("/ptmd/") ||
+                    context.contains("/tmd/")
+            }
+            "playbackResolver" -> isPlaybackNoiseEndpoint(endpoint) || isTrackingSignal(operation, path) || "collection_feed" in signals
             else -> false
         }
     }
@@ -3752,6 +4482,7 @@ object RuntimeToolkitSourcePipelineExporter {
         val path = endpoint.normalizedPath.lowercase(Locale.ROOT)
         if (isNoiseEndpoint(endpoint)) return false
         if (isRoleCrossContaminated(endpoint)) return false
+        if ("entry_surface" in endpoint.internalSignals || "collection_feed" in endpoint.internalSignals) return true
         if (path == "/" || path.contains("/home")) return true
         if (operation.contains("cluster") || operation.contains("rail") || operation.contains("recommend")) return true
         if (operation.contains("collection") || operation.contains("teaser") || operation.contains("start")) return true
@@ -3765,11 +4496,19 @@ object RuntimeToolkitSourcePipelineExporter {
         val operation = endpoint.requestOperation.lowercase(Locale.ROOT)
         val path = endpoint.normalizedPath.lowercase(Locale.ROOT)
         val context = "$operation $path"
+        val signals = endpoint.internalSignals
         return when (role) {
             "home" -> {
                 var score = 0.0
                 if (path == "/") score += 4.2
                 if (isHomeSignal(operation, path)) score += 3.0
+                if (isCollectionBrowsePath(path)) score += 2.0
+                if ("entry_surface" in signals) score += 2.2
+                if ("collection_feed" in signals) score += 2.8
+                if ("item_summary" in signals) score += 1.5
+                if ("item_detail" in signals) score -= 2.8
+                if ("playback_resolution" in signals) score -= 3.2
+                if ("account_or_policy" in signals) score -= 2.0
                 if (isSearchSignal(operation, path) || isDetailSignal(operation, path) || isLiveOrCategorySignal(operation, path)) score -= 3.2
                 if (isTrackingSignal(operation, path)) score -= 4.0
                 score
@@ -3778,6 +4517,11 @@ object RuntimeToolkitSourcePipelineExporter {
                 var score = 0.0
                 if (isSearchSignal(operation, path)) score += 3.6
                 if (path.contains("/suche")) score += 2.8
+                if ("search_results" in signals) score += 3.2
+                if ("item_summary" in signals) score += 1.6
+                if ("collection_feed" in signals) score += 1.2
+                if ("item_detail" in signals) score -= 2.4
+                if ("playback_resolution" in signals) score -= 3.0
                 if (path.contains("/graphql") && !operation.contains("search")) score -= 2.0
                 if (isLiveOrCategorySignal(operation, path) || isDetailSignal(operation, path)) score -= 3.0
                 if (isTrackingSignal(operation, path)) score -= 4.0
@@ -3786,6 +4530,12 @@ object RuntimeToolkitSourcePipelineExporter {
             "detail" -> {
                 var score = 0.0
                 if (isDetailSignal(operation, path)) score += 3.5
+                if (isCollectionBrowsePath(path)) score -= 3.8
+                if ("item_detail" in signals) score += 3.2
+                if ("collection_feed" in signals) score -= 3.6
+                if ("entry_surface" in signals) score -= 2.8
+                if ("search_results" in signals) score -= 2.5
+                if ("playback_resolution" in signals) score -= 3.4
                 if (path.contains("/graphql") && !isDetailSignal(operation, path)) score -= 1.8
                 if (isSearchSignal(operation, path) || isLiveOrCategorySignal(operation, path)) score -= 2.8
                 if (context.contains("/ptmd/") || context.contains("/tmd/") || context.contains("manifest")) score -= 3.4
@@ -3798,6 +4548,10 @@ object RuntimeToolkitSourcePipelineExporter {
                 if (context.contains("resolver") || context.contains("playback")) score += 2.8
                 if (path.endsWith(".m3u8") || path.endsWith(".mpd")) score += 1.2
                 if (context.contains("manifest")) score += 0.8
+                if ("playback_resolution" in signals) score += 3.5
+                if ("item_detail" in signals) score -= 1.8
+                if ("collection_feed" in signals) score -= 3.0
+                if ("entry_surface" in signals) score -= 3.0
                 if (isPlaybackNoiseEndpoint(endpoint)) score -= 8.0
                 if (isTrackingSignal(operation, path)) score -= 6.0
                 score
@@ -3973,6 +4727,15 @@ object RuntimeToolkitSourcePipelineExporter {
 
         if (selected.size < candidates.size) {
             warnings += "NOISE_ENDPOINTS_DROPPED"
+        }
+        if (selected.any { "collection_feed" in it.internalSignals || "entry_surface" in it.internalSignals }) {
+            warnings += "COLLECTION_FEED_PRIORITY_APPLIED"
+        }
+        if (selected.any { canonicalRole(it.role) == "detail" && "item_detail" in it.internalSignals }) {
+            warnings += "DETAIL_ENRICHMENT_MODELED"
+        }
+        if (selected.any { canonicalRole(it.role) == "playbackResolver" && "playback_resolution" in it.internalSignals }) {
+            warnings += "PLAYBACK_RESOLVER_CHAIN_MODELED"
         }
 
         return EndpointSelection(

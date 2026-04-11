@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260411T200454Z",
+  "generated_at_utc": "2026-04-11T20:04:54Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260411T200454Z"
+  },
+  "scope": "runtime exporter/telemetry hardening + zdf validation",
+  "highlights": [
+    "feed-collection-first alignment, role/noise filtering, live snapshot parity"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260411T175619Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/mapper_feed_collection_first_model.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/zdf_website_funktionsweise.txt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitSourcePipelineExporter.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitTelemetry.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/test/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitSourcePipelineExporterTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/test/java/dev/fishit/mapper/wave01/debug/RuntimeToolkitTelemetryWizardFlowTest.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "contracts/decision_trace.json",
+      "old_path": null
+    }
+  ]
+}

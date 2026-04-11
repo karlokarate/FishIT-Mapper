@@ -46,6 +46,12 @@ class RuntimeToolkitSourcePipelineExporterTest {
         assertTrue(File(runtimeRoot, "response_index.json").exists())
         assertTrue(File(runtimeRoot, "fixture_manifest.json").exists())
 
+        val endpointCandidatesDoc = JSONObject(File(runtimeRoot, "endpoint_candidates.json").readText(Charsets.UTF_8))
+        val catalogModel = endpointCandidatesDoc.optJSONObject("catalog_model")
+        assertNotNull(catalogModel)
+        assertTrue((catalogModel!!.optJSONArray("entry_surfaces")?.length() ?: 0) > 0)
+        assertTrue((catalogModel.optJSONArray("collection_feeds")?.length() ?: 0) > 0)
+
         val bundle = JSONObject(artifacts.sourcePipelineBundlePath.readText(Charsets.UTF_8))
         val manifest = JSONObject(artifacts.manifestPath.readText(Charsets.UTF_8))
 
@@ -190,6 +196,350 @@ class RuntimeToolkitSourcePipelineExporterTest {
             assertTrue("site_runtime_model.json" in names)
             assertTrue("manifest.json" in names)
         }
+    }
+
+    @Test
+    fun exporter_builds_selection_and_sync_model_from_entry_surfaces_and_collection_feeds() {
+        val runtimeRoot = Files.createTempDirectory("rtk_source_bundle_collection_first").toFile()
+        val collectionEvents = listOf(
+            requestEvent(
+                eventId = "evt_req_surface_home",
+                requestId = "req_surface_home",
+                phaseId = "home_probe",
+                url = "https://www.zdf.de/",
+                normalizedPath = "/",
+                operation = "home_entry",
+                headers = mapOf("accept" to "text/html"),
+            ),
+            responseEvent(
+                eventId = "evt_res_surface_home",
+                requestId = "req_surface_home",
+                phaseId = "home_probe",
+                url = "https://www.zdf.de/",
+                normalizedPath = "/",
+                bodyPreview = """<html><title>Startseite</title></html>""",
+            ),
+            requestEvent(
+                eventId = "evt_req_surface_categories",
+                requestId = "req_surface_categories",
+                phaseId = "home_probe",
+                url = "https://www.zdf.de/kategorien",
+                normalizedPath = "/kategorien",
+                operation = "categories_entry",
+                headers = mapOf("accept" to "text/html"),
+            ),
+            responseEvent(
+                eventId = "evt_res_surface_categories",
+                requestId = "req_surface_categories",
+                phaseId = "home_probe",
+                url = "https://www.zdf.de/kategorien",
+                normalizedPath = "/kategorien",
+                bodyPreview = """{"rows":[{"title":"Dokus","canonicalId":"cid_doku"}]}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_collection_rail",
+                requestId = "req_collection_rail",
+                phaseId = "home_probe",
+                url = "https://api.zdf.de/graphql",
+                normalizedPath = "/graphql",
+                operation = "home_collection_rail",
+                headers = mapOf("accept" to "application/json"),
+            ),
+            responseEvent(
+                eventId = "evt_res_collection_rail",
+                requestId = "req_collection_rail",
+                phaseId = "home_probe",
+                url = "https://api.zdf.de/graphql",
+                normalizedPath = "/graphql",
+                bodyPreview = """{"rows":[{"title":"Top-Serien","items":[{"title":"Serie 1","canonicalId":"s1"}]}]}""",
+            ),
+        ).joinToString(separator = "\n", postfix = "\n")
+        File(runtimeRoot, "events/runtime_events.jsonl").apply {
+            parentFile?.mkdirs()
+            writeText(buildRuntimeEventsFixture().trimEnd() + "\n" + collectionEvents, Charsets.UTF_8)
+        }
+
+        val artifacts = RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+            runtimeRoot = runtimeRoot,
+            targetSiteHint = "zdf.de",
+        )
+        val bundle = JSONObject(artifacts.sourcePipelineBundlePath.readText(Charsets.UTF_8))
+        val selectionModel = bundle.optJSONObject("selectionModel")
+        assertNotNull(selectionModel)
+        val entities = selectionModel!!.optJSONArray("selectionEntities") ?: JSONArray()
+        assertTrue(entities.length() >= 2)
+        val selectionKeys = mutableSetOf<String>()
+        forEachObject(entities) { entity ->
+            val key = entity.optString("selectionKey")
+            if (key.isNotBlank()) selectionKeys += key
+            assertTrue((entity.optJSONArray("linkedEndpointRefs")?.length() ?: 0) > 0)
+        }
+        assertTrue("/" in selectionKeys)
+        assertTrue("/kategorien" in selectionKeys)
+
+        val syncModel = bundle.optJSONObject("syncModel")
+        assertNotNull(syncModel)
+        val collectionFeedRefs = syncModel!!.optJSONArray("collectionFeedRefs") ?: JSONArray()
+        assertTrue(collectionFeedRefs.length() > 0)
+    }
+
+    @Test
+    fun exporter_selection_entities_do_not_include_api_or_graphql_paths() {
+        val runtimeRoot = Files.createTempDirectory("rtk_source_bundle_selection_routes").toFile()
+        File(runtimeRoot, "events/runtime_events.jsonl").apply {
+            parentFile?.mkdirs()
+            writeText(buildRuntimeEventsFixture(), Charsets.UTF_8)
+        }
+
+        val artifacts = RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+            runtimeRoot = runtimeRoot,
+            targetSiteHint = "zdf.de",
+        )
+        val bundle = JSONObject(artifacts.sourcePipelineBundlePath.readText(Charsets.UTF_8))
+        val selectionEntities = bundle
+            .optJSONObject("selectionModel")
+            ?.optJSONArray("selectionEntities")
+            ?: JSONArray()
+
+        val selectionKeys = mutableSetOf<String>()
+        forEachObject(selectionEntities) { entity ->
+            val key = entity.optString("selectionKey")
+            if (key.isNotBlank()) selectionKeys += key
+        }
+
+        assertFalse(selectionKeys.any { it.startsWith("/api/") })
+        assertFalse(selectionKeys.any { it.contains("graphql") })
+    }
+
+    @Test
+    fun exporter_treats_browse_surfaces_as_catalog_inputs_and_keeps_playback_chain_clean() {
+        val runtimeRoot = Files.createTempDirectory("rtk_source_bundle_feed_vs_detail").toFile()
+        val extraEvents = listOf(
+            requestEvent(
+                eventId = "evt_req_browse_series_root",
+                requestId = "req_browse_series_root",
+                phaseId = "detail_probe",
+                url = "https://www.zdf.de/serien",
+                normalizedPath = "/serien",
+                operation = "series_collection_entry",
+                headers = mapOf("accept" to "text/html"),
+            ),
+            responseEvent(
+                eventId = "evt_res_browse_series_root",
+                requestId = "req_browse_series_root",
+                phaseId = "detail_probe",
+                url = "https://www.zdf.de/serien",
+                normalizedPath = "/serien",
+                bodyPreview = """{"rows":[{"title":"Top-Serien","items":[{"title":"Show 1","canonicalId":"show_1"}]}]}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_series_item_detail",
+                requestId = "req_series_item_detail",
+                phaseId = "detail_probe",
+                url = "https://www.zdf.de/serien/kommissar-meyer-102",
+                normalizedPath = "/serien/kommissar-meyer-102",
+                operation = "detail_page_load",
+                headers = mapOf("accept" to "text/html"),
+            ),
+            responseEvent(
+                eventId = "evt_res_series_item_detail",
+                requestId = "req_series_item_detail",
+                phaseId = "detail_probe",
+                url = "https://www.zdf.de/serien/kommissar-meyer-102",
+                normalizedPath = "/serien/kommissar-meyer-102",
+                bodyPreview = """{"title":"Kommissar Meyer","canonical":"kommissar-meyer-102","description":"Folge 1"}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_playback_ptmd",
+                requestId = "req_playback_ptmd",
+                phaseId = "playback_probe",
+                url = "https://api.zdf.de/tmd/2/ngplayer_2_5/vod/ptmd/tivi/kommissar-meyer-102",
+                normalizedPath = "/tmd/2/ngplayer_2_5/vod/ptmd/tivi/kommissar-meyer-102",
+                operation = "playback_manifest_fetch",
+                headers = mapOf("accept" to "application/json"),
+                extraPayload = JSONObject().apply {
+                    put("normalized_host", "api.zdf.de")
+                    put("host_class", "target_api")
+                },
+            ),
+            responseEvent(
+                eventId = "evt_res_playback_ptmd",
+                requestId = "req_playback_ptmd",
+                phaseId = "playback_probe",
+                url = "https://api.zdf.de/tmd/2/ngplayer_2_5/vod/ptmd/tivi/kommissar-meyer-102",
+                normalizedPath = "/tmd/2/ngplayer_2_5/vod/ptmd/tivi/kommissar-meyer-102",
+                normalizedHost = "api.zdf.de",
+                hostClass = "target_api",
+                bodyPreview = """{"manifestUrl":"https://zdfvod.akamaized.net/i/mp4/..../master.m3u8"}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_geo_helper",
+                requestId = "req_geo_helper",
+                phaseId = "playback_probe",
+                url = "https://ssl.zdf.de/geo/de/geo.txt",
+                normalizedPath = "/geo/de/geo.txt",
+                operation = "network_request",
+                headers = mapOf("accept" to "text/plain"),
+                extraPayload = JSONObject().apply {
+                    put("normalized_host", "ssl.zdf.de")
+                    put("host_class", "target_secondary")
+                },
+            ),
+            responseEvent(
+                eventId = "evt_res_geo_helper",
+                requestId = "req_geo_helper",
+                phaseId = "playback_probe",
+                url = "https://ssl.zdf.de/geo/de/geo.txt",
+                normalizedPath = "/geo/de/geo.txt",
+                normalizedHost = "ssl.zdf.de",
+                hostClass = "target_secondary",
+                mimeType = "text/plain",
+                bodyPreview = "DE",
+            ),
+        ).joinToString(separator = "\n", postfix = "\n")
+        File(runtimeRoot, "events/runtime_events.jsonl").apply {
+            parentFile?.mkdirs()
+            writeText(buildRuntimeEventsFixture().trimEnd() + "\n" + extraEvents, Charsets.UTF_8)
+        }
+
+        val artifacts = RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+            runtimeRoot = runtimeRoot,
+            targetSiteHint = "zdf.de",
+        )
+        val bundle = JSONObject(artifacts.sourcePipelineBundlePath.readText(Charsets.UTF_8))
+        val endpointTemplates = bundle.getJSONArray("endpointTemplates")
+
+        val detailPaths = mutableListOf<String>()
+        val homePaths = mutableListOf<String>()
+        val playbackPaths = mutableListOf<String>()
+        forEachObject(endpointTemplates) { endpoint ->
+            when (endpoint.optString("role")) {
+                "detail" -> detailPaths += endpoint.optString("normalizedPath")
+                "home" -> homePaths += endpoint.optString("normalizedPath")
+                "playbackResolver", "playback_resolver" -> playbackPaths += endpoint.optString("normalizedPath")
+            }
+        }
+
+        assertTrue(detailPaths.isNotEmpty())
+        assertFalse(detailPaths.any { it == "/serien" || it == "/kategorien" || it == "/live-tv" })
+        assertTrue(homePaths.any { it == "/" || it == "/kategorien" || it == "/serien" })
+        assertTrue(playbackPaths.any { it.contains("/ptmd/") || it.contains("/tmd/") || it.contains("/playback/resolver") })
+        assertFalse(playbackPaths.any { it.endsWith("/geo.txt") || it.contains("/usage-data/") || it.endsWith(".ts") || it.endsWith(".m4s") })
+
+        val candidates = JSONObject(File(runtimeRoot, "endpoint_candidates.json").readText(Charsets.UTF_8))
+        val catalogModel = candidates.optJSONObject("catalog_model")
+        assertNotNull(catalogModel)
+        val entrySurfaces = catalogModel!!.optJSONArray("entry_surfaces") ?: JSONArray()
+        val surfaceRoutes = mutableSetOf<String>()
+        forEachObject(entrySurfaces) { surface ->
+            val route = surface.optString("routePattern")
+            if (route.isNotBlank()) surfaceRoutes += route
+        }
+        assertTrue("/" in surfaceRoutes || "/kategorien" in surfaceRoutes || "/serien" in surfaceRoutes)
+    }
+
+    @Test
+    fun exporter_catalog_model_references_are_consistent() {
+        val runtimeRoot = Files.createTempDirectory("rtk_source_bundle_catalog_refs").toFile()
+        File(runtimeRoot, "events/runtime_events.jsonl").apply {
+            parentFile?.mkdirs()
+            writeText(buildRuntimeEventsFixture(), Charsets.UTF_8)
+        }
+
+        RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+            runtimeRoot = runtimeRoot,
+            targetSiteHint = "zdf.de",
+        )
+
+        val endpointCandidatesDoc = JSONObject(File(runtimeRoot, "endpoint_candidates.json").readText(Charsets.UTF_8))
+        val catalogModel = endpointCandidatesDoc.optJSONObject("catalog_model")
+        assertNotNull(catalogModel)
+
+        val entrySurfaces = catalogModel!!.optJSONArray("entry_surfaces") ?: JSONArray()
+        val collectionFeeds = catalogModel.optJSONArray("collection_feeds") ?: JSONArray()
+        val itemSummarySources = catalogModel.optJSONArray("item_summary_sources") ?: JSONArray()
+
+        val surfaceIds = mutableSetOf<String>()
+        forEachObject(entrySurfaces) { surface ->
+            val surfaceId = surface.optString("surfaceId")
+            if (surfaceId.isNotBlank()) surfaceIds += surfaceId
+        }
+        assertTrue(surfaceIds.isNotEmpty())
+
+        val feedIds = mutableSetOf<String>()
+        forEachObject(collectionFeeds) { feed ->
+            val feedId = feed.optString("collectionFeedId")
+            if (feedId.isNotBlank()) feedIds += feedId
+            val sourceSurfaceRef = feed.optString("sourceSurfaceRef")
+            assertTrue(sourceSurfaceRef in surfaceIds)
+        }
+        assertTrue(feedIds.isNotEmpty())
+
+        forEachObject(entrySurfaces) { surface ->
+            val linkedFeedRefs = surface.optJSONArray("linkedCollectionFeedRefs") ?: JSONArray()
+            for (idx in 0 until linkedFeedRefs.length()) {
+                val ref = linkedFeedRefs.optString(idx)
+                if (ref.isNotBlank()) {
+                    assertTrue(ref in feedIds)
+                }
+            }
+        }
+
+        forEachObject(itemSummarySources) { summary ->
+            val sourceCollectionFeedRef = summary.optString("sourceCollectionFeedRef")
+            assertTrue(sourceCollectionFeedRef in feedIds)
+        }
+    }
+
+    @Test
+    fun exporter_catalog_model_keeps_config_policy_sources() {
+        val runtimeRoot = Files.createTempDirectory("rtk_source_bundle_catalog_policy").toFile()
+        val configEvents = listOf(
+            requestEvent(
+                eventId = "evt_req_config",
+                requestId = "req_config",
+                phaseId = "auth_probe",
+                url = "https://www.zdf.de/api/config/settings?lang=de",
+                normalizedPath = "/api/config/settings",
+                operation = "config_settings",
+                headers = mapOf("accept" to "application/json"),
+            ),
+            responseEvent(
+                eventId = "evt_res_config",
+                requestId = "req_config",
+                phaseId = "auth_probe",
+                url = "https://www.zdf.de/api/config/settings?lang=de",
+                normalizedPath = "/api/config/settings",
+                bodyPreview = """{"policy":{"geo":"de"},"settings":{"ui":"default"}}""",
+            ),
+        ).joinToString(separator = "\n", postfix = "\n")
+        File(runtimeRoot, "events/runtime_events.jsonl").apply {
+            parentFile?.mkdirs()
+            writeText(buildRuntimeEventsFixture().trimEnd() + "\n" + configEvents, Charsets.UTF_8)
+        }
+
+        val artifacts = RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+            runtimeRoot = runtimeRoot,
+            targetSiteHint = "zdf.de",
+        )
+        val bundle = JSONObject(artifacts.sourcePipelineBundlePath.readText(Charsets.UTF_8))
+        val configEndpointRefs = mutableSetOf<String>()
+        forEachObject(bundle.optJSONArray("endpointTemplates") ?: JSONArray()) { endpoint ->
+            if (endpoint.optString("role") == "config") {
+                endpoint.optString("endpointId").takeIf { it.isNotBlank() }?.let { configEndpointRefs += it }
+            }
+        }
+        assertTrue(configEndpointRefs.isNotEmpty())
+
+        val endpointCandidatesDoc = JSONObject(File(runtimeRoot, "endpoint_candidates.json").readText(Charsets.UTF_8))
+        val catalogModel = endpointCandidatesDoc.optJSONObject("catalog_model")
+        assertNotNull(catalogModel)
+        val accountPolicySources = catalogModel!!.optJSONArray("account_policy_sources") ?: JSONArray()
+        val policyRefs = mutableSetOf<String>()
+        forEachObject(accountPolicySources) { source ->
+            source.optString("endpointRef").takeIf { it.isNotBlank() }?.let { policyRefs += it }
+        }
+        assertTrue(configEndpointRefs.any { it in policyRefs })
     }
 
     @Test

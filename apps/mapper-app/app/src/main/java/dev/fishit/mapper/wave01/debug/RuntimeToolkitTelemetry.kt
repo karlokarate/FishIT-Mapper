@@ -221,6 +221,8 @@ object RuntimeToolkitTelemetry {
         val queryParamNames: List<String>,
         val bodyFieldNames: List<String>,
         val sampleUrl: String,
+        val internalSignals: List<String> = emptyList(),
+        val topologyHints: List<String> = emptyList(),
     )
 
     data class LiveWizardSnapshot(
@@ -1587,6 +1589,17 @@ object RuntimeToolkitTelemetry {
                     sampleUrl = request.url,
                 )
             }
+            aggregate.internalSignals += inferLiveInternalSignalsForRequest(
+                role = role,
+                phaseId = request.phaseId,
+                operation = request.operation,
+                path = request.normalizedPath,
+                url = request.url,
+            )
+            aggregate.topologyHints += inferLiveTopologyHints(
+                operation = request.operation,
+                path = request.normalizedPath,
+            )
             aggregate.requestEvidenceCount += 1
             aggregate.queryParamNames += request.queryParamNames
             aggregate.bodyFieldNames += request.bodyFieldNames
@@ -1596,6 +1609,11 @@ object RuntimeToolkitTelemetry {
                 if (response.hostClass.isNotBlank()) aggregate.hostClassSignals += response.hostClass
                 if (response.mimeType.isNotBlank()) aggregate.responseMimeTypes += response.mimeType
                 if (response.routeKind.isNotBlank()) aggregate.routeKinds += response.routeKind
+                aggregate.internalSignals += inferLiveInternalSignalsFromResponse(response)
+                aggregate.topologyHints += inferLiveTopologyHints(
+                    operation = response.operation,
+                    path = response.normalizedPath,
+                )
             }
         }
 
@@ -1622,6 +1640,8 @@ object RuntimeToolkitTelemetry {
                 queryParamNames = aggregate.queryParamNames.toList().sorted(),
                 bodyFieldNames = aggregate.bodyFieldNames.toList().sorted(),
                 sampleUrl = aggregate.sampleUrl,
+                internalSignals = aggregate.internalSignals.toList().sorted(),
+                topologyHints = aggregate.topologyHints.toList().sorted(),
             )
         }.sortedWith(
             compareByDescending<LiveEndpointCandidate> { it.score }
@@ -3247,6 +3267,7 @@ object RuntimeToolkitTelemetry {
         val normalizedPath: String,
         val hostClass: String,
         val mimeType: String,
+        val bodyPreview: String,
     )
 
     private data class LiveEndpointAggregate(
@@ -3266,6 +3287,8 @@ object RuntimeToolkitTelemetry {
         val routeKinds: MutableSet<String> = linkedSetOf(),
         val queryParamNames: MutableSet<String> = linkedSetOf(),
         val bodyFieldNames: MutableSet<String> = linkedSetOf(),
+        val internalSignals: MutableSet<String> = linkedSetOf(),
+        val topologyHints: MutableSet<String> = linkedSetOf(),
     )
 
     private fun parseInstant(value: String): Instant? {
@@ -3383,6 +3406,90 @@ object RuntimeToolkitTelemetry {
         }
     }
 
+    private val liveEntrySurfacePaths = setOf(
+        "/",
+        "/suche",
+        "/kategorien",
+        "/serien",
+        "/dokus",
+        "/kinder",
+        "/live-tv",
+        "/mein-zdf",
+    )
+
+    private val liveBrowseRootSegments = setOf(
+        "kategorien",
+        "serien",
+        "dokus",
+        "kinder",
+        "live-tv",
+        "livetv",
+        "themen",
+        "rubriken",
+        "mein-zdf",
+    )
+
+    private fun normalizeLiveRoutePath(path: String): String {
+        val trimmed = path.trim().ifBlank { "/" }
+        if (trimmed == "/") return "/"
+        return "/" + trimmed.trim('/').lowercase(Locale.ROOT)
+    }
+
+    private fun liveRouteSegments(path: String): List<String> {
+        return normalizeLiveRoutePath(path)
+            .trim('/')
+            .split('/')
+            .filter { it.isNotBlank() }
+    }
+
+    private fun isLiveCollectionBrowsePath(path: String): Boolean {
+        val normalized = normalizeLiveRoutePath(path)
+        if (normalized in liveEntrySurfacePaths) return true
+        val segments = liveRouteSegments(path)
+        if (segments.isEmpty()) return normalized == "/"
+        val first = segments.first()
+        if (first in liveBrowseRootSegments && segments.size == 1) return true
+        if (first in liveBrowseRootSegments && segments.size == 2 && segments.last() in setOf("alle", "neu", "top", "beliebt")) return true
+        return false
+    }
+
+    private fun looksLikeLiveSingleItemPath(path: String): Boolean {
+        val segments = liveRouteSegments(path)
+        if (segments.size < 2) return false
+        if (isLiveCollectionBrowsePath(path)) return false
+        val last = segments.last()
+        if (last in setOf("index", "overview", "alle", "top", "neu")) return false
+        if (Regex(".*-\\d{2,}$").matches(last)) return true
+        val contentPrefix = segments.dropLast(1).lastOrNull().orEmpty()
+        if (contentPrefix in setOf("reportagen", "dokus", "filme", "serien", "video", "videos", "episode", "episoden")) {
+            return last.length >= 8 && last.any { it.isDigit() }
+        }
+        return false
+    }
+
+    private fun hasLiveCollectionPayloadHints(body: String): Boolean {
+        if (body.isBlank()) return false
+        return body.contains("\"rows\"") ||
+            body.contains("\"rails\"") ||
+            body.contains("\"clusters\"") ||
+            body.contains("\"teasers\"") ||
+            body.contains("\"results\"") ||
+            body.contains("\"items\":[{") ||
+            body.contains("\"edges\":[{")
+    }
+
+    private fun hasLiveSingleItemPayloadHints(body: String): Boolean {
+        if (body.isBlank()) return false
+        val hasIdentity =
+            body.contains("\"canonical\"") ||
+                body.contains("\"canonicalid\"") ||
+                body.contains("\"contentid\"") ||
+                body.contains("\"videoid\"")
+        val hasTitle = body.contains("\"title\"") || body.contains("\"headline\"")
+        val looksCollection = hasLiveCollectionPayloadHints(body)
+        return hasIdentity && hasTitle && !looksCollection
+    }
+
     private fun isLiveSearchSignal(operation: String, path: String): Boolean {
         val op = operation.lowercase(Locale.ROOT)
         val loweredPath = path.lowercase(Locale.ROOT)
@@ -3395,19 +3502,20 @@ object RuntimeToolkitTelemetry {
     private fun isLiveDetailSignal(operation: String, path: String): Boolean {
         val op = operation.lowercase(Locale.ROOT)
         val loweredPath = path.lowercase(Locale.ROOT)
+        if (isLiveCollectionBrowsePath(loweredPath)) return false
         return op.contains("detail") ||
             op.contains("episode") ||
             op.contains("canonical") ||
             op.contains("video") ||
             op.contains("content") ||
+            op.contains("media_by_canonical") ||
+            op.contains("getvideo") ||
             loweredPath.contains("/detail") ||
             loweredPath.contains("/content/") ||
             loweredPath.contains("/video/") ||
             loweredPath.contains("/episode/") ||
-            loweredPath.contains("/reportagen/") ||
-            loweredPath.contains("/dokus/") ||
             loweredPath.contains("/filme/") ||
-            loweredPath.contains("/serien/")
+            looksLikeLiveSingleItemPath(loweredPath)
     }
 
     private fun isLiveHomeSignal(operation: String, path: String): Boolean {
@@ -3446,16 +3554,169 @@ object RuntimeToolkitTelemetry {
             context.contains("/event")
     }
 
+    private fun inferLiveInternalSignalsForRequest(
+        role: String,
+        phaseId: String,
+        operation: String,
+        path: String,
+        url: String,
+    ): Set<String> {
+        val signals = linkedSetOf<String>()
+        val op = operation.lowercase(Locale.ROOT)
+        val normalizedPath = path.lowercase(Locale.ROOT)
+        val context = "$op $normalizedPath $url".lowercase(Locale.ROOT)
+
+        val entrySurface = normalizedPath in liveEntrySurfacePaths
+        val collectionSignal =
+            op.contains("collection") ||
+                op.contains("rail") ||
+                op.contains("row") ||
+                op.contains("cluster") ||
+                op.contains("teaser") ||
+                op.contains("facet") ||
+                op.contains("tab") ||
+                op.contains("grid") ||
+                op.contains("catalog") ||
+                isLiveCollectionBrowsePath(normalizedPath)
+        val playbackSignal =
+            context.contains("/ptmd/") ||
+                context.contains("/tmd/") ||
+                context.contains("resolver") ||
+                context.contains("manifest") ||
+                normalizedPath.endsWith(".m3u8") ||
+                normalizedPath.endsWith(".mpd")
+        val accountSignal =
+            role in setOf("auth", "refresh", "config", "helper") ||
+                context.contains("auth") ||
+                context.contains("login") ||
+                context.contains("token") ||
+                context.contains("identity")
+
+        if (entrySurface) signals += "entry_surface"
+        if (collectionSignal && !playbackSignal) signals += "collection_feed"
+        if ((isLiveSearchSignal(op, normalizedPath) || role == "search") && !playbackSignal) signals += "search_results"
+        if (isLiveDetailSignal(op, normalizedPath) && !collectionSignal && !playbackSignal) signals += "item_detail"
+        if (playbackSignal) signals += "playback_resolution"
+        if (accountSignal) signals += "account_or_policy"
+        if ((collectionSignal || isLiveSearchSignal(op, normalizedPath) || entrySurface) && !playbackSignal && !accountSignal) {
+            signals += "item_summary"
+        }
+
+        val normalizedPhase = normalizePhaseId(phaseId) ?: PHASE_BACKGROUND
+        if (signals.isEmpty()) {
+            when (normalizedPhase) {
+                "home_probe" -> {
+                    val homeLikeRoute = isLiveCollectionBrowsePath(normalizedPath)
+                    val homeLikeOperation =
+                        op.contains("home") ||
+                            op.contains("start") ||
+                            op.contains("collection") ||
+                            op.contains("rail") ||
+                            op.contains("row") ||
+                            op.contains("cluster") ||
+                            op.contains("teaser") ||
+                            op.contains("category")
+                    if (homeLikeRoute) signals += "entry_surface"
+                    if (homeLikeRoute || homeLikeOperation) signals += "collection_feed"
+                }
+                "search_probe" -> {
+                    signals += "search_results"
+                    signals += "item_summary"
+                }
+                "detail_probe" -> signals += "item_detail"
+                "playback_probe" -> signals += "playback_resolution"
+                "auth_probe" -> signals += "account_or_policy"
+            }
+        }
+
+        return signals
+    }
+
+    private fun inferLiveInternalSignalsFromResponse(response: LiveResponseEvent): Set<String> {
+        val signals = linkedSetOf<String>()
+        val op = response.operation.lowercase(Locale.ROOT)
+        val path = response.normalizedPath.lowercase(Locale.ROOT)
+        val route = response.routeKind.lowercase(Locale.ROOT)
+        val body = response.bodyPreview.lowercase(Locale.ROOT)
+        val collectionPayload = hasLiveCollectionPayloadHints(body)
+        val singleItemPayload = hasLiveSingleItemPayloadHints(body)
+        if (path in liveEntrySurfacePaths) {
+            signals += "entry_surface"
+        }
+        if (route.contains("home") || route.contains("category") || op.contains("collection") || op.contains("cluster")) {
+            signals += "collection_feed"
+        }
+        if (collectionPayload) {
+            signals += "collection_feed"
+        }
+        if (route.contains("search") || op.contains("search")) {
+            signals += "search_results"
+        }
+        if (
+            body.contains("\"title\"") &&
+            (body.contains("\"canonical") || body.contains("\"teaser") || body.contains("\"image")) &&
+            ("collection_feed" in signals || "search_results" in signals || collectionPayload)
+        ) {
+            signals += "item_summary"
+        }
+        if (
+            (route.contains("detail") || op.contains("detail") || op.contains("canonical") || singleItemPayload || looksLikeLiveSingleItemPath(path)) &&
+            !isLiveCollectionBrowsePath(path) &&
+            "collection_feed" !in signals &&
+            !collectionPayload
+        ) {
+            signals += "item_detail"
+        }
+        if (path.contains("/ptmd/") || path.contains("/tmd/") || op.contains("resolver") || path.endsWith(".m3u8") || path.endsWith(".mpd")) {
+            signals += "playback_resolution"
+        }
+        if (route.contains("auth") || op.contains("auth") || op.contains("login") || op.contains("token")) {
+            signals += "account_or_policy"
+        }
+        return signals
+    }
+
+    private fun inferLiveTopologyHints(operation: String, path: String): Set<String> {
+        val hints = linkedSetOf<String>()
+        val op = operation.lowercase(Locale.ROOT)
+        val normalizedPath = path.lowercase(Locale.ROOT)
+        if (op.contains("row") || op.contains("rail") || op.contains("cluster")) hints += "row_or_rail"
+        if (op.contains("tab") || normalizedPath.contains("/tabs")) hints += "tabbed_collection"
+        if (op.contains("facet") || op.contains("filter")) hints += "faceted_collection"
+        if (op.contains("grid") || normalizedPath.contains("/grid")) hints += "grid_collection"
+        if (normalizedPath.contains("/kategorien") || normalizedPath.contains("/serien") || normalizedPath.contains("/dokus") || normalizedPath.contains("/kinder") || op.contains("category")) {
+            hints += "category_collection"
+        }
+        if (normalizedPath in liveEntrySurfacePaths) {
+            hints += "entry_surface_route"
+        }
+        return hints
+    }
+
     private fun isLiveRoleCrossContaminated(role: String, operation: String, path: String): Boolean {
         val normalizedRole = role.trim()
         val op = operation.lowercase(Locale.ROOT)
         val loweredPath = path.lowercase(Locale.ROOT)
         val context = "$op $loweredPath"
         return when (normalizedRole) {
-            "home" -> isLiveSearchSignal(op, loweredPath) || isLiveDetailSignal(op, loweredPath) || isLiveOrCategorySignal(op, loweredPath) || isLiveTrackingSignal(op, loweredPath)
-            "search" -> isLiveOrCategorySignal(op, loweredPath) || isLiveDetailSignal(op, loweredPath) || op.contains("live_catalog") || isLiveTrackingSignal(op, loweredPath)
-            "detail" -> isLiveSearchSignal(op, loweredPath) || isLiveOrCategorySignal(op, loweredPath) || context.contains("playback_manifest") || context.contains("/ptmd/") || context.contains("/tmd/") || isLiveTrackingSignal(op, loweredPath)
-            "playbackResolver" -> isLiveTrackingSignal(op, loweredPath) || context.contains("playback_history") || context.contains("usage-data")
+            "home" -> {
+                isLiveTrackingSignal(op, loweredPath) ||
+                    context.contains("/ptmd/") ||
+                    context.contains("/tmd/") ||
+                    context.contains("manifest") ||
+                    (isLiveDetailSignal(op, loweredPath) && !isLiveCollectionBrowsePath(loweredPath)) ||
+                    (isLiveSearchSignal(op, loweredPath) && !loweredPath.contains("/suche"))
+            }
+            "search" -> {
+                isLiveTrackingSignal(op, loweredPath) ||
+                    op.contains("live_catalog") ||
+                    context.contains("/ptmd/") ||
+                    context.contains("/tmd/") ||
+                    isLiveDetailSignal(op, loweredPath) ||
+                    (isLiveOrCategorySignal(op, loweredPath) && !loweredPath.contains("/suche"))
+            }
+            "detail" -> isLiveSearchSignal(op, loweredPath) || isLiveOrCategorySignal(op, loweredPath) || isLiveCollectionBrowsePath(loweredPath) || context.contains("playback_manifest") || context.contains("/ptmd/") || context.contains("/tmd/") || isLiveTrackingSignal(op, loweredPath)
+            "playbackResolver" -> isLiveTrackingSignal(op, loweredPath) || isLiveCollectionBrowsePath(loweredPath) || context.contains("playback_history") || context.contains("usage-data")
             else -> false
         }
     }
@@ -3552,19 +3813,34 @@ object RuntimeToolkitTelemetry {
         if (aggregate.routeKinds.contains(aggregate.role)) score += 6.0
         val operation = aggregate.requestOperation.lowercase(Locale.ROOT)
         val path = aggregate.normalizedPath.lowercase(Locale.ROOT)
+        val signals = aggregate.internalSignals
         when (aggregate.role) {
             "home" -> {
                 if (isLiveHomeSignal(operation, path)) score += 8.0
+                if ("entry_surface" in signals) score += 6.0
+                if ("collection_feed" in signals) score += 7.0
+                if ("item_summary" in signals) score += 3.5
+                if ("item_detail" in signals) score -= 6.0
+                if ("playback_resolution" in signals) score -= 8.0
                 if (isLiveSearchSignal(operation, path) || isLiveDetailSignal(operation, path) || isLiveOrCategorySignal(operation, path)) score -= 8.0
             }
             "search" -> {
                 if (isLiveSearchSignal(operation, path)) score += 8.0
                 if (path.contains("/suche")) score += 6.0
+                if ("search_results" in signals) score += 7.0
+                if ("item_summary" in signals) score += 3.0
+                if ("item_detail" in signals) score -= 5.0
+                if ("playback_resolution" in signals) score -= 8.0
                 if (path.contains("/graphql") && !operation.contains("search")) score -= 6.0
                 if (isLiveOrCategorySignal(operation, path) || isLiveDetailSignal(operation, path)) score -= 8.0
             }
             "detail" -> {
                 if (isLiveDetailSignal(operation, path)) score += 8.0
+                if ("item_detail" in signals) score += 7.0
+                if ("collection_feed" in signals) score -= 9.0
+                if ("entry_surface" in signals) score -= 8.0
+                if ("search_results" in signals) score -= 7.0
+                if ("playback_resolution" in signals) score -= 8.0
                 if (path.contains("/graphql") && !isLiveDetailSignal(operation, path)) score -= 5.0
                 if (isLiveSearchSignal(operation, path) || isLiveOrCategorySignal(operation, path)) score -= 7.0
                 if (path.contains("/ptmd/") || path.contains("/tmd/") || path.contains("manifest")) score -= 9.0
@@ -3573,8 +3849,15 @@ object RuntimeToolkitTelemetry {
                 if (path.contains("/ptmd/") || path.contains("/tmd/")) score += 14.0
                 if (path.endsWith(".m3u8") || path.endsWith(".mpd")) score += 4.0
                 if (operation.contains("resolver") || operation.contains("playback_manifest")) score += 6.0
+                if ("playback_resolution" in signals) score += 8.0
+                if ("collection_feed" in signals) score -= 10.0
+                if ("item_summary" in signals) score -= 5.0
             }
         }
+        if ("row_or_rail" in aggregate.topologyHints && aggregate.role == "home") score += 2.0
+        if ("tabbed_collection" in aggregate.topologyHints && aggregate.role == "home") score += 1.5
+        if ("category_collection" in aggregate.topologyHints && aggregate.role == "home") score += 2.0
+        if ("tabbed_collection" in aggregate.topologyHints && aggregate.role == "search") score += 1.0
         if (isLiveRoleCrossContaminated(aggregate.role, operation, path)) score -= 18.0
         if (isLiveNoiseEndpoint(aggregate)) score -= 80.0
         return score
@@ -3590,7 +3873,7 @@ object RuntimeToolkitTelemetry {
         if (path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".woff") || path.endsWith(".woff2")) return true
         if (path.endsWith(".png") || path.endsWith(".jpg") || path.endsWith(".jpeg") || path.endsWith(".gif")) return true
         if (path.endsWith(".svg") || path.endsWith(".webp") || path.endsWith(".ico")) return true
-        if (path.endsWith(".m3u8") || path.endsWith(".mpd") || path.endsWith(".ts") || path.endsWith(".m4s")) return true
+        if (path.endsWith(".ts") || path.endsWith(".m4s")) return true
         if (path.endsWith(".vtt") || path.endsWith(".mp3") || path.endsWith(".mp4") || path.endsWith(".m4a")) return true
         if (path.contains("/usage-data/") || path.contains("/user-histories/")) return true
         if (path.contains("/geo.txt") || path.contains("/nmrodam")) return true
@@ -3678,6 +3961,7 @@ object RuntimeToolkitTelemetry {
             normalizedPath = normalizedPath,
             hostClass = payload.optString("host_class").ifBlank { "unknown" },
             mimeType = mimeType.lowercase(Locale.ROOT),
+            bodyPreview = payload.optString("body_preview"),
         )
     }
 
