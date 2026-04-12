@@ -152,25 +152,505 @@ object RuntimeToolkitSourcePipelineExporter {
     private val entrySurfacePaths = setOf(
         "/",
         "/suche",
+        "/suchergebnisse",
+        "/startseite",
+        "/mediathek",
         "/kategorien",
         "/serien",
+        "/filme",
         "/dokus",
+        "/reportagen",
+        "/nachrichten",
+        "/sport",
+        "/wissen",
         "/kinder",
         "/live-tv",
         "/mein-zdf",
     )
 
     private val browseRootSegments = setOf(
+        "suche",
+        "suchergebnisse",
+        "startseite",
+        "mediathek",
         "kategorien",
+        "kategorie",
+        "genre",
+        "genres",
         "serien",
+        "serie",
+        "film",
         "dokus",
+        "filme",
+        "reportagen",
+        "reportage",
+        "nachrichten",
+        "sport",
+        "wissen",
+        "zdfheute",
+        "sportstudio",
+        "spielfilm",
+        "fernsehfilm",
+        "einzeldokus",
+        "kurzdoku",
         "kinder",
+        "programm",
         "live-tv",
         "livetv",
         "themen",
+        "thema",
         "rubriken",
+        "rubrik",
         "mein-zdf",
     )
+
+    private val searchHintTokens = listOf(
+        "/search",
+        "/suche",
+        "/suchergebnis",
+        "/suchergebnisse",
+        "/such-resultate",
+        "/suchtreffer",
+        "/mediathek/suche",
+        "search=",
+        "suche=",
+        "suchbegriff=",
+        "suchwort=",
+        "suchtext=",
+        "suchphrase=",
+        "suchanfrage=",
+        "searchterm=",
+        "suchterm=",
+        "query=",
+        "q=",
+        "suggest",
+        "autocomplete",
+        "searchrecommendation",
+        "getsearchresults",
+        "searchresults",
+        "suchergebnisse",
+        "suchtreffer",
+        "trefferliste",
+        "ergebnisliste",
+        "volltextsuche",
+        "suchfeld",
+        "sucheingabe",
+        "suchanfrage",
+        "suchvorschlag",
+        "vorschlag",
+        "suchhistorie",
+    )
+
+    private val detailHintTokens = listOf(
+        "/detail",
+        "/content/",
+        "/video/",
+        "/episode/",
+        "/episodes/",
+        "/folge/",
+        "/folgen/",
+        "/staffel/",
+        "/staffeln/",
+        "/sendung/",
+        "/sendungen/",
+        "/beitrag/",
+        "/beiträge/",
+        "/reportage",
+        "/doku",
+        "/dokus/",
+        "/dokumentation/",
+        "/dokumentationen/",
+        "/kurzdoku/",
+        "/einzeldokus/",
+        "/film",
+        "/filme/",
+        "/spielfilm/",
+        "/fernsehfilm/",
+        "/serie/",
+        "/serien/",
+        "/sendereihe/",
+        "/sendereihen/",
+        "/thema/",
+        "/themen/",
+        "detail",
+        "detailseite",
+        "detailansicht",
+        "beitragsdetail",
+        "sendungsdetail",
+        "episodendetail",
+        "videodetail",
+        "episode",
+        "canonical",
+        "canonicalid",
+        "video",
+        "content",
+        "media_by_canonical",
+        "mediadetail",
+        "contentdetail",
+        "getvideo",
+        "sendung",
+        "folge",
+        "folgen",
+        "staffel",
+        "staffeln",
+        "serie",
+        "serien",
+        "beitrag",
+        "doku",
+        "dokus",
+        "dokumentation",
+        "kurzdoku",
+        "einzeldokus",
+        "reportage",
+        "reportagen",
+        "spielfilm",
+        "fernsehfilm",
+        "film",
+        "filme",
+    )
+
+    private val homeHintTokens = listOf(
+        "/home",
+        "/start",
+        "/startseite",
+        "/mediathek",
+        "/entdecken",
+        "/stöbern",
+        "/für-dich",
+        "/neu-in-der-mediathek",
+        "home",
+        "start",
+        "startseite",
+        "entdecken",
+        "stöbern",
+        "für dich",
+        "weiterschauen",
+        "neu in der mediathek",
+        "top serien",
+        "top dokus",
+        "hero",
+        "highlight",
+        "highlights",
+        "cluster",
+        "rail",
+        "row",
+        "recommend",
+        "collection",
+        "teaser",
+        "empfehl",
+    )
+
+    private val categoryHintTokens = listOf(
+        "/kategorie",
+        "/kategorien",
+        "/category",
+        "/categories",
+        "/rubrik",
+        "/rubriken",
+        "/genre",
+        "/thema",
+        "/themen",
+        "/serien",
+        "/dokus",
+        "/kinder",
+        "/filme",
+        "/reportagen",
+        "/nachrichten",
+        "/sport",
+        "/wissen",
+        "/zdfheute",
+        "/sportstudio",
+        "/krimi",
+        "/thriller",
+        "/drama",
+        "/komoedie",
+        "/komödie",
+        "/romance",
+        "/romanze",
+        "/action",
+        "category",
+        "categories",
+        "kategorie",
+        "kategorien",
+        "kategorienseite",
+        "rubrik",
+        "rubriken",
+        "rubrikenseite",
+        "genre",
+        "topic",
+        "thema",
+        "themen",
+        "themenwelt",
+        "sammlung",
+        "sammlungen",
+        "facet",
+        "facets",
+        "alle-inhalte",
+        "alleinhalte",
+        "krimi",
+        "thriller",
+        "drama",
+        "komödie",
+        "komoedie",
+        "romance",
+        "romanze",
+        "action",
+        "horror",
+        "fantasy",
+        "mystery",
+        "science fiction",
+        "science-fiction",
+        "sciencefiction",
+        "sci-fi",
+        "dokumentation",
+        "spielfilm",
+        "fernsehfilm",
+        "sportstudio",
+        "zdfheute",
+        "erzgebirgskrimi",
+        "taunuskrimi",
+        "familie",
+        "familienfilm",
+        "kinderfilm",
+    )
+
+    private val genreHintTokens = listOf(
+        "krimi",
+        "thriller",
+        "drama",
+        "komödie",
+        "komoedie",
+        "komodie",
+        "romance",
+        "romanze",
+        "action",
+        "horror",
+        "fantasy",
+        "mystery",
+        "science fiction",
+        "science-fiction",
+        "sciencefiction",
+        "sci-fi",
+        "sci fi",
+        "doku",
+        "dokus",
+        "dokumentation",
+        "reportage",
+        "reportagen",
+        "spielfilm",
+        "fernsehfilm",
+        "familie",
+        "familienfilm",
+        "kinderfilm",
+        "kinder",
+        "nachrichten",
+        "sport",
+        "wissen",
+        "sportstudio",
+        "zdfheute",
+        "erzgebirgskrimi",
+        "taunuskrimi",
+    )
+
+    private val mediaTypeHintTokens = listOf(
+        "serie",
+        "serien",
+        "staffel",
+        "staffeln",
+        "folge",
+        "folgen",
+        "episode",
+        "episoden",
+        "show",
+        "film",
+        "filme",
+        "movie",
+        "spielfilm",
+        "fernsehfilm",
+        "doku",
+        "dokus",
+        "dokumentation",
+        "reportage",
+        "reportagen",
+        "kurzdoku",
+        "einzeldokus",
+        "live",
+        "livestream",
+        "clip",
+        "trailer",
+    )
+
+    private val liveHintTokens = listOf(
+        "/live",
+        "/live-tv",
+        "/livetv",
+        "/livestream",
+        "/programm",
+        "/tv-programm",
+        "/sendung-verpasst",
+        "/verpasst",
+        "/epg",
+        "onair",
+        "jetzt live",
+        "jetzt-live",
+        "sendungverpasst",
+        "programmübersicht",
+        "live_catalog",
+        "activelive",
+        "epg",
+        "livetv",
+    )
+
+    private val authHintTokens = listOf(
+        "/auth",
+        "/oauth",
+        "/identity",
+        "/login",
+        "/signin",
+        "/logout",
+        "/mein-zdf",
+        "/meinzdf",
+        "/token",
+        "/session",
+        "/userinfo",
+        "/userdetails",
+        "/fsk",
+        "/pin",
+        "auth",
+        "token",
+        "login",
+        "logout",
+        "signin",
+        "authorize",
+        "oidc",
+        "openid",
+        "refresh",
+        "identity",
+        "session",
+        "anmelden",
+        "anmeldung",
+        "abmelden",
+        "abmeldung",
+        "einloggen",
+        "ausloggen",
+        "konto",
+        "benutzerkonto",
+        "kontoverwaltung",
+        "profil",
+        "benutzer",
+        "passwort",
+        "kennwort",
+        "mein-zdf",
+        "meinzdf",
+        "registrieren",
+        "registrierung",
+        "jugendschutz",
+        "altersnachweis",
+        "altersfreigabe",
+        "personalisierung",
+    )
+
+    private val loginHintTokens = listOf(
+        "login",
+        "signin",
+        "authorize",
+        "anmelden",
+        "anmeldung",
+        "einloggen",
+        "registrieren",
+        "registrierung",
+        "/login",
+        "/signin",
+        "/authorize",
+        "/anmelden",
+    )
+
+    private val validationHintTokens = listOf(
+        "validate",
+        "validation",
+        "userinfo",
+        "profile",
+        "session",
+        "status",
+        "sessionstatus",
+        "authstatus",
+        "kontostatus",
+        "angemeldet",
+        "eingeloggt",
+        "whoami",
+        "werbinich",
+        "konto",
+        "profil",
+        "benutzer",
+        "/userinfo",
+        "/profile",
+        "/profil",
+        "/konto",
+        "/me",
+    )
+
+    private val refreshHintTokens = listOf(
+        "refresh",
+        "token_refresh",
+        "session_refresh",
+        "sessionrefresh",
+        "session_renew",
+        "token_renew",
+        "keepalive",
+        "renew",
+        "renewal",
+        "revalidate",
+        "erneuern",
+        "aktualisieren",
+        "verlängern",
+        "/refresh",
+        "/session/refresh",
+        "/token/erneuern",
+        "/token/refresh",
+    )
+
+    private fun hasSearchHint(text: String): Boolean = containsAnyToken(text, searchHintTokens)
+
+    private fun hasDetailHint(text: String): Boolean = containsAnyToken(text, detailHintTokens)
+
+    private fun hasHomeHint(text: String): Boolean = containsAnyToken(text, homeHintTokens)
+
+    private fun hasCategoryHint(text: String): Boolean = containsAnyToken(text, categoryHintTokens)
+
+    private fun hasLiveHint(text: String): Boolean = containsAnyToken(text, liveHintTokens)
+
+    private fun hasGenreHint(text: String): Boolean = containsAnyToken(text, genreHintTokens)
+
+    private fun hasMediaTypeHint(text: String): Boolean = containsAnyToken(text, mediaTypeHintTokens)
+
+    private fun hasLiveOrCategoryHint(text: String): Boolean = hasLiveHint(text) || hasCategoryHint(text) || hasGenreHint(text)
+
+    private fun hasAuthHint(text: String): Boolean = containsAnyToken(text, authHintTokens)
+
+    private fun hasLoginHint(text: String): Boolean = containsAnyToken(text, loginHintTokens)
+
+    private fun hasValidationHint(text: String): Boolean = containsAnyToken(text, validationHintTokens)
+
+    private fun hasRefreshHint(text: String): Boolean = containsAnyToken(text, refreshHintTokens)
+
+    private fun containsAnyToken(text: String, tokens: List<String>): Boolean {
+        if (text.isBlank()) return false
+        val haystack = text.lowercase(Locale.ROOT)
+        val normalizedHaystack = normalizeHintText(haystack)
+        return tokens.any {
+            val token = it.lowercase(Locale.ROOT)
+            haystack.contains(token) || normalizedHaystack.contains(normalizeHintText(token))
+        }
+    }
+
+    private fun normalizeHintText(text: String): String {
+        return text
+            .lowercase(Locale.ROOT)
+            .replace("ä", "ae")
+            .replace("ö", "oe")
+            .replace("ü", "ue")
+            .replace("ß", "ss")
+    }
 
     private data class CatalogSelectionEntity(
         val selectionKey: String,
@@ -474,7 +954,7 @@ object RuntimeToolkitSourcePipelineExporter {
                     JSONObject().apply {
                         put("endpointId", endpoint.endpointId)
                         put("role", endpointRole)
-                        put("templateKind", templateKindForRole(endpointRole, endpoint.normalizedPath))
+                        put("templateKind", templateKindForRole(endpointRole, endpoint.normalizedPath, endpoint.requestOperation))
                         put("method", endpoint.method)
                         put("normalizedHost", endpoint.normalizedHost)
                         put("normalizedPath", endpoint.normalizedPath)
@@ -1911,13 +2391,20 @@ object RuntimeToolkitSourcePipelineExporter {
             if ("entry_surface" in info.signals && info.path in entrySurfacePaths) return info.path
             if (info.path in entrySurfacePaths) return info.path
             return when {
-                info.role == "search" || "search_results" in info.signals || info.path.contains("/suche") || info.path.contains("/search") -> "/suche"
+                info.role == "search" || "search_results" in info.signals || hasSearchHint(info.path) -> "/suche"
+                info.path.contains("/startseite") || info.path.contains("/mediathek") -> "/"
                 info.path.contains("/kategorien") -> "/kategorien"
+                info.path.contains("/rubriken") || info.path.contains("/themen") || info.path.contains("/thema") -> "/kategorien"
                 info.path.contains("/serien") -> "/serien"
                 info.path.contains("/dokus") -> "/dokus"
+                info.path.contains("/filme") -> "/filme"
+                info.path.contains("/reportagen") -> "/reportagen"
+                info.path.contains("/nachrichten") -> "/nachrichten"
+                info.path.contains("/sport") -> "/sport"
+                info.path.contains("/wissen") -> "/wissen"
                 info.path.contains("/kinder") -> "/kinder"
-                info.path.contains("/live-tv") || info.path.contains("/livetv") -> "/live-tv"
-                info.path.contains("/mein-zdf") || info.role == "auth_or_refresh" || "account_or_policy" in info.signals -> "/mein-zdf"
+                info.path.contains("/live-tv") || info.path.contains("/livetv") || info.path.contains("/programm") -> "/live-tv"
+                info.path.contains("/mein-zdf") || info.role == "auth_or_refresh" || "account_or_policy" in info.signals || hasAuthHint(info.path) -> "/mein-zdf"
                 else -> "/"
             }
         }
@@ -3037,6 +3524,7 @@ object RuntimeToolkitSourcePipelineExporter {
     private fun looksLikeCatalogItemTypeSignal(path: String, value: String): Boolean {
         val loweredPath = path.lowercase(Locale.ROOT)
         val loweredValue = value.trim().lowercase(Locale.ROOT)
+        val normalizedValue = normalizeHintText(loweredValue)
         if (loweredValue.isBlank()) return false
         if (
             loweredPath.contains("token_type") ||
@@ -3045,11 +3533,36 @@ object RuntimeToolkitSourcePipelineExporter {
         ) {
             return false
         }
-        if (loweredValue.contains("bearer")) return false
+        if (normalizedValue.contains("bearer")) return false
 
         if (
-            loweredValue in setOf("live", "live_collection", "series", "show", "episode", "movie", "film") ||
-            loweredValue.contains("livestream")
+            normalizedValue in setOf(
+                "live",
+                "live_collection",
+                "series",
+                "serie",
+                "serien",
+                "show",
+                "episode",
+                "episoden",
+                "staffel",
+                "staffeln",
+                "folge",
+                "folgen",
+                "movie",
+                "film",
+                "filme",
+                "spielfilm",
+                "fernsehfilm",
+                "doku",
+                "dokus",
+                "dokumentation",
+                "reportage",
+                "reportagen",
+                "kurzdoku",
+                "einzeldokus",
+            ) ||
+            normalizedValue.contains("livestream")
         ) {
             return true
         }
@@ -3067,17 +3580,28 @@ object RuntimeToolkitSourcePipelineExporter {
             "content_type",
             "format",
             "genre",
+            "typ",
+            "type",
+            "art",
+            "rubrik",
+            "kategorie",
+            "thema",
         ).any { key -> loweredPath.contains(key) }
         if (!pathLooksLikeType) return false
 
-        return loweredValue.contains("live") ||
-            loweredValue.contains("episode") ||
-            loweredValue.contains("series") ||
-            loweredValue.contains("show") ||
-            loweredValue.contains("season") ||
-            loweredValue.contains("movie") ||
-            loweredValue.contains("film") ||
-            loweredValue.contains("feature")
+        return normalizedValue.contains("live") ||
+            normalizedValue.contains("episode") ||
+            normalizedValue.contains("folge") ||
+            normalizedValue.contains("series") ||
+            normalizedValue.contains("serie") ||
+            normalizedValue.contains("show") ||
+            normalizedValue.contains("season") ||
+            normalizedValue.contains("staffel") ||
+            normalizedValue.contains("movie") ||
+            normalizedValue.contains("film") ||
+            normalizedValue.contains("doku") ||
+            normalizedValue.contains("reportage") ||
+            normalizedValue.contains("feature")
     }
 
     private fun setFieldEvidence(
@@ -3181,6 +3705,7 @@ object RuntimeToolkitSourcePipelineExporter {
         val normalizedOperation = endpoint.requestOperation.lowercase(Locale.ROOT)
         var score = 0
         if (endpoint.method == "GET") score += 10
+        if (normalizedOperation.contains("playback_resolver_fetch")) score += 90
         if (normalizedOperation.contains("playback_manifest_fetch")) score += 60
         if (normalizedPath.endsWith(".m3u8") || normalizedPath.endsWith(".mpd")) score += 50
         if (normalizedPath.contains("/ptmd/") || normalizedPath.contains("/tmd/")) score += 140
@@ -3209,6 +3734,7 @@ object RuntimeToolkitSourcePipelineExporter {
             val confidentiality =
                 when {
                     lower.contains("password") ||
+                        lower.contains("passwort") ||
                         lower.contains("client_secret") ||
                         lower.contains("code_verifier") ||
                         lower.contains("refresh_token") ||
@@ -3218,6 +3744,8 @@ object RuntimeToolkitSourcePipelineExporter {
                         lower.contains("otp") ||
                         lower.contains("pin") -> "secret"
                     lower.contains("auth") ||
+                        lower.contains("anmeld") ||
+                        lower.contains("authent") ||
                         lower.contains("token") ||
                         lower.contains("authorization") ||
                         lower.startsWith("cookies.") -> "hash_only"
@@ -3238,16 +3766,14 @@ object RuntimeToolkitSourcePipelineExporter {
     private fun isRefreshEndpointCandidate(endpoint: EndpointAggregate): Boolean {
         val candidate = "${endpoint.requestOperation} ${endpoint.normalizedPath} ${endpoint.endpointId}"
             .lowercase(Locale.ROOT)
-        return candidate.contains("refresh") || candidate.contains("token_refresh") || candidate.contains("/refresh")
+        return hasRefreshHint(candidate)
     }
 
     private fun isLoginEndpointCandidate(endpoint: EndpointAggregate): Boolean {
         val candidate = "${endpoint.requestOperation} ${endpoint.normalizedPath} ${endpoint.endpointId}"
             .lowercase(Locale.ROOT)
         if (isRefreshEndpointCandidate(endpoint)) return false
-        return candidate.contains("login") ||
-            candidate.contains("signin") ||
-            candidate.contains("authorize") ||
+        return hasLoginHint(candidate) ||
             candidate.contains("oidc") ||
             candidate.contains("oauth/token") ||
             candidate.contains("/token")
@@ -3257,10 +3783,10 @@ object RuntimeToolkitSourcePipelineExporter {
         val candidate = "${endpoint.requestOperation} ${endpoint.normalizedPath} ${endpoint.endpointId}"
             .lowercase(Locale.ROOT)
         var score = 0
-        if (candidate.contains("auth_login") || candidate.contains("/login") || candidate.contains("signin")) score += 160
+        if (candidate.contains("auth_login") || candidate.contains("/login") || candidate.contains("signin") || candidate.contains("anmelden") || candidate.contains("einloggen")) score += 160
         if (candidate.contains("oidc") || candidate.contains("oauth/token") || candidate.contains("authorize")) score += 110
         if (candidate.contains("/token")) score += 40
-        if (candidate.contains("refresh")) score -= 140
+        if (hasRefreshHint(candidate)) score -= 140
         score += endpoint.requiredBodyFields.size * 12
         score += endpoint.requiredQueryParams.size * 6
         return score
@@ -3270,13 +3796,7 @@ object RuntimeToolkitSourcePipelineExporter {
         val candidate = "${endpoint.requestOperation} ${endpoint.normalizedPath} ${endpoint.endpointId}"
             .lowercase(Locale.ROOT)
         if (isRefreshEndpointCandidate(endpoint)) return false
-        return candidate.contains("validate") ||
-            candidate.contains("validation") ||
-            candidate.contains("userinfo") ||
-            candidate.contains("userdetails") ||
-            candidate.contains("session") ||
-            candidate.contains("profile") ||
-            candidate.contains("/me")
+        return hasValidationHint(candidate) || candidate.contains("userdetails")
     }
 
     private data class TokenLifecycleInsights(
@@ -3296,9 +3816,7 @@ object RuntimeToolkitSourcePipelineExporter {
                 refreshTriggers += "refresh_trigger:http_${response.statusCode}"
             }
             val isAuthLike = role == "auth" || role == "refresh" ||
-                response.operation.contains("auth", ignoreCase = true) ||
-                response.operation.contains("token", ignoreCase = true) ||
-                response.operation.contains("refresh", ignoreCase = true)
+                hasAuthHint(response.operation)
             if (!isAuthLike) return@forEach
             val body = readResponseBody(runtimeRoot, response)
             val json = runCatching { JSONObject(body) }.getOrNull()
@@ -3638,7 +4156,7 @@ object RuntimeToolkitSourcePipelineExporter {
         ) {
             return true
         }
-        if (operation.contains("detail") && segmentIndex == lastIndex && normalized.length >= 4) {
+        if (hasDetailHint(operation) && segmentIndex == lastIndex && normalized.length >= 4) {
             return true
         }
         return false
@@ -3654,8 +4172,8 @@ object RuntimeToolkitSourcePipelineExporter {
         val roleLower = role.lowercase(Locale.ROOT)
         val preferred = when {
             roleLower.contains("detail") || roleLower.contains("playback") -> "canonical"
-            normalized.contains("episode") -> "episodeId"
-            normalized.contains("video") -> "videoId"
+            normalized.contains("episode") || normalized.contains("folge") -> "episodeId"
+            normalized.contains("video") || normalized.contains("beitrag") -> "videoId"
             normalized.contains("asset") -> "assetId"
             normalized.contains("channel") -> "channelId"
             normalized.matches(Regex("^[0-9]+$")) -> "id"
@@ -3675,13 +4193,21 @@ object RuntimeToolkitSourcePipelineExporter {
 
     private fun placeholderToken(name: String): String = "\${$name}"
 
-    private fun templateKindForRole(role: String, path: String): String {
+    private fun templateKindForRole(role: String, path: String, operation: String): String {
         val lowered = path.lowercase(Locale.ROOT)
+        val loweredOperation = operation.lowercase(Locale.ROOT)
+        val normalizedRole = canonicalRole(role)
         return when {
             lowered == "/graphql" || lowered.contains("/graphql/") -> "graphql"
             lowered.endsWith(".m3u8") || lowered.endsWith(".mpd") -> "manifest"
-            role == "playbackResolver" || role == "playback_resolver" -> "resolver"
-            role == "auth" || role == "refresh" -> "rest_json"
+            normalizedRole == "playbackResolver" && (
+                lowered.contains("/ptmd/") ||
+                    lowered.contains("/tmd/") ||
+                    loweredOperation.contains("resolver") ||
+                    loweredOperation.contains("playback_resolver")
+                ) -> "resolver"
+            normalizedRole == "playbackResolver" && loweredOperation.contains("manifest") -> "manifest"
+            normalizedRole == "auth" || normalizedRole == "refresh" -> "rest_json"
             else -> "rest_json"
         }
     }
@@ -3755,7 +4281,7 @@ object RuntimeToolkitSourcePipelineExporter {
         val authLike =
             role == "auth" ||
                 role == "refresh" ||
-                listOf("auth", "token", "login", "logout", "oidc", "openid", "oauth", "refresh", "identity")
+                listOf("auth", "token", "login", "logout", "oidc", "openid", "oauth", "refresh", "identity", "anmelden", "abmelden", "einloggen", "ausloggen", "konto", "profil")
                     .any { marker -> context.contains(marker) }
         if (!authLike) return emptySet()
 
@@ -3787,9 +4313,9 @@ object RuntimeToolkitSourcePipelineExporter {
             normalized.contains("client_id") -> "client_id"
             normalized.contains("client_secret") -> "client_secret"
             normalized.contains("session_token") -> "session_token"
-            normalized.contains("password") -> "password"
-            normalized.contains("username") -> "username"
-            normalized == "email" || normalized.endsWith("_email") -> "email"
+            normalized.contains("password") || normalized.contains("passwort") || normalized.contains("kennwort") -> "password"
+            normalized.contains("username") || normalized.contains("benutzername") || normalized.contains("nutzername") || normalized.contains("loginname") -> "username"
+            normalized == "email" || normalized.endsWith("_email") || normalized.contains("e_mail") || normalized.contains("mailadresse") -> "email"
             normalized.contains("pin") -> "pin"
             normalized.contains("otp") -> "otp"
             normalized.contains("nonce") -> "nonce"
@@ -3809,12 +4335,7 @@ object RuntimeToolkitSourcePipelineExporter {
         val role = canonicalRole(endpoint.role)
         if (role == "auth" || role == "refresh") return true
         val context = "${endpoint.requestOperation} ${endpoint.normalizedPath}".lowercase(Locale.ROOT)
-        return context.contains("auth") ||
-            context.contains("token") ||
-            context.contains("login") ||
-            context.contains("refresh") ||
-            context.contains("oauth") ||
-            context.contains("identity")
+        return hasAuthHint(context)
     }
 
     private fun effectiveRequiredProvenanceInputs(
@@ -3869,7 +4390,7 @@ object RuntimeToolkitSourcePipelineExporter {
 
     private fun normalizePhaseId(raw: String): String {
         return when (raw.trim()) {
-            "home_probe", "search_probe", "detail_probe", "playback_probe", "auth_probe", "background_noise" -> raw.trim()
+            "home_probe", "search_probe", "detail_probe", "playback_probe", "auth_probe", "replay_probe", "background_noise" -> raw.trim()
             "unscoped" -> "background_noise"
             else -> "background_noise"
         }
@@ -3894,57 +4415,24 @@ object RuntimeToolkitSourcePipelineExporter {
     }
 
     private fun isSearchSignal(operation: String, path: String): Boolean {
-        val op = operation.lowercase(Locale.ROOT)
-        val loweredPath = path.lowercase(Locale.ROOT)
-        return op.contains("search") ||
-            op.contains("suggest") ||
-            loweredPath.contains("/suche") ||
-            loweredPath.contains("/search")
+        return hasSearchHint("${operation.lowercase(Locale.ROOT)} ${path.lowercase(Locale.ROOT)}")
     }
 
     private fun isDetailSignal(operation: String, path: String): Boolean {
-        val op = operation.lowercase(Locale.ROOT)
         val loweredPath = path.lowercase(Locale.ROOT)
         if (isCollectionBrowsePath(loweredPath)) return false
-        return op.contains("detail") ||
-            op.contains("episode") ||
-            op.contains("canonical") ||
-            op.contains("video") ||
-            op.contains("content") ||
-            op.contains("media_by_canonical") ||
-            op.contains("getvideo") ||
-            loweredPath.contains("/detail") ||
-            loweredPath.contains("/content/") ||
-            loweredPath.contains("/video/") ||
-            loweredPath.contains("/episode/") ||
-            loweredPath.contains("/filme/") ||
-            looksLikeSingleItemPath(loweredPath)
+        return hasDetailHint("${operation.lowercase(Locale.ROOT)} $loweredPath") || hasMediaTypeHint("${operation.lowercase(Locale.ROOT)} $loweredPath") || looksLikeSingleItemPath(loweredPath)
     }
 
     private fun isHomeSignal(operation: String, path: String): Boolean {
-        val op = operation.lowercase(Locale.ROOT)
         val loweredPath = path.lowercase(Locale.ROOT)
         return loweredPath == "/" ||
-            op.contains("home") ||
-            op.contains("start") ||
-            op.contains("cluster") ||
-            op.contains("rail") ||
-            op.contains("recommend") ||
-            op.contains("collection") ||
-            op.contains("teaser") ||
-            loweredPath.contains("/home") ||
+            hasHomeHint("${operation.lowercase(Locale.ROOT)} $loweredPath") ||
             loweredPath.contains("/kategorien")
     }
 
     private fun isLiveOrCategorySignal(operation: String, path: String): Boolean {
-        val op = operation.lowercase(Locale.ROOT)
-        val loweredPath = path.lowercase(Locale.ROOT)
-        return op.contains("live_catalog") ||
-            op.contains("live") ||
-            op.contains("category") ||
-            loweredPath.contains("/live-tv") ||
-            loweredPath.contains("/livetv") ||
-            loweredPath.contains("/kategorien")
+        return hasLiveOrCategoryHint("${operation.lowercase(Locale.ROOT)} ${path.lowercase(Locale.ROOT)}")
     }
 
     private fun isTrackingSignal(operation: String, path: String): Boolean {
@@ -3977,7 +4465,8 @@ object RuntimeToolkitSourcePipelineExporter {
         if (segments.isEmpty()) return normalized == "/"
         val first = segments.first()
         if (first in browseRootSegments && segments.size == 1) return true
-        if (first in browseRootSegments && segments.size == 2 && segments.last() in setOf("alle", "neu", "top", "beliebt")) return true
+        if (first in browseRootSegments && segments.size == 2 && segments.last() in setOf("alle", "neu", "top", "beliebt", "aktuell", "empfohlen", "meistgesehen")) return true
+        if (first in setOf("genre", "genres", "kategorie", "kategorien", "rubrik", "rubriken", "thema", "themen", "serien", "filme", "dokus", "reportagen", "nachrichten", "sport", "wissen") && segments.size == 2) return true
         return false
     }
 
@@ -3986,10 +4475,10 @@ object RuntimeToolkitSourcePipelineExporter {
         if (segments.size < 2) return false
         if (isCollectionBrowsePath(path)) return false
         val last = segments.last()
-        if (last in setOf("index", "overview", "alle", "top", "neu")) return false
+        if (last in setOf("index", "overview", "alle", "top", "neu", "aktuell", "empfohlen")) return false
         if (Regex(".*-\\d{2,}$").matches(last)) return true
         val contentPrefix = segments.dropLast(1).lastOrNull().orEmpty()
-        if (contentPrefix in setOf("reportagen", "dokus", "filme", "serien", "video", "videos", "episode", "episoden")) {
+        if (contentPrefix in setOf("reportagen", "reportage", "doku", "dokus", "dokumentation", "dokumentationen", "einzeldokus", "kurzdoku", "filme", "film", "spielfilm", "fernsehfilm", "serien", "serie", "sendung", "sendungen", "folge", "folgen", "staffel", "staffeln", "beitrag", "beitraege", "beiträge", "video", "videos", "episode", "episoden")) {
             return last.length >= 8 && last.any { it.isDigit() }
         }
         return false
@@ -4035,15 +4524,7 @@ object RuntimeToolkitSourcePipelineExporter {
         val searchSignal = isSearchSignal(op, normalizedPath)
         val detailSignal = isDetailSignal(op, normalizedPath)
         val collectionSignal =
-            op.contains("collection") ||
-                op.contains("rail") ||
-                op.contains("row") ||
-                op.contains("cluster") ||
-                op.contains("teaser") ||
-                op.contains("facet") ||
-                op.contains("tab") ||
-                op.contains("grid") ||
-                op.contains("catalog") ||
+            containsAnyToken(op, listOf("collection", "rail", "row", "reihe", "reihen", "cluster", "teaser", "facet", "filter", "tab", "grid", "kachel", "tile", "catalog", "kategorie", "rubrik", "thema", "genre", "serien", "serie", "filme", "film", "dokus", "doku", "reportagen")) ||
                 isCollectionBrowsePath(normalizedPath)
         val playbackSignal =
             context.contains("/ptmd/") ||
@@ -4054,10 +4535,7 @@ object RuntimeToolkitSourcePipelineExporter {
                 normalizedPath.endsWith(".mpd")
         val accountPolicySignal =
             normalizedRole in setOf("auth", "refresh", "config", "helper") ||
-                context.contains("auth") ||
-                context.contains("login") ||
-                context.contains("token") ||
-                context.contains("identity") ||
+                hasAuthHint(context) ||
                 context.contains("geo") ||
                 context.contains("policy") ||
                 context.contains("fsk")
@@ -4075,15 +4553,11 @@ object RuntimeToolkitSourcePipelineExporter {
         val normalizedPhase = normalizePhaseId(phaseId)
         if (signals.isEmpty() && normalizedPhase == "home_probe") {
             val homeLikeRoute = isCollectionBrowsePath(normalizedPath)
-            val homeLikeOperation =
-                op.contains("home") ||
-                    op.contains("start") ||
-                    op.contains("collection") ||
-                    op.contains("rail") ||
-                    op.contains("row") ||
-                    op.contains("cluster") ||
-                    op.contains("teaser") ||
-                    op.contains("category")
+                    val homeLikeOperation =
+                        hasHomeHint(op) ||
+                            hasCategoryHint(op) ||
+                            hasGenreHint(op) ||
+                            containsAnyToken(op, listOf("collection", "rail", "row", "reihe", "reihen", "cluster", "teaser", "catalog"))
             if (homeLikeRoute) signals += "entry_surface"
             if (homeLikeRoute || homeLikeOperation) signals += "collection_feed"
         } else if (signals.isEmpty() && normalizedPhase == "search_probe") {
@@ -4113,6 +4587,8 @@ object RuntimeToolkitSourcePipelineExporter {
             route.contains("home") ||
                 route.contains("category") ||
                 route.contains("search") ||
+                hasCategoryHint("$op $path") ||
+                hasGenreHint("$op $path") ||
                 op.contains("collection") ||
                 op.contains("rail") ||
                 op.contains("cluster")
@@ -4122,7 +4598,7 @@ object RuntimeToolkitSourcePipelineExporter {
         if (collectionPayload) signals += "collection_feed"
         if (
             route.contains("search") ||
-                op.contains("search") ||
+                hasSearchHint("$op $path") ||
                 body.contains("\"results\"") ||
                 body.contains("\"search\"")
         ) {
@@ -4136,7 +4612,7 @@ object RuntimeToolkitSourcePipelineExporter {
             signals += "item_summary"
         }
         if (
-            (op.contains("detail") || route.contains("detail") || singleItemPayload || looksLikeSingleItemPath(path)) &&
+            (hasDetailHint("$op $path") || route.contains("detail") || singleItemPayload || looksLikeSingleItemPath(path)) &&
             !route.contains("category") &&
             "collection_feed" !in signals &&
             !collectionPayload &&
@@ -4156,11 +4632,7 @@ object RuntimeToolkitSourcePipelineExporter {
         }
         if (
             route.contains("auth") ||
-                op.contains("auth") ||
-                op.contains("login") ||
-                op.contains("token") ||
-                path.contains("/auth/") ||
-                path.contains("/oauth/")
+                hasAuthHint("$op $path")
         ) {
             signals += "account_or_policy"
         }
@@ -4171,11 +4643,11 @@ object RuntimeToolkitSourcePipelineExporter {
         val hints = linkedSetOf<String>()
         val op = operation.lowercase(Locale.ROOT)
         val normalizedPath = path.lowercase(Locale.ROOT)
-        if (op.contains("row") || op.contains("rail") || op.contains("cluster")) hints += "row_or_rail"
+        if (containsAnyToken(op, listOf("row", "rail", "cluster", "reihe", "reihen"))) hints += "row_or_rail"
         if (op.contains("tab") || normalizedPath.contains("/tabs")) hints += "tabbed_collection"
-        if (op.contains("facet") || op.contains("filter")) hints += "faceted_collection"
+        if (containsAnyToken(op, listOf("facet", "filter", "facette"))) hints += "faceted_collection"
         if (op.contains("grid") || normalizedPath.contains("/grid")) hints += "grid_collection"
-        if (normalizedPath.contains("/kategorien") || normalizedPath.contains("/serien") || normalizedPath.contains("/dokus") || normalizedPath.contains("/kinder") || op.contains("category")) {
+        if (hasCategoryHint("$op $normalizedPath") || hasGenreHint("$op $normalizedPath") || normalizedPath.contains("/serien") || normalizedPath.contains("/dokus") || normalizedPath.contains("/kinder") || normalizedPath.contains("/filme")) {
             hints += "category_collection"
         }
         if (normalizedPath in entrySurfacePaths) hints += "entry_surface_route"
@@ -4185,11 +4657,11 @@ object RuntimeToolkitSourcePipelineExporter {
     private fun inferEntrySurfaceKind(path: String): String {
         return when (path.lowercase(Locale.ROOT)) {
             "/" -> "home"
-            "/suche" -> "search_entry"
+            "/suche", "/suchergebnisse" -> "search_entry"
             "/kategorien" -> "categories_entry"
             "/mein-zdf" -> "account_entry"
-            "/live-tv" -> "live_entry"
-            "/serien", "/dokus", "/kinder" -> "vertical_entry"
+            "/live-tv", "/programm" -> "live_entry"
+            "/serien", "/dokus", "/filme", "/reportagen", "/nachrichten", "/sport", "/wissen", "/kinder" -> "vertical_entry"
             else -> "unknown"
         }
     }
@@ -4197,12 +4669,17 @@ object RuntimeToolkitSourcePipelineExporter {
     private fun surfaceLabelFromPath(path: String): String {
         return when (path.lowercase(Locale.ROOT)) {
             "/" -> "Home"
-            "/suche" -> "Suche"
+            "/suche", "/suchergebnisse" -> "Suche"
             "/kategorien" -> "Kategorien"
             "/serien" -> "Serien"
             "/dokus" -> "Dokus"
+            "/filme" -> "Filme"
+            "/reportagen" -> "Reportagen"
+            "/nachrichten" -> "Nachrichten"
+            "/sport" -> "Sport"
+            "/wissen" -> "Wissen"
             "/kinder" -> "Kinder"
-            "/live-tv" -> "Live TV"
+            "/live-tv", "/programm" -> "Live TV"
             "/mein-zdf" -> "Mein ZDF"
             else -> path.trim('/').replace('-', ' ').replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
         }.ifBlank { "Entry" }
@@ -4226,13 +4703,13 @@ object RuntimeToolkitSourcePipelineExporter {
         ) {
             return "playbackResolver"
         }
-        if (lowered.contains("refresh") || lowered.contains("token_refresh") || lowered.contains("/refresh")) {
+        if (hasRefreshHint(lowered)) {
             return "refresh"
         }
-        if (lowered.contains("auth") || lowered.contains("token") || lowered.contains("login")) {
+        if (hasAuthHint(lowered)) {
             return "auth"
         }
-        if (lowered.contains("config") || lowered.contains("/settings") || lowered.contains("/configuration")) {
+        if (lowered.contains("config") || lowered.contains("/settings") || lowered.contains("/configuration") || lowered.contains("einstellungen") || lowered.contains("konfiguration")) {
             return "config"
         }
         if (isSearchSignal(loweredOperation, loweredPath)) {
@@ -4404,16 +4881,24 @@ object RuntimeToolkitSourcePipelineExporter {
         val normalized = phaseIds
             .map { normalizePhaseId(it) }
             .filter { it in finalPhaseSet }
+        val rolePhases = expectedFinalPhasesForRole(role)
         if (normalized.isNotEmpty()) {
-            return normalized.distinct()
+            val aligned = if (rolePhases.isEmpty()) normalized else normalized.filter { it in rolePhases }
+            if (aligned.isNotEmpty()) return aligned.distinct()
         }
-        return when (role) {
-            "home" -> listOf("home_probe")
-            "search" -> listOf("search_probe")
-            "detail" -> listOf("detail_probe")
-            "playbackResolver", "playback_resolver" -> listOf("playback_probe")
-            "auth", "refresh" -> listOf("auth_probe")
-            else -> emptyList()
+        return rolePhases.toList()
+    }
+
+    private fun expectedFinalPhasesForRole(role: String): Set<String> {
+        return when (canonicalRole(role)) {
+            "home" -> setOf("home_probe")
+            "search" -> setOf("search_probe")
+            "detail" -> setOf("detail_probe")
+            "playbackResolver" -> setOf("playback_probe")
+            "auth", "refresh" -> setOf("auth_probe")
+            "config" -> setOf("replay_probe", "auth_probe")
+            "helper" -> setOf("replay_probe")
+            else -> emptySet()
         }
     }
 
@@ -4423,7 +4908,7 @@ object RuntimeToolkitSourcePipelineExporter {
         if (path.contains("/usage-data/") || path.contains("/user-histories/")) return true
         if (path.endsWith("/geo.txt") || lowered.contains("geo.txt")) return true
         if (path.endsWith("/event") || path.contains("/event/")) return true
-        if (path.endsWith(".ts") || path.endsWith(".m4s") || path.endsWith(".aac") || path.endsWith(".mp4")) return true
+        if (path.endsWith(".ts") || path.endsWith(".m4s") || path.endsWith(".aac") || path.endsWith(".mp4") || path.endsWith(".webm")) return true
         if (path.endsWith(".vtt") || path.endsWith(".srt") || path.endsWith(".ttml") || path.endsWith(".webvtt")) return true
         if (lowered.contains("subtitle") || lowered.contains("captions")) return true
         return false
@@ -4469,6 +4954,7 @@ object RuntimeToolkitSourcePipelineExporter {
                     "entry_surface" in signals ||
                     isCollectionBrowsePath(path) ||
                     context.contains("playback_manifest") ||
+                    context.contains("playback_resolver") ||
                     context.contains("/ptmd/") ||
                     context.contains("/tmd/")
             }
@@ -4483,11 +4969,10 @@ object RuntimeToolkitSourcePipelineExporter {
         if (isNoiseEndpoint(endpoint)) return false
         if (isRoleCrossContaminated(endpoint)) return false
         if ("entry_surface" in endpoint.internalSignals || "collection_feed" in endpoint.internalSignals) return true
-        if (path == "/" || path.contains("/home")) return true
-        if (operation.contains("cluster") || operation.contains("rail") || operation.contains("recommend")) return true
-        if (operation.contains("collection") || operation.contains("teaser") || operation.contains("start")) return true
-        if (path.contains("/kategorien")) return true
-        if (path.contains("/graphql") && (operation.contains("home") || operation.contains("start") || operation.contains("collection"))) return true
+        if (path == "/" || hasHomeHint(path) || hasCategoryHint(path) || hasGenreHint(path)) return true
+        if (containsAnyToken(operation, listOf("cluster", "rail", "recommend", "empfehl"))) return true
+        if (containsAnyToken(operation, listOf("collection", "teaser", "start", "startseite"))) return true
+        if (path.contains("/graphql") && (hasHomeHint(operation) || containsAnyToken(operation, listOf("collection", "cluster", "rail")))) return true
         return false
     }
 
@@ -4516,13 +5001,13 @@ object RuntimeToolkitSourcePipelineExporter {
             "search" -> {
                 var score = 0.0
                 if (isSearchSignal(operation, path)) score += 3.6
-                if (path.contains("/suche")) score += 2.8
+                if (path.contains("/suche") || path.contains("/suchergebnisse")) score += 2.8
                 if ("search_results" in signals) score += 3.2
                 if ("item_summary" in signals) score += 1.6
                 if ("collection_feed" in signals) score += 1.2
                 if ("item_detail" in signals) score -= 2.4
                 if ("playback_resolution" in signals) score -= 3.0
-                if (path.contains("/graphql") && !operation.contains("search")) score -= 2.0
+                if (path.contains("/graphql") && !hasSearchHint(operation)) score -= 2.0
                 if (isLiveOrCategorySignal(operation, path) || isDetailSignal(operation, path)) score -= 3.0
                 if (isTrackingSignal(operation, path)) score -= 4.0
                 score
@@ -4776,13 +5261,22 @@ object RuntimeToolkitSourcePipelineExporter {
     private fun looksLikeGenreSignal(path: String, value: String): Boolean {
         val loweredPath = path.lowercase(Locale.ROOT)
         val loweredValue = value.trim().lowercase(Locale.ROOT)
+        val normalizedValue = normalizeHintText(loweredValue)
         if (loweredValue.isBlank()) return false
         val pathLooksLikeGenre =
             loweredPath.contains("genre") ||
                 loweredPath.contains("category") ||
-                loweredPath.contains("section")
+                loweredPath.contains("section") ||
+                loweredPath.contains("rubrik") ||
+                loweredPath.contains("kategorie") ||
+                loweredPath.contains("thema") ||
+                loweredPath.contains("topic") ||
+                loweredPath.contains("facet") ||
+                loweredPath.contains("sammlung")
         if (!pathLooksLikeGenre) return false
-        return loweredValue.any { ch -> ch.isLetter() } && loweredValue.length in 3..80
+        if (normalizedValue in setOf("all", "alle", "neu", "top", "aktuell", "empfohlen")) return false
+        if (hasGenreHint(normalizedValue)) return true
+        return normalizedValue.any { ch -> ch.isLetter() } && normalizedValue.length in 3..80
     }
 
     private fun looksLikeYearSignal(path: String, value: String): Boolean {

@@ -133,6 +133,286 @@ class RuntimeToolkitTelemetryWizardFlowTest {
     }
 
     @Test
+    fun tracking_event_host_with_search_term_remains_tracking() {
+        RuntimeToolkitTelemetry.startMissionSession(
+            context = context,
+            missionId = RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE,
+        )
+        RuntimeToolkitTelemetry.setMissionTarget(context, "https://www.zdf.de")
+        RuntimeToolkitTelemetry.startCaptureSession(context, source = "unit_test")
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = context,
+            stepId = RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        )
+        RuntimeToolkitTelemetry.setActivePhaseId(context, "search_probe")
+        val request = RuntimeToolkitTelemetry.logNetworkRequest(
+            context = context,
+            source = "webview",
+            url = "https://tracksrv.zdf.de/event?eventType=search",
+            method = "GET",
+            headers = emptyMap(),
+        )
+        RuntimeToolkitTelemetry.logNetworkResponse(
+            context = context,
+            source = "webview",
+            url = "https://tracksrv.zdf.de/event?eventType=search",
+            method = "GET",
+            statusCode = 200,
+            reason = "OK",
+            mimeType = "application/json",
+            headers = emptyMap(),
+            rawBody = """{"ok":true}""".toByteArray(),
+            requestId = request.requestId,
+        )
+
+        val snapshot = RuntimeToolkitTelemetry.buildLiveWizardSnapshot(context)
+        val tracked = snapshot.recentCorrelated.firstOrNull { it.normalizedHost.contains("tracksrv") }
+        assertNotNull(tracked)
+        assertEquals("tracking", tracked!!.routeKind)
+        assertEquals("tracking_event", tracked.operation)
+    }
+
+    @Test
+    fun german_search_terms_are_resolved_to_search_role_candidates() {
+        RuntimeToolkitTelemetry.startMissionSession(
+            context = context,
+            missionId = RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE,
+        )
+        RuntimeToolkitTelemetry.setMissionTarget(context, "https://www.zdf.de")
+        RuntimeToolkitTelemetry.startCaptureSession(context, source = "unit_test")
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = context,
+            stepId = RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        )
+        RuntimeToolkitTelemetry.setActivePhaseId(context, "search_probe")
+        val request = RuntimeToolkitTelemetry.logNetworkRequest(
+            context = context,
+            source = "webview",
+            url = "https://www.zdf.de/suchergebnisse?suchbegriff=heute",
+            method = "GET",
+            headers = emptyMap(),
+        )
+        RuntimeToolkitTelemetry.logNetworkResponse(
+            context = context,
+            source = "webview",
+            url = "https://www.zdf.de/suchergebnisse?suchbegriff=heute",
+            method = "GET",
+            statusCode = 200,
+            reason = "OK",
+            mimeType = "application/json",
+            headers = emptyMap(),
+            rawBody = """{"items":[{"title":"Heute Journal"}]}""".toByteArray(),
+            requestId = request.requestId,
+        )
+
+        val snapshot = RuntimeToolkitTelemetry.buildLiveWizardSnapshot(context)
+        val searchCandidates = snapshot.endpointCandidates["search"].orEmpty()
+        assertTrue(searchCandidates.any { it.normalizedPath.contains("/suchergebnisse") })
+    }
+
+    @Test
+    fun ptmd_calls_are_named_as_playback_resolver_fetch() {
+        RuntimeToolkitTelemetry.startMissionSession(
+            context = context,
+            missionId = RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE,
+        )
+        RuntimeToolkitTelemetry.setMissionTarget(context, "https://www.zdf.de")
+        RuntimeToolkitTelemetry.startCaptureSession(context, source = "unit_test")
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = context,
+            stepId = RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        )
+        RuntimeToolkitTelemetry.setActivePhaseId(context, "playback_probe")
+        val request = RuntimeToolkitTelemetry.logNetworkRequest(
+            context = context,
+            source = "webview",
+            url = "https://api.zdf.de/tmd/2/ngplayer_2_5/vod/ptmd/tivi/123",
+            method = "GET",
+            headers = emptyMap(),
+        )
+        RuntimeToolkitTelemetry.logNetworkResponse(
+            context = context,
+            source = "webview",
+            url = "https://api.zdf.de/tmd/2/ngplayer_2_5/vod/ptmd/tivi/123",
+            method = "GET",
+            statusCode = 200,
+            reason = "OK",
+            mimeType = "application/json",
+            headers = emptyMap(),
+            rawBody = """{"priorityList":[],"formitaeten":[]}""".toByteArray(),
+            requestId = request.requestId,
+        )
+
+        val snapshot = RuntimeToolkitTelemetry.buildLiveWizardSnapshot(context)
+        val playback = snapshot.recentCorrelated.firstOrNull { it.normalizedPath.contains("/ptmd/") }
+        assertNotNull(playback)
+        assertEquals("playback_resolver_fetch", playback!!.operation)
+    }
+
+    @Test
+    fun german_auth_login_terms_are_classified_as_auth_login() {
+        RuntimeToolkitTelemetry.startMissionSession(
+            context = context,
+            missionId = RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE,
+        )
+        RuntimeToolkitTelemetry.setMissionTarget(context, "https://www.zdf.de")
+        RuntimeToolkitTelemetry.startCaptureSession(context, source = "unit_test")
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = context,
+            stepId = RuntimeToolkitMissionWizard.STEP_AUTH_PROBE_OPTIONAL,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        )
+        RuntimeToolkitTelemetry.setActivePhaseId(context, "auth_probe")
+        val request = RuntimeToolkitTelemetry.logNetworkRequest(
+            context = context,
+            source = "webview",
+            url = "https://api.zdf.de/identity/anmelden",
+            method = "POST",
+            headers = emptyMap(),
+        )
+        RuntimeToolkitTelemetry.logNetworkResponse(
+            context = context,
+            source = "webview",
+            url = "https://api.zdf.de/identity/anmelden",
+            method = "POST",
+            statusCode = 200,
+            reason = "OK",
+            mimeType = "application/json",
+            headers = emptyMap(),
+            rawBody = """{"ok":true}""".toByteArray(),
+            requestId = request.requestId,
+        )
+
+        val snapshot = RuntimeToolkitTelemetry.buildLiveWizardSnapshot(context)
+        val authEvent = snapshot.recentCorrelated.firstOrNull { it.normalizedPath.contains("/anmelden") }
+        assertNotNull(authEvent)
+        assertEquals("auth", authEvent!!.routeKind)
+        assertEquals("auth_login", authEvent.operation)
+    }
+
+    @Test
+    fun german_ascii_path_variants_match_umlaut_hint_tokens() {
+        RuntimeToolkitTelemetry.startMissionSession(
+            context = context,
+            missionId = RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE,
+        )
+        RuntimeToolkitTelemetry.setMissionTarget(context, "https://www.zdf.de")
+        RuntimeToolkitTelemetry.startCaptureSession(context, source = "unit_test")
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = context,
+            stepId = RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        )
+        RuntimeToolkitTelemetry.setActivePhaseId(context, "detail_probe")
+        val request = RuntimeToolkitTelemetry.logNetworkRequest(
+            context = context,
+            source = "webview",
+            url = "https://www.zdf.de/beitraege/fokus-europa-100",
+            method = "GET",
+            headers = emptyMap(),
+        )
+        RuntimeToolkitTelemetry.logNetworkResponse(
+            context = context,
+            source = "webview",
+            url = "https://www.zdf.de/beitraege/fokus-europa-100",
+            method = "GET",
+            statusCode = 200,
+            reason = "OK",
+            mimeType = "application/json",
+            headers = emptyMap(),
+            rawBody = """{"item":{"title":"Fokus Europa"}}""".toByteArray(),
+            requestId = request.requestId,
+        )
+
+        val snapshot = RuntimeToolkitTelemetry.buildLiveWizardSnapshot(context)
+        val detailCandidates = snapshot.endpointCandidates["detail"].orEmpty()
+        assertTrue(detailCandidates.any { it.normalizedPath.contains("/beitraege/") })
+    }
+
+    @Test
+    fun german_genre_route_is_classified_as_category() {
+        RuntimeToolkitTelemetry.startMissionSession(
+            context = context,
+            missionId = RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE,
+        )
+        RuntimeToolkitTelemetry.setMissionTarget(context, "https://www.zdf.de")
+        RuntimeToolkitTelemetry.startCaptureSession(context, source = "unit_test")
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = context,
+            stepId = RuntimeToolkitMissionWizard.STEP_HOME_PROBE,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        )
+        RuntimeToolkitTelemetry.setActivePhaseId(context, "home_probe")
+        val request = RuntimeToolkitTelemetry.logNetworkRequest(
+            context = context,
+            source = "webview",
+            url = "https://www.zdf.de/genre/krimi",
+            method = "GET",
+            headers = emptyMap(),
+        )
+        RuntimeToolkitTelemetry.logNetworkResponse(
+            context = context,
+            source = "webview",
+            url = "https://www.zdf.de/genre/krimi",
+            method = "GET",
+            statusCode = 200,
+            reason = "OK",
+            mimeType = "application/json",
+            headers = emptyMap(),
+            rawBody = """{"rows":[{"title":"Krimi","items":[{"title":"Taunuskrimi"}]}]}""".toByteArray(),
+            requestId = request.requestId,
+        )
+
+        val snapshot = RuntimeToolkitTelemetry.buildLiveWizardSnapshot(context)
+        val genre = snapshot.recentCorrelated.firstOrNull { it.normalizedPath.contains("/genre/krimi") }
+        assertNotNull(genre)
+        assertEquals("category", genre!!.routeKind)
+    }
+
+    @Test
+    fun german_filme_item_paths_are_classified_as_detail() {
+        RuntimeToolkitTelemetry.startMissionSession(
+            context = context,
+            missionId = RuntimeToolkitMissionWizard.MISSION_FISHIT_PIPELINE,
+        )
+        RuntimeToolkitTelemetry.setMissionTarget(context, "https://www.zdf.de")
+        RuntimeToolkitTelemetry.startCaptureSession(context, source = "unit_test")
+        RuntimeToolkitTelemetry.setMissionWizardStepState(
+            context = context,
+            stepId = RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE,
+            saturationState = RuntimeToolkitMissionWizard.SATURATION_INCOMPLETE,
+        )
+        RuntimeToolkitTelemetry.setActivePhaseId(context, "detail_probe")
+        val request = RuntimeToolkitTelemetry.logNetworkRequest(
+            context = context,
+            source = "webview",
+            url = "https://www.zdf.de/filme/der-fernsehfilm-der-woche-100",
+            method = "GET",
+            headers = emptyMap(),
+        )
+        RuntimeToolkitTelemetry.logNetworkResponse(
+            context = context,
+            source = "webview",
+            url = "https://www.zdf.de/filme/der-fernsehfilm-der-woche-100",
+            method = "GET",
+            statusCode = 200,
+            reason = "OK",
+            mimeType = "text/html",
+            headers = emptyMap(),
+            rawBody = """<html><title>Der Fernsehfilm der Woche</title></html>""".toByteArray(),
+            requestId = request.requestId,
+        )
+
+        val snapshot = RuntimeToolkitTelemetry.buildLiveWizardSnapshot(context)
+        val filmDetail = snapshot.recentCorrelated.firstOrNull { it.normalizedPath.contains("/filme/der-fernsehfilm-der-woche-100") }
+        assertNotNull(filmDetail)
+        assertEquals("detail", filmDetail!!.routeKind)
+    }
+
+    @Test
     fun live_snapshot_exposes_feed_first_internal_signals_and_playback_resolution_chain() {
         RuntimeToolkitTelemetry.startMissionSession(
             context = context,

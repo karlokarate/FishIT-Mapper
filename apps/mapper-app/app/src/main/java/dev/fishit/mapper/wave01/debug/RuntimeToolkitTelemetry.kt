@@ -3365,10 +3365,11 @@ object RuntimeToolkitTelemetry {
         val operation = observation.operation
         val path = observation.path
         val mime = observation.mimeType
+        val context = "$operation $path"
         return when {
-            observation.routeKind == "home" || path == "/" || path.contains("/home") -> "home_probe"
-            observation.routeKind == "search" || operation.contains("search") || path.contains("/search") -> "search_probe"
-            observation.routeKind == "detail" || operation.contains("detail") || path.contains("/detail") || path.contains("/content/") -> "detail_probe"
+            observation.routeKind == "home" || path == "/" || hasHomeHint(context) -> "home_probe"
+            observation.routeKind == "search" || hasSearchHint(context) -> "search_probe"
+            observation.routeKind == "detail" || hasDetailHint(context) -> "detail_probe"
             isPlaybackSignal(
                 routeKind = observation.routeKind,
                 operation = operation,
@@ -3376,12 +3377,7 @@ object RuntimeToolkitTelemetry {
                 mimeType = mime,
             ) -> "playback_probe"
             observation.routeKind == "auth" ||
-                operation.contains("auth") ||
-                operation.contains("token") ||
-                operation.contains("login") ||
-                operation.contains("logout") ||
-                operation.contains("refresh") ||
-                path.contains("/auth") -> "auth_probe"
+                hasAuthHint(context) -> "auth_probe"
             else -> PHASE_BACKGROUND
         }
     }
@@ -3409,25 +3405,486 @@ object RuntimeToolkitTelemetry {
     private val liveEntrySurfacePaths = setOf(
         "/",
         "/suche",
+        "/suchergebnisse",
+        "/startseite",
+        "/mediathek",
         "/kategorien",
         "/serien",
+        "/filme",
         "/dokus",
+        "/reportagen",
+        "/nachrichten",
+        "/sport",
+        "/wissen",
         "/kinder",
         "/live-tv",
         "/mein-zdf",
     )
 
     private val liveBrowseRootSegments = setOf(
+        "suche",
+        "suchergebnisse",
+        "startseite",
+        "mediathek",
         "kategorien",
+        "kategorie",
+        "genre",
+        "genres",
         "serien",
+        "serie",
+        "film",
         "dokus",
+        "filme",
+        "reportagen",
+        "reportage",
+        "nachrichten",
+        "sport",
+        "wissen",
+        "zdfheute",
+        "sportstudio",
+        "spielfilm",
+        "fernsehfilm",
+        "einzeldokus",
+        "kurzdoku",
         "kinder",
+        "programm",
         "live-tv",
         "livetv",
         "themen",
+        "thema",
         "rubriken",
+        "rubrik",
         "mein-zdf",
     )
+
+    private val searchHintTokens = listOf(
+        "/search",
+        "/suche",
+        "/suchergebnis",
+        "/suchergebnisse",
+        "/such-resultate",
+        "/suchtreffer",
+        "/mediathek/suche",
+        "search=",
+        "suche=",
+        "suchbegriff=",
+        "suchwort=",
+        "suchtext=",
+        "suchphrase=",
+        "suchanfrage=",
+        "searchterm=",
+        "suchterm=",
+        "query=",
+        "q=",
+        "suggest",
+        "autocomplete",
+        "searchrecommendation",
+        "getsearchresults",
+        "searchresults",
+        "suchergebnisse",
+        "suchtreffer",
+        "trefferliste",
+        "ergebnisliste",
+        "volltextsuche",
+        "suchfeld",
+        "sucheingabe",
+        "suchanfrage",
+        "suchvorschlag",
+        "vorschlag",
+        "suchhistorie",
+    )
+
+    private val detailHintTokens = listOf(
+        "/detail",
+        "/content/",
+        "/video/",
+        "/episode/",
+        "/episodes/",
+        "/folge/",
+        "/folgen/",
+        "/staffel/",
+        "/staffeln/",
+        "/sendung/",
+        "/sendungen/",
+        "/beitrag/",
+        "/beiträge/",
+        "/reportage",
+        "/doku",
+        "/dokus/",
+        "/dokumentation/",
+        "/dokumentationen/",
+        "/kurzdoku/",
+        "/einzeldokus/",
+        "/film",
+        "/filme/",
+        "/spielfilm/",
+        "/fernsehfilm/",
+        "/serie/",
+        "/serien/",
+        "/sendereihe/",
+        "/sendereihen/",
+        "/thema/",
+        "/themen/",
+        "detail",
+        "detailseite",
+        "detailansicht",
+        "beitragsdetail",
+        "sendungsdetail",
+        "episodendetail",
+        "videodetail",
+        "episode",
+        "canonical",
+        "canonicalid",
+        "video",
+        "content",
+        "media_by_canonical",
+        "mediadetail",
+        "contentdetail",
+        "getvideo",
+        "sendung",
+        "folge",
+        "folgen",
+        "staffel",
+        "staffeln",
+        "serie",
+        "serien",
+        "beitrag",
+        "doku",
+        "dokus",
+        "dokumentation",
+        "kurzdoku",
+        "einzeldokus",
+        "reportage",
+        "reportagen",
+        "spielfilm",
+        "fernsehfilm",
+        "film",
+        "filme",
+    )
+
+    private val homeHintTokens = listOf(
+        "/home",
+        "/start",
+        "/startseite",
+        "/mediathek",
+        "/entdecken",
+        "/stöbern",
+        "/für-dich",
+        "/neu-in-der-mediathek",
+        "home",
+        "start",
+        "startseite",
+        "entdecken",
+        "stöbern",
+        "für dich",
+        "weiterschauen",
+        "neu in der mediathek",
+        "top serien",
+        "top dokus",
+        "hero",
+        "highlight",
+        "highlights",
+        "cluster",
+        "rail",
+        "row",
+        "recommend",
+        "collection",
+        "teaser",
+        "empfehl",
+    )
+
+    private val categoryHintTokens = listOf(
+        "/kategorie",
+        "/kategorien",
+        "/category",
+        "/categories",
+        "/rubrik",
+        "/rubriken",
+        "/genre",
+        "/thema",
+        "/themen",
+        "/serien",
+        "/dokus",
+        "/kinder",
+        "/filme",
+        "/reportagen",
+        "/nachrichten",
+        "/sport",
+        "/wissen",
+        "/zdfheute",
+        "/sportstudio",
+        "/krimi",
+        "/thriller",
+        "/drama",
+        "/komoedie",
+        "/komödie",
+        "/romance",
+        "/romanze",
+        "/action",
+        "category",
+        "categories",
+        "kategorie",
+        "kategorien",
+        "kategorienseite",
+        "rubrik",
+        "rubriken",
+        "rubrikenseite",
+        "genre",
+        "topic",
+        "thema",
+        "themen",
+        "themenwelt",
+        "sammlung",
+        "sammlungen",
+        "facet",
+        "facets",
+        "alle-inhalte",
+        "alleinhalte",
+        "krimi",
+        "thriller",
+        "drama",
+        "komödie",
+        "komoedie",
+        "romance",
+        "romanze",
+        "action",
+        "horror",
+        "fantasy",
+        "mystery",
+        "science fiction",
+        "science-fiction",
+        "sciencefiction",
+        "sci-fi",
+        "dokumentation",
+        "spielfilm",
+        "fernsehfilm",
+        "sportstudio",
+        "zdfheute",
+        "erzgebirgskrimi",
+        "taunuskrimi",
+        "familie",
+        "familienfilm",
+        "kinderfilm",
+    )
+
+    private val genreHintTokens = listOf(
+        "krimi",
+        "thriller",
+        "drama",
+        "komödie",
+        "komoedie",
+        "komodie",
+        "romance",
+        "romanze",
+        "action",
+        "horror",
+        "fantasy",
+        "mystery",
+        "science fiction",
+        "science-fiction",
+        "sciencefiction",
+        "sci-fi",
+        "sci fi",
+        "doku",
+        "dokus",
+        "dokumentation",
+        "reportage",
+        "reportagen",
+        "spielfilm",
+        "fernsehfilm",
+        "familie",
+        "familienfilm",
+        "kinderfilm",
+        "kinder",
+        "nachrichten",
+        "sport",
+        "wissen",
+        "sportstudio",
+        "zdfheute",
+        "erzgebirgskrimi",
+        "taunuskrimi",
+    )
+
+    private val mediaTypeHintTokens = listOf(
+        "serie",
+        "serien",
+        "staffel",
+        "staffeln",
+        "folge",
+        "folgen",
+        "episode",
+        "episoden",
+        "show",
+        "film",
+        "filme",
+        "movie",
+        "spielfilm",
+        "fernsehfilm",
+        "doku",
+        "dokus",
+        "dokumentation",
+        "reportage",
+        "reportagen",
+        "kurzdoku",
+        "einzeldokus",
+        "live",
+        "livestream",
+        "clip",
+        "trailer",
+    )
+
+    private val liveHintTokens = listOf(
+        "/live",
+        "/live-tv",
+        "/livetv",
+        "/livestream",
+        "/programm",
+        "/tv-programm",
+        "/sendung-verpasst",
+        "/verpasst",
+        "/epg",
+        "onair",
+        "jetzt live",
+        "jetzt-live",
+        "sendungverpasst",
+        "programmübersicht",
+        "live_catalog",
+        "activelive",
+        "epg",
+        "livetv",
+    )
+
+    private val authHintTokens = listOf(
+        "/auth",
+        "/oauth",
+        "/identity",
+        "/login",
+        "/signin",
+        "/logout",
+        "/mein-zdf",
+        "/meinzdf",
+        "/token",
+        "/session",
+        "/userinfo",
+        "/userdetails",
+        "/fsk",
+        "/pin",
+        "auth",
+        "token",
+        "login",
+        "logout",
+        "signin",
+        "authorize",
+        "oidc",
+        "openid",
+        "refresh",
+        "identity",
+        "session",
+        "anmelden",
+        "anmeldung",
+        "abmelden",
+        "abmeldung",
+        "einloggen",
+        "ausloggen",
+        "konto",
+        "benutzerkonto",
+        "kontoverwaltung",
+        "profil",
+        "benutzer",
+        "passwort",
+        "kennwort",
+        "mein-zdf",
+        "meinzdf",
+        "registrieren",
+        "registrierung",
+        "jugendschutz",
+        "altersnachweis",
+        "altersfreigabe",
+        "personalisierung",
+    )
+
+    private val loginHintTokens = listOf(
+        "login",
+        "signin",
+        "authorize",
+        "anmelden",
+        "anmeldung",
+        "einloggen",
+        "registrieren",
+        "registrierung",
+        "/login",
+        "/signin",
+        "/authorize",
+        "/anmelden",
+    )
+
+    private val validationHintTokens = listOf(
+        "validate",
+        "validation",
+        "userinfo",
+        "profile",
+        "session",
+        "status",
+        "sessionstatus",
+        "authstatus",
+        "kontostatus",
+        "angemeldet",
+        "eingeloggt",
+        "whoami",
+        "werbinich",
+        "konto",
+        "profil",
+        "benutzer",
+        "/userinfo",
+        "/profile",
+        "/profil",
+        "/konto",
+        "/me",
+    )
+
+    private val refreshHintTokens = listOf(
+        "refresh",
+        "token_refresh",
+        "session_refresh",
+        "sessionrefresh",
+        "session_renew",
+        "token_renew",
+        "keepalive",
+        "renew",
+        "renewal",
+        "revalidate",
+        "erneuern",
+        "aktualisieren",
+        "verlängern",
+        "/refresh",
+        "/session/refresh",
+        "/token/erneuern",
+        "/token/refresh",
+    )
+
+    private fun hasSearchHint(text: String): Boolean = containsAnyToken(text, searchHintTokens)
+
+    private fun hasDetailHint(text: String): Boolean = containsAnyToken(text, detailHintTokens)
+
+    private fun hasHomeHint(text: String): Boolean = containsAnyToken(text, homeHintTokens)
+
+    private fun hasCategoryHint(text: String): Boolean = containsAnyToken(text, categoryHintTokens)
+
+    private fun hasLiveHint(text: String): Boolean = containsAnyToken(text, liveHintTokens)
+
+    private fun hasGenreHint(text: String): Boolean = containsAnyToken(text, genreHintTokens)
+
+    private fun hasMediaTypeHint(text: String): Boolean = containsAnyToken(text, mediaTypeHintTokens)
+
+    private fun hasLiveOrCategoryHint(text: String): Boolean = hasLiveHint(text) || hasCategoryHint(text) || hasGenreHint(text)
+
+    private fun hasAuthHint(text: String): Boolean = containsAnyToken(text, authHintTokens)
+
+    private fun hasLoginHint(text: String): Boolean = containsAnyToken(text, loginHintTokens)
+
+    private fun hasValidationHint(text: String): Boolean = containsAnyToken(text, validationHintTokens)
+
+    private fun hasRefreshHint(text: String): Boolean = containsAnyToken(text, refreshHintTokens)
 
     private fun normalizeLiveRoutePath(path: String): String {
         val trimmed = path.trim().ifBlank { "/" }
@@ -3449,7 +3906,8 @@ object RuntimeToolkitTelemetry {
         if (segments.isEmpty()) return normalized == "/"
         val first = segments.first()
         if (first in liveBrowseRootSegments && segments.size == 1) return true
-        if (first in liveBrowseRootSegments && segments.size == 2 && segments.last() in setOf("alle", "neu", "top", "beliebt")) return true
+        if (first in liveBrowseRootSegments && segments.size == 2 && segments.last() in setOf("alle", "neu", "top", "beliebt", "aktuell", "empfohlen", "meistgesehen")) return true
+        if (first in setOf("genre", "genres", "kategorie", "kategorien", "rubrik", "rubriken", "thema", "themen", "serien", "filme", "dokus", "reportagen", "nachrichten", "sport", "wissen") && segments.size == 2) return true
         return false
     }
 
@@ -3458,10 +3916,10 @@ object RuntimeToolkitTelemetry {
         if (segments.size < 2) return false
         if (isLiveCollectionBrowsePath(path)) return false
         val last = segments.last()
-        if (last in setOf("index", "overview", "alle", "top", "neu")) return false
+        if (last in setOf("index", "overview", "alle", "top", "neu", "aktuell", "empfohlen")) return false
         if (Regex(".*-\\d{2,}$").matches(last)) return true
         val contentPrefix = segments.dropLast(1).lastOrNull().orEmpty()
-        if (contentPrefix in setOf("reportagen", "dokus", "filme", "serien", "video", "videos", "episode", "episoden")) {
+        if (contentPrefix in setOf("reportagen", "reportage", "doku", "dokus", "dokumentation", "dokumentationen", "einzeldokus", "kurzdoku", "filme", "film", "spielfilm", "fernsehfilm", "serien", "serie", "sendung", "sendungen", "folge", "folgen", "staffel", "staffeln", "beitrag", "beitraege", "beiträge", "video", "videos", "episode", "episoden")) {
             return last.length >= 8 && last.any { it.isDigit() }
         }
         return false
@@ -3491,57 +3949,24 @@ object RuntimeToolkitTelemetry {
     }
 
     private fun isLiveSearchSignal(operation: String, path: String): Boolean {
-        val op = operation.lowercase(Locale.ROOT)
-        val loweredPath = path.lowercase(Locale.ROOT)
-        return op.contains("search") ||
-            op.contains("suggest") ||
-            loweredPath.contains("/suche") ||
-            loweredPath.contains("/search")
+        return hasSearchHint("${operation.lowercase(Locale.ROOT)} ${path.lowercase(Locale.ROOT)}")
     }
 
     private fun isLiveDetailSignal(operation: String, path: String): Boolean {
-        val op = operation.lowercase(Locale.ROOT)
         val loweredPath = path.lowercase(Locale.ROOT)
         if (isLiveCollectionBrowsePath(loweredPath)) return false
-        return op.contains("detail") ||
-            op.contains("episode") ||
-            op.contains("canonical") ||
-            op.contains("video") ||
-            op.contains("content") ||
-            op.contains("media_by_canonical") ||
-            op.contains("getvideo") ||
-            loweredPath.contains("/detail") ||
-            loweredPath.contains("/content/") ||
-            loweredPath.contains("/video/") ||
-            loweredPath.contains("/episode/") ||
-            loweredPath.contains("/filme/") ||
-            looksLikeLiveSingleItemPath(loweredPath)
+        return hasDetailHint("${operation.lowercase(Locale.ROOT)} $loweredPath") || hasMediaTypeHint("${operation.lowercase(Locale.ROOT)} $loweredPath") || looksLikeLiveSingleItemPath(loweredPath)
     }
 
     private fun isLiveHomeSignal(operation: String, path: String): Boolean {
-        val op = operation.lowercase(Locale.ROOT)
         val loweredPath = path.lowercase(Locale.ROOT)
         return loweredPath == "/" ||
-            op.contains("home") ||
-            op.contains("start") ||
-            op.contains("cluster") ||
-            op.contains("rail") ||
-            op.contains("recommend") ||
-            op.contains("collection") ||
-            op.contains("teaser") ||
-            loweredPath.contains("/home") ||
+            hasHomeHint("${operation.lowercase(Locale.ROOT)} $loweredPath") ||
             loweredPath.contains("/kategorien")
     }
 
     private fun isLiveOrCategorySignal(operation: String, path: String): Boolean {
-        val op = operation.lowercase(Locale.ROOT)
-        val loweredPath = path.lowercase(Locale.ROOT)
-        return op.contains("live_catalog") ||
-            op.contains("live") ||
-            op.contains("category") ||
-            loweredPath.contains("/live-tv") ||
-            loweredPath.contains("/livetv") ||
-            loweredPath.contains("/kategorien")
+        return hasLiveOrCategoryHint("${operation.lowercase(Locale.ROOT)} ${path.lowercase(Locale.ROOT)}")
     }
 
     private fun isLiveTrackingSignal(operation: String, path: String): Boolean {
@@ -3549,6 +3974,9 @@ object RuntimeToolkitTelemetry {
         return context.contains("tracking") ||
             context.contains("telemetry") ||
             context.contains("analytics") ||
+            context.contains("measurement") ||
+            context.contains("tracksrv") ||
+            context.contains("nmrodam") ||
             context.contains("beacon") ||
             context.contains("pixel") ||
             context.contains("/event")
@@ -3568,15 +3996,7 @@ object RuntimeToolkitTelemetry {
 
         val entrySurface = normalizedPath in liveEntrySurfacePaths
         val collectionSignal =
-            op.contains("collection") ||
-                op.contains("rail") ||
-                op.contains("row") ||
-                op.contains("cluster") ||
-                op.contains("teaser") ||
-                op.contains("facet") ||
-                op.contains("tab") ||
-                op.contains("grid") ||
-                op.contains("catalog") ||
+            containsAnyToken(op, listOf("collection", "rail", "row", "reihe", "reihen", "cluster", "teaser", "facet", "filter", "tab", "grid", "kachel", "tile", "catalog", "kategorie", "rubrik", "thema", "genre", "serien", "serie", "filme", "film", "dokus", "doku", "reportagen")) ||
                 isLiveCollectionBrowsePath(normalizedPath)
         val playbackSignal =
             context.contains("/ptmd/") ||
@@ -3587,10 +4007,7 @@ object RuntimeToolkitTelemetry {
                 normalizedPath.endsWith(".mpd")
         val accountSignal =
             role in setOf("auth", "refresh", "config", "helper") ||
-                context.contains("auth") ||
-                context.contains("login") ||
-                context.contains("token") ||
-                context.contains("identity")
+                hasAuthHint(context)
 
         if (entrySurface) signals += "entry_surface"
         if (collectionSignal && !playbackSignal) signals += "collection_feed"
@@ -3608,14 +4025,10 @@ object RuntimeToolkitTelemetry {
                 "home_probe" -> {
                     val homeLikeRoute = isLiveCollectionBrowsePath(normalizedPath)
                     val homeLikeOperation =
-                        op.contains("home") ||
-                            op.contains("start") ||
-                            op.contains("collection") ||
-                            op.contains("rail") ||
-                            op.contains("row") ||
-                            op.contains("cluster") ||
-                            op.contains("teaser") ||
-                            op.contains("category")
+                        hasHomeHint(op) ||
+                            hasCategoryHint(op) ||
+                            hasGenreHint(op) ||
+                            containsAnyToken(op, listOf("collection", "rail", "row", "reihe", "reihen", "cluster", "teaser", "catalog"))
                     if (homeLikeRoute) signals += "entry_surface"
                     if (homeLikeRoute || homeLikeOperation) signals += "collection_feed"
                 }
@@ -3643,13 +4056,13 @@ object RuntimeToolkitTelemetry {
         if (path in liveEntrySurfacePaths) {
             signals += "entry_surface"
         }
-        if (route.contains("home") || route.contains("category") || op.contains("collection") || op.contains("cluster")) {
+        if (route.contains("home") || route.contains("category") || hasCategoryHint("$op $path") || hasGenreHint("$op $path") || op.contains("collection") || op.contains("cluster")) {
             signals += "collection_feed"
         }
         if (collectionPayload) {
             signals += "collection_feed"
         }
-        if (route.contains("search") || op.contains("search")) {
+        if (route.contains("search") || hasSearchHint("$op $path")) {
             signals += "search_results"
         }
         if (
@@ -3660,7 +4073,7 @@ object RuntimeToolkitTelemetry {
             signals += "item_summary"
         }
         if (
-            (route.contains("detail") || op.contains("detail") || op.contains("canonical") || singleItemPayload || looksLikeLiveSingleItemPath(path)) &&
+            (route.contains("detail") || hasDetailHint("$op $path") || op.contains("canonical") || singleItemPayload || looksLikeLiveSingleItemPath(path)) &&
             !isLiveCollectionBrowsePath(path) &&
             "collection_feed" !in signals &&
             !collectionPayload
@@ -3670,7 +4083,7 @@ object RuntimeToolkitTelemetry {
         if (path.contains("/ptmd/") || path.contains("/tmd/") || op.contains("resolver") || path.endsWith(".m3u8") || path.endsWith(".mpd")) {
             signals += "playback_resolution"
         }
-        if (route.contains("auth") || op.contains("auth") || op.contains("login") || op.contains("token")) {
+        if (route.contains("auth") || hasAuthHint("$op $path")) {
             signals += "account_or_policy"
         }
         return signals
@@ -3680,11 +4093,11 @@ object RuntimeToolkitTelemetry {
         val hints = linkedSetOf<String>()
         val op = operation.lowercase(Locale.ROOT)
         val normalizedPath = path.lowercase(Locale.ROOT)
-        if (op.contains("row") || op.contains("rail") || op.contains("cluster")) hints += "row_or_rail"
+        if (containsAnyToken(op, listOf("row", "rail", "cluster", "reihe", "reihen"))) hints += "row_or_rail"
         if (op.contains("tab") || normalizedPath.contains("/tabs")) hints += "tabbed_collection"
-        if (op.contains("facet") || op.contains("filter")) hints += "faceted_collection"
+        if (containsAnyToken(op, listOf("facet", "filter", "facette"))) hints += "faceted_collection"
         if (op.contains("grid") || normalizedPath.contains("/grid")) hints += "grid_collection"
-        if (normalizedPath.contains("/kategorien") || normalizedPath.contains("/serien") || normalizedPath.contains("/dokus") || normalizedPath.contains("/kinder") || op.contains("category")) {
+        if (hasCategoryHint("$op $normalizedPath") || hasGenreHint("$op $normalizedPath") || normalizedPath.contains("/serien") || normalizedPath.contains("/dokus") || normalizedPath.contains("/kinder") || normalizedPath.contains("/filme")) {
             hints += "category_collection"
         }
         if (normalizedPath in liveEntrySurfacePaths) {
@@ -3780,13 +4193,13 @@ object RuntimeToolkitTelemetry {
             return "helper"
         }
         return when {
-            context.contains("refresh") -> "refresh"
-            context.contains("auth") || context.contains("login") || context.contains("token") -> "auth"
+            hasRefreshHint(context) -> "refresh"
+            hasAuthHint(context) -> "auth"
             context.contains("playback") || context.contains("resolver") || context.contains("ptmd") || context.contains("manifest") || path.endsWith(".m3u8") || path.endsWith(".mpd") -> "playbackResolver"
             isLiveSearchSignal(op, path) -> "search"
             isLiveDetailSignal(op, path) -> "detail"
             isLiveHomeSignal(op, path) -> "home"
-            context.contains("config") || context.contains("settings") -> "config"
+            context.contains("config") || context.contains("settings") || context.contains("einstellungen") || context.contains("konfiguration") -> "config"
             phase.startsWith("home") -> "home"
             phase.startsWith("search") -> "search"
             phase.startsWith("detail") -> "detail"
@@ -3826,12 +4239,12 @@ object RuntimeToolkitTelemetry {
             }
             "search" -> {
                 if (isLiveSearchSignal(operation, path)) score += 8.0
-                if (path.contains("/suche")) score += 6.0
+                if (path.contains("/suche") || path.contains("/suchergebnisse")) score += 6.0
                 if ("search_results" in signals) score += 7.0
                 if ("item_summary" in signals) score += 3.0
                 if ("item_detail" in signals) score -= 5.0
                 if ("playback_resolution" in signals) score -= 8.0
-                if (path.contains("/graphql") && !operation.contains("search")) score -= 6.0
+                if (path.contains("/graphql") && !hasSearchHint(operation)) score -= 6.0
                 if (isLiveOrCategorySignal(operation, path) || isLiveDetailSignal(operation, path)) score -= 8.0
             }
             "detail" -> {
@@ -3977,10 +4390,11 @@ object RuntimeToolkitTelemetry {
         val loweredRoute = routeKind.trim().lowercase(Locale.ROOT)
         val loweredOp = operation.lowercase(Locale.ROOT)
         val loweredPath = path.lowercase(Locale.ROOT)
+        val context = "$loweredOp $loweredPath"
         return when {
-            loweredRoute == "home" || loweredPath == "/" || loweredPath.contains("/home") -> "home_probe"
-            loweredRoute == "search" || loweredOp.contains("search") || loweredPath.contains("/search") -> "search_probe"
-            loweredRoute == "detail" || loweredOp.contains("detail") || loweredPath.contains("/detail") || loweredPath.contains("/content/") -> "detail_probe"
+            loweredRoute == "home" || loweredPath == "/" || hasHomeHint(context) -> "home_probe"
+            loweredRoute == "search" || hasSearchHint(context) -> "search_probe"
+            loweredRoute == "detail" || hasDetailHint(context) -> "detail_probe"
             isPlaybackSignal(
                 routeKind = loweredRoute,
                 operation = loweredOp,
@@ -3988,12 +4402,7 @@ object RuntimeToolkitTelemetry {
                 mimeType = mimeType.lowercase(Locale.ROOT),
             ) -> "playback_probe"
             loweredRoute == "auth" ||
-                loweredOp.contains("auth") ||
-                loweredOp.contains("token") ||
-                loweredOp.contains("login") ||
-                loweredOp.contains("logout") ||
-                loweredOp.contains("refresh") ||
-                loweredPath.contains("/auth") -> "auth_probe"
+                hasAuthHint(context) -> "auth_probe"
             else -> PHASE_BACKGROUND
         }
     }
@@ -4107,11 +4516,7 @@ object RuntimeToolkitTelemetry {
                         val routeKind = payload.optString("route_kind").lowercase(Locale.ROOT)
                         val authRelated = phaseId == "auth_probe" ||
                             routeKind == "auth" ||
-                            operation.contains("auth") ||
-                            operation.contains("token") ||
-                            operation.contains("refresh") ||
-                            path.contains("/auth") ||
-                            path.contains("/oauth")
+                            hasAuthHint("$operation $path")
                         if (statusCode in setOf(401, 403)) {
                             refreshTriggers += 1
                         }
@@ -4136,29 +4541,15 @@ object RuntimeToolkitTelemetry {
 
     private fun isLoginOperation(operation: String, path: String): Boolean {
         if (isRefreshOperation(operation, path) || isValidationOperation(operation, path)) return false
-        return operation.contains("login") ||
-            operation.contains("signin") ||
-            operation.contains("authorize") ||
-            path.contains("/login") ||
-            path.contains("/signin") ||
-            path.contains("/authorize")
+        return hasLoginHint("$operation $path")
     }
 
     private fun isValidationOperation(operation: String, path: String): Boolean {
-        return operation.contains("validate") ||
-            operation.contains("validation") ||
-            operation.contains("userinfo") ||
-            operation.contains("profile") ||
-            path.contains("/userinfo") ||
-            path.contains("/profile") ||
-            path.endsWith("/me")
+        return hasValidationHint("$operation $path")
     }
 
     private fun isRefreshOperation(operation: String, path: String): Boolean {
-        return operation.contains("refresh") ||
-            operation.contains("token_refresh") ||
-            path.contains("/refresh") ||
-            path.endsWith("/token")
+        return hasRefreshHint("$operation $path")
     }
 
     private fun collectWizardReadyHitsByStep(context: Context): Map<String, Int> {
@@ -4239,7 +4630,7 @@ object RuntimeToolkitTelemetry {
             }
             RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE -> {
                 val relevant = successfulTargetByPhase["search_probe"].orEmpty().filter {
-                    it.operation.contains("search") || it.path.contains("/search")
+                    hasSearchHint("${it.operation} ${it.path}")
                 }
                 val unique = relevant.map { it.fingerprint }.toSet().size
                 val readyHits = readyHitsByStep[RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE] ?: 0
@@ -4270,9 +4661,9 @@ object RuntimeToolkitTelemetry {
                 val relevant = successfulTargetByPhase["detail_probe"].orEmpty().filter {
                     it.routeKind == "detail" ||
                         it.routeKind == "category" ||
-                        it.operation.contains("detail") ||
-                        it.operation.contains("category") ||
-                        it.path.contains("/detail")
+                        hasDetailHint("${it.operation} ${it.path}") ||
+                        hasCategoryHint("${it.operation} ${it.path}") ||
+                        hasGenreHint("${it.operation} ${it.path}")
                 }
                 val readyHits = readyHitsByStep[RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE] ?: 0
                 val responseCount = relevant.size
@@ -4732,18 +5123,16 @@ object RuntimeToolkitTelemetry {
     ): Boolean {
         val normalizedOperation = operation.lowercase(Locale.ROOT)
         val path = normalizedPath.lowercase(Locale.ROOT)
+        val context = "$normalizedOperation $path"
         return when (stepId) {
             RuntimeToolkitMissionWizard.STEP_SEARCH_PROBE ->
-                semantic.routeKind == "search" || normalizedOperation.contains("search") || path.contains("/search")
+                semantic.routeKind == "search" || hasSearchHint(context)
             RuntimeToolkitMissionWizard.STEP_DETAIL_PROBE ->
                 semantic.routeKind == "detail" ||
                     semantic.routeKind == "category" ||
-                    normalizedOperation.contains("detail") ||
-                    normalizedOperation.contains("category") ||
-                    path.contains("/detail") ||
-                    path.contains("/content/") ||
-                    path.contains("/thema/") ||
-                    path.contains("/genre/")
+                    hasDetailHint(context) ||
+                    hasCategoryHint(context) ||
+                    hasGenreHint(context)
             RuntimeToolkitMissionWizard.STEP_PLAYBACK_PROBE ->
                 semantic.playbackRelated ||
                     isPlaybackSignal(
@@ -4756,10 +5145,7 @@ object RuntimeToolkitTelemetry {
                 semantic.routeKind == "auth" ||
                     semantic.authRelated ||
                     phaseId == "auth_probe" ||
-                    normalizedOperation.contains("login") ||
-                    normalizedOperation.contains("logout") ||
-                    normalizedOperation.contains("token") ||
-                    normalizedOperation.contains("refresh")
+                    hasAuthHint(context)
             else -> false
         }
     }
@@ -4836,6 +5222,7 @@ object RuntimeToolkitTelemetry {
             "detail_probe",
             "playback_probe",
             "auth_probe",
+            "replay_probe",
             PHASE_BACKGROUND,
             -> normalized
             else -> PHASE_BACKGROUND
@@ -4857,9 +5244,9 @@ object RuntimeToolkitTelemetry {
         return when {
             normalized.contains("field_matrix") -> "field_matrix"
             normalized.contains("playback") -> "playback"
-            normalized.contains("detail") -> "detail"
-            normalized.contains("search") -> "search"
-            normalized.contains("auth") -> "auth"
+            hasDetailHint(normalized) -> "detail"
+            hasSearchHint(normalized) -> "search"
+            hasAuthHint(normalized) -> "auth"
             else -> "runtime_event"
         }
     }
@@ -5144,7 +5531,13 @@ object RuntimeToolkitTelemetry {
                 lowerUrl.contains("graphql") ||
                 lowerUrl.contains("operationname=") ||
                 lowerUrl.contains("search") ||
-                lowerUrl.contains("detail")
+                lowerUrl.contains("suche") ||
+                lowerUrl.contains("suchergebnisse") ||
+                lowerUrl.contains("detail") ||
+                lowerUrl.contains("kategorie") ||
+                lowerUrl.contains("rubrik") ||
+                lowerUrl.contains("sendung") ||
+                lowerUrl.contains("folge")
             ) {
                 return "target_api"
             }
@@ -5240,58 +5633,25 @@ object RuntimeToolkitTelemetry {
         if (hasGraphql) labels += "graphql"
         if (!graphqlOperation.isNullOrBlank()) labels += "graphql_operation"
 
-        val authRelated = containsAnyToken(
-            text = "$host $pathLower $queryLower",
-            tokens = listOf(
-                "/auth",
-                "/identity",
-                "/oauth",
-                "/login",
-                "/signin",
-                "/logout",
-                "/token",
-                "/session",
-                "/userinfo",
-                "/userdetails",
-                "/fsk",
-                "refresh",
-            ),
-        )
-        if (authRelated) labels += "auth"
         val graphqlLower = graphqlOperation?.lowercase(Locale.ROOT).orEmpty()
+        val authRelated = hasAuthHint("$host $pathLower $queryLower $graphqlLower")
+        if (authRelated) labels += "auth"
 
-        val searchRelated = containsAnyToken(
-            text = "$pathLower $queryLower",
-            tokens = listOf("/search", "/suche", "search=", "query=", "q=", "suggest"),
-        ) || (!graphqlOperation.isNullOrBlank() && graphqlOperation.contains("search", ignoreCase = true))
+        val searchRelated = hasSearchHint("$pathLower $queryLower $graphqlLower")
         if (searchRelated) labels += "search"
 
-        val categoryRelated = containsAnyToken(
-            text = "$pathLower $queryLower",
-            tokens = listOf("/kategorie", "/kategorien", "/category", "/genre", "collectionid", "cluster"),
-        ) || (!graphqlOperation.isNullOrBlank() && (
+        val categoryRelated = hasCategoryHint("$pathLower $queryLower $graphqlLower") ||
+            hasGenreHint("$pathLower $queryLower $graphqlLower") ||
             graphqlLower.contains("cluster") ||
-                (graphqlLower.contains("collection") && !graphqlLower.contains("byvideo"))
-            ))
+            (graphqlLower.contains("collection") && !graphqlLower.contains("byvideo"))
         if (categoryRelated) labels += "category"
 
-        val detailRelated = containsAnyToken(
-            text = pathLower,
-            tokens = listOf("/serien/", "/serie/", "/film", "/episode", "/sendung", "/doku", "/reportage", "/video/"),
-        ) || (!graphqlOperation.isNullOrBlank() && (
-            graphqlOperation.contains("details", ignoreCase = true) ||
-                graphqlOperation.contains("video", ignoreCase = true) ||
-                graphqlOperation.contains("smartcollection", ignoreCase = true)
-            ))
+        val detailRelated = hasDetailHint("$pathLower $graphqlLower") ||
+            hasMediaTypeHint("$pathLower $queryLower $graphqlLower") ||
+            graphqlLower.contains("smartcollection")
         if (detailRelated) labels += "detail"
 
-        val liveRelated = containsAnyToken(
-            text = "$pathLower $queryLower",
-            tokens = listOf("/live", "/livetv", "onair", "/epg"),
-        ) || (!graphqlOperation.isNullOrBlank() && (
-            graphqlOperation.contains("activelive", ignoreCase = true) ||
-                graphqlOperation.contains("epg", ignoreCase = true)
-            ))
+        val liveRelated = hasLiveHint("$pathLower $queryLower $graphqlLower")
         if (liveRelated) labels += "live"
 
         val playbackByPath = containsAnyToken(
@@ -5311,15 +5671,31 @@ object RuntimeToolkitTelemetry {
             extension in setOf("webm", "m3u8", "mpd", "m4s", "mp4", "ts", "aac", "m4a", "m4v")
         if (playbackRelated) labels += "playback"
 
-        val tracking = containsAnyToken(
+        val trackingHostRelated = containsAnyToken(
+            text = host,
+            tokens = listOf("tracksrv", "analytics", "measurement", "metrics", "telemetry", "googletagmanager", "nmrodam"),
+        )
+        val trackingPathRelated = containsAnyToken(
             text = "$host $pathLower $queryLower",
-            tokens = listOf("track", "analytic", "telemetry", "metrics", "/event", "/collect", "beacon"),
-        ) || source.contains("analytics", ignoreCase = true)
+            tokens = listOf("track", "analytic", "telemetry", "metrics", "/event", "/collect", "beacon", "eventtype=", "nmrodam"),
+        )
+        val trackingGraphqlRelated = graphqlLower.contains("tracking") || graphqlLower.contains("telemetry")
+        val tracking = trackingHostRelated || trackingPathRelated || trackingGraphqlRelated || source.contains("analytics", ignoreCase = true)
         if (tracking) labels += "tracking"
+        val trackingPreferred = tracking && !authRelated && !playbackStrongSignal
 
         val configRelated = containsAnyToken(
             text = "$pathLower $queryLower",
-            tokens = listOf("/config", "/configuration", "/settings", "/bootstrap", "appconfig"),
+            tokens = listOf(
+                "/config",
+                "/configuration",
+                "/settings",
+                "/einstellungen",
+                "/konfiguration",
+                "/bootstrap",
+                "appconfig",
+                "konfig",
+            ),
         )
         if (configRelated) labels += "config"
 
@@ -5347,6 +5723,7 @@ object RuntimeToolkitTelemetry {
         val routeKind = when {
             path.isBlank() || path == "/" -> "home"
             assetRelated -> "asset"
+            trackingPreferred -> "tracking"
             searchRelated -> "search"
             detailRelated -> "detail"
             categoryRelated -> "category"
@@ -5359,6 +5736,7 @@ object RuntimeToolkitTelemetry {
 
         val classificationOverride = when {
             playbackStrongSignal -> "playback"
+            trackingPreferred -> "tracking"
             hasGraphql && (graphqlLower.contains("activelive") || graphqlLower == "getepg") -> "live"
             hasGraphql && graphqlLower == "getsmartcollectionidsbyvideoids" -> "detail"
             else -> null
@@ -5366,13 +5744,13 @@ object RuntimeToolkitTelemetry {
 
         val classification = classificationOverride ?: when {
             authRelated -> "auth"
+            trackingPreferred -> "tracking"
             searchRelated -> "search"
             detailRelated -> "detail"
             categoryRelated -> "category"
             liveRelated -> "live"
             playbackRelated -> "playback"
             configRelated -> "config"
-            tracking -> "tracking"
             assetRelated -> "asset"
             else -> "generic"
         }
@@ -5383,9 +5761,9 @@ object RuntimeToolkitTelemetry {
                 pathLower.contains("/fsk/verification") -> "auth_age_verification"
                 pathLower.contains("/userinfo") -> "auth_userinfo"
                 pathLower.contains("/userdetails") -> "auth_userdetails"
-                pathLower.contains("logout") -> "auth_logout"
-                pathLower.contains("login") || pathLower.contains("signin") -> "auth_login"
-                pathLower.contains("refresh") || pathLower.contains("token") -> "auth_token_refresh"
+                pathLower.contains("logout") || pathLower.contains("abmelden") || pathLower.contains("ausloggen") -> "auth_logout"
+                pathLower.contains("login") || pathLower.contains("signin") || pathLower.contains("anmelden") || pathLower.contains("einloggen") -> "auth_login"
+                pathLower.contains("refresh") || pathLower.contains("token_refresh") || pathLower.contains("/token/refresh") || pathLower.contains("aktualisieren") || pathLower.contains("erneuern") -> "auth_token_refresh"
                 else -> "auth_request"
             }
 
@@ -5395,7 +5773,8 @@ object RuntimeToolkitTelemetry {
             "live" -> if (hasGraphql) "live_catalog_query" else "live_load"
             "playback" -> when {
                 pathLower.contains("/playbackhistory") || pathLower.contains("seamless-view-entries") -> "playback_history_sync"
-                pathLower.contains("/tmd/") || pathLower.contains("/ptmd/") || pathLower.contains("manifest") || extension in setOf("m3u8", "mpd") -> "playback_manifest_fetch"
+                pathLower.contains("/tmd/") || pathLower.contains("/ptmd/") -> "playback_resolver_fetch"
+                pathLower.contains("manifest") || extension in setOf("m3u8", "mpd") -> "playback_manifest_fetch"
                 extension in setOf("webm", "mp4", "m4s", "ts", "aac", "m4a", "m4v") -> "playback_media_segment"
                 else -> "playback_request"
             }
@@ -5491,7 +5870,20 @@ object RuntimeToolkitTelemetry {
     private fun containsAnyToken(text: String, tokens: List<String>): Boolean {
         if (text.isBlank()) return false
         val haystack = text.lowercase(Locale.ROOT)
-        return tokens.any { haystack.contains(it.lowercase(Locale.ROOT)) }
+        val normalizedHaystack = normalizeHintText(haystack)
+        return tokens.any {
+            val token = it.lowercase(Locale.ROOT)
+            haystack.contains(token) || normalizedHaystack.contains(normalizeHintText(token))
+        }
+    }
+
+    private fun normalizeHintText(text: String): String {
+        return text
+            .lowercase(Locale.ROOT)
+            .replace("ä", "ae")
+            .replace("ö", "oe")
+            .replace("ü", "ue")
+            .replace("ß", "ss")
     }
 
     private fun pruneDedupRequests(nowMonoNs: Long) {

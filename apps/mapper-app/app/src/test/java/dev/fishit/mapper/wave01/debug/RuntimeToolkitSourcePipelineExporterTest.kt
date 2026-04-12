@@ -1047,13 +1047,9 @@ class RuntimeToolkitSourcePipelineExporterTest {
         assertEquals("secret", tokenByName.getValue("refresh_token").optString("confidentiality"))
         assertEquals("secret", tokenByName.getValue("client_secret").optString("confidentiality"))
 
-        val endpointTemplates = bundle.getJSONArray("endpointTemplates")
-        val authEndpointId = (0 until endpointTemplates.length())
-            .asSequence()
-            .mapNotNull { endpointTemplates.optJSONObject(it) }
-            .firstOrNull { endpoint -> endpoint.optString("role") == "auth" }
-            ?.optString("endpointId")
-            .orEmpty()
+        val authEndpointId = sessionAuth.optString("loginEndpointRef").ifBlank {
+            sessionAuth.optString("validationEndpointRef")
+        }
         assertTrue(authEndpointId.isNotBlank())
 
         val replay = bundle.getJSONArray("replayRequirements")
@@ -1291,6 +1287,243 @@ class RuntimeToolkitSourcePipelineExporterTest {
                 assertFalse(name.contains("zdf_cmp_client"))
             }
         }
+    }
+
+    @Test
+    fun exporter_maps_german_surface_and_detail_hints_into_roles() {
+        val runtimeRoot = Files.createTempDirectory("rtk_source_bundle_german_hints").toFile()
+        val events = listOf(
+            requestEvent(
+                eventId = "evt_req_home_startseite",
+                requestId = "req_home_startseite",
+                phaseId = "home_probe",
+                url = "https://www.zdf.de/startseite",
+                normalizedPath = "/startseite",
+                operation = "startseite_feed",
+                headers = mapOf("accept" to "application/json"),
+            ),
+            responseEvent(
+                eventId = "evt_res_home_startseite",
+                requestId = "req_home_startseite",
+                phaseId = "home_probe",
+                url = "https://www.zdf.de/startseite",
+                normalizedPath = "/startseite",
+                bodyPreview = """{"rows":[{"title":"Startseite","items":[{"title":"Tile 1","canonicalId":"cid_1"}]}]}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_search_suchergebnisse",
+                requestId = "req_search_suchergebnisse",
+                phaseId = "search_probe",
+                url = "https://www.zdf.de/suchergebnisse?suchbegriff=heute",
+                normalizedPath = "/suchergebnisse",
+                operation = "suche_request",
+                headers = mapOf("accept" to "application/json"),
+            ),
+            responseEvent(
+                eventId = "evt_res_search_suchergebnisse",
+                requestId = "req_search_suchergebnisse",
+                phaseId = "search_probe",
+                url = "https://www.zdf.de/suchergebnisse?suchbegriff=heute",
+                normalizedPath = "/suchergebnisse",
+                bodyPreview = """{"results":[{"title":"Heute Journal","canonicalId":"cid_hj"}]}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_detail_sendung",
+                requestId = "req_detail_sendung",
+                phaseId = "detail_probe",
+                url = "https://www.zdf.de/sendungen/heute-journal-100",
+                normalizedPath = "/sendungen/heute-journal-100",
+                operation = "sendung_detail",
+                headers = mapOf("accept" to "application/json"),
+            ),
+            responseEvent(
+                eventId = "evt_res_detail_sendung",
+                requestId = "req_detail_sendung",
+                phaseId = "detail_probe",
+                url = "https://www.zdf.de/sendungen/heute-journal-100",
+                normalizedPath = "/sendungen/heute-journal-100",
+                bodyPreview = """{"item":{"title":"Heute Journal","canonicalId":"cid_hj","description":"Nachrichten"}}""",
+            ),
+        )
+        File(runtimeRoot, "events/runtime_events.jsonl").apply {
+            parentFile?.mkdirs()
+            writeText(events.joinToString(separator = "\n", postfix = "\n"), Charsets.UTF_8)
+        }
+
+        val artifacts = RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+            runtimeRoot = runtimeRoot,
+            targetSiteHint = "zdf.de",
+        )
+        val bundle = JSONObject(artifacts.sourcePipelineBundlePath.readText(Charsets.UTF_8))
+        val endpointTemplates = bundle.getJSONArray("endpointTemplates")
+
+        var hasSearchHintedEndpoint = false
+        var hasDetailHintedEndpoint = false
+        var hasHomeHintedEndpoint = false
+        forEachObject(endpointTemplates) { endpoint ->
+            val role = endpoint.optString("role")
+            val pathTemplate = endpoint.optString("pathTemplate").lowercase()
+            if (role == "search" && (pathTemplate.contains("/suchergebnisse") || pathTemplate.contains("/suche"))) {
+                hasSearchHintedEndpoint = true
+            }
+            if (role == "detail" && (pathTemplate.contains("/sendungen/") || pathTemplate.contains("/folge/") || pathTemplate.contains("/beitrag/"))) {
+                hasDetailHintedEndpoint = true
+            }
+            if (role == "home" && (pathTemplate == "/" || pathTemplate.contains("/startseite") || pathTemplate.contains("/mediathek"))) {
+                hasHomeHintedEndpoint = true
+            }
+        }
+
+        assertTrue(hasSearchHintedEndpoint)
+        assertTrue(hasDetailHintedEndpoint)
+        assertTrue(hasHomeHintedEndpoint)
+    }
+
+    @Test
+    fun exporter_normalizes_umlaut_hints_for_ascii_route_variants() {
+        val runtimeRoot = Files.createTempDirectory("rtk_source_bundle_ascii_umlaut_variants").toFile()
+        val events = listOf(
+            requestEvent(
+                eventId = "evt_req_home_fuer_dich",
+                requestId = "req_home_fuer_dich",
+                phaseId = "home_probe",
+                url = "https://www.zdf.de/fuer-dich",
+                normalizedPath = "/fuer-dich",
+                operation = "surface_fetch",
+                headers = mapOf("accept" to "application/json"),
+            ),
+            responseEvent(
+                eventId = "evt_res_home_fuer_dich",
+                requestId = "req_home_fuer_dich",
+                phaseId = "home_probe",
+                url = "https://www.zdf.de/fuer-dich",
+                normalizedPath = "/fuer-dich",
+                bodyPreview = """{"rows":[{"title":"Für dich","items":[{"title":"Tile 1","canonicalId":"cid_1"}]}]}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_detail_beitraege",
+                requestId = "req_detail_beitraege",
+                phaseId = "detail_probe",
+                url = "https://www.zdf.de/beitraege/fokus-europa-100",
+                normalizedPath = "/beitraege/fokus-europa-100",
+                operation = "surface_fetch",
+                headers = mapOf("accept" to "application/json"),
+            ),
+            responseEvent(
+                eventId = "evt_res_detail_beitraege",
+                requestId = "req_detail_beitraege",
+                phaseId = "detail_probe",
+                url = "https://www.zdf.de/beitraege/fokus-europa-100",
+                normalizedPath = "/beitraege/fokus-europa-100",
+                bodyPreview = """{"item":{"title":"Fokus Europa","canonicalId":"cid_fe"}}""",
+            ),
+        )
+        File(runtimeRoot, "events/runtime_events.jsonl").apply {
+            parentFile?.mkdirs()
+            writeText(events.joinToString(separator = "\n", postfix = "\n"), Charsets.UTF_8)
+        }
+
+        val artifacts = RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+            runtimeRoot = runtimeRoot,
+            targetSiteHint = "zdf.de",
+        )
+        val bundle = JSONObject(artifacts.sourcePipelineBundlePath.readText(Charsets.UTF_8))
+        val endpointTemplates = bundle.getJSONArray("endpointTemplates")
+
+        var hasHomeFromAsciiHint = false
+        var hasDetailFromAsciiHint = false
+        forEachObject(endpointTemplates) { endpoint ->
+            val role = endpoint.optString("role")
+            val pathTemplate = endpoint.optString("pathTemplate").lowercase()
+            if (role == "home" && (pathTemplate == "/" || pathTemplate.contains("/fuer-dich"))) {
+                hasHomeFromAsciiHint = true
+            }
+            if (role == "detail" && pathTemplate.contains("/beitraege/")) {
+                hasDetailFromAsciiHint = true
+            }
+        }
+
+        assertTrue(hasHomeFromAsciiHint)
+        assertTrue(hasDetailFromAsciiHint)
+    }
+
+    @Test
+    fun exporter_maps_filme_surface_and_german_genre_item_type_hints() {
+        val runtimeRoot = Files.createTempDirectory("rtk_source_bundle_filme_genre_hints").toFile()
+        val events = listOf(
+            requestEvent(
+                eventId = "evt_req_surface_filme",
+                requestId = "req_surface_filme",
+                phaseId = "home_probe",
+                url = "https://www.zdf.de/filme",
+                normalizedPath = "/filme",
+                operation = "filme_collection_entry",
+                headers = mapOf("accept" to "application/json"),
+            ),
+            responseEvent(
+                eventId = "evt_res_surface_filme",
+                requestId = "req_surface_filme",
+                phaseId = "home_probe",
+                url = "https://www.zdf.de/filme",
+                normalizedPath = "/filme",
+                bodyPreview = """{"rows":[{"title":"Filme","items":[{"title":"Der Fernsehfilm","currentMediaType":"Serie","rubrik":"Krimi"}]}]}""",
+            ),
+            requestEvent(
+                eventId = "evt_req_detail_filme_item",
+                requestId = "req_detail_filme_item",
+                phaseId = "detail_probe",
+                url = "https://www.zdf.de/filme/der-fernsehfilm-der-woche-100",
+                normalizedPath = "/filme/der-fernsehfilm-der-woche-100",
+                operation = "film_detail",
+                headers = mapOf("accept" to "application/json"),
+            ),
+            responseEvent(
+                eventId = "evt_res_detail_filme_item",
+                requestId = "req_detail_filme_item",
+                phaseId = "detail_probe",
+                url = "https://www.zdf.de/filme/der-fernsehfilm-der-woche-100",
+                normalizedPath = "/filme/der-fernsehfilm-der-woche-100",
+                bodyPreview = """{"item":{"title":"Der Fernsehfilm","currentMediaType":"Spielfilm","rubrik":"Krimi","canonicalId":"cid_ffw"}}""",
+            ),
+        )
+        File(runtimeRoot, "events/runtime_events.jsonl").apply {
+            parentFile?.mkdirs()
+            writeText(events.joinToString(separator = "\n", postfix = "\n"), Charsets.UTF_8)
+        }
+
+        val artifacts = RuntimeToolkitSourcePipelineExporter.ensureSourcePipelineArtifacts(
+            runtimeRoot = runtimeRoot,
+            targetSiteHint = "zdf.de",
+        )
+        val bundle = JSONObject(artifacts.sourcePipelineBundlePath.readText(Charsets.UTF_8))
+
+        val selectionEntities = bundle
+            .optJSONObject("selectionModel")
+            ?.optJSONArray("selectionEntities")
+            ?: JSONArray()
+        val selectionKeys = mutableSetOf<String>()
+        forEachObject(selectionEntities) { entity ->
+            val key = entity.optString("selectionKey")
+            if (key.isNotBlank()) selectionKeys += key
+        }
+        assertTrue("/filme" in selectionKeys)
+
+        val fieldMappings = bundle.getJSONArray("fieldMappings")
+        val itemType = findFieldMapping(fieldMappings, "itemType")
+        val detailMapping = findFieldMapping(fieldMappings, "detailMapping")
+
+        assertNotNull(itemType)
+        assertNotNull(detailMapping)
+        val itemTypeTemplate = itemType!!.optString("valueTemplate").lowercase()
+        val detailTemplate = detailMapping!!.optJSONObject("valueTemplate")
+        if (itemTypeTemplate.isNotBlank()) {
+            assertFalse(itemTypeTemplate.contains("token_type"))
+            assertFalse(itemTypeTemplate.contains("bearer"))
+        }
+        assertNotNull(detailTemplate)
+        val genreTemplate = detailTemplate!!.optString("genre").lowercase()
+        assertTrue(genreTemplate.isNotBlank())
+        assertTrue(genreTemplate.contains("rubrik") || genreTemplate.contains("genre"))
     }
 
     private fun buildRuntimeEventsFixture(): String {
