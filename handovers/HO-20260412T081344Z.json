@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "handover_id": "HO-20260412T081344Z",
+  "generated_at_utc": "2026-04-12T08:13:44Z",
+  "agent": {
+    "name": "codex",
+    "session_label": "HO-20260412T081344Z"
+  },
+  "scope": "guided-capture-header-compaction",
+  "highlights": [
+    "Merged SATURATED/Copy control area into one compact horizontal control strip"
+  ],
+  "changed_files": [
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260411T175619Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260411T202409Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260411T204916Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/HO-20260412T075926Z.json",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/mapper_feed_collection_first_model.yaml",
+      "old_path": null
+    },
+    {
+      "status_code": "?",
+      "status": "untracked",
+      "path": "handovers/zdf_website_funktionsweise.txt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/ui/GuidedCaptureDockBinder.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/ui/GuidedCaptureDockViews.kt",
+      "old_path": null
+    },
+    {
+      "status_code": "M",
+      "status": "modified",
+      "path": "apps/mapper-app/app/src/main/java/info/plateaukao/einkbro/mapper/missiondock/ui/MissionDockCandidateAdapter.kt",
+      "old_path": null
+    }
+  ]
+}

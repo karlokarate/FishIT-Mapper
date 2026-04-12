@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -50,6 +51,7 @@ class MissionDockCandidateAdapter(
         val root = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = safeDrawable(context, R.drawable.background_with_border)
+            background?.mutate()?.alpha = (255 * 0.9f).toInt()
             setPadding(dp(context, 10), dp(context, 8), dp(context, 10), dp(context, 8))
             layoutParams = RecyclerView.LayoutParams(
                 RecyclerView.LayoutParams.MATCH_PARENT,
@@ -92,6 +94,9 @@ class MissionDockCandidateAdapter(
         val excludeButton = createButton(context)
         val testButton = createButton(context)
         val copyButton = createButton(context)
+        listOf(selectButton, excludeButton, testButton, copyButton).forEach { button ->
+            applyButtonPressFeedback(button)
+        }
         actionRow.addView(selectButton)
         actionRow.addView(excludeButton, buttonParams(context))
         actionRow.addView(testButton, buttonParams(context))
@@ -329,5 +334,22 @@ class MissionDockCandidateAdapter(
 
     private fun safeString(context: Context, resId: Int, fallback: String): String {
         return runCatching { context.getString(resId) }.getOrElse { fallback }
+    }
+
+    private fun applyButtonPressFeedback(view: TextView) {
+        view.isClickable = true
+        view.isFocusable = true
+        view.setOnTouchListener { v, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    v.animate().setDuration(90).alpha(0.72f).scaleX(0.97f).scaleY(0.97f).start()
+                }
+                MotionEvent.ACTION_UP,
+                MotionEvent.ACTION_CANCEL -> {
+                    v.animate().setDuration(90).alpha(1f).scaleX(1f).scaleY(1f).start()
+                }
+            }
+            false
+        }
     }
 }

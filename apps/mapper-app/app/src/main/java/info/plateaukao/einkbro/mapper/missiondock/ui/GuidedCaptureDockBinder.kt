@@ -3,6 +3,7 @@ package info.plateaukao.einkbro.mapper.missiondock.ui
 import android.content.Context
 import android.view.View
 import android.view.MotionEvent
+import android.widget.LinearLayout
 import androidx.core.content.ContextCompat
 import dev.fishit.mapper.wave01.debug.RuntimeToolkitMissionWizard
 import dev.fishit.mapper.wave01.debug.RuntimeToolkitTelemetry
@@ -42,13 +43,18 @@ class GuidedCaptureDockBinder(
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         downX = event.rawX
+                        v?.animate()?.setDuration(90)?.alpha(0.72f)?.scaleX(0.97f)?.scaleY(0.97f)?.start()
                     }
                     MotionEvent.ACTION_UP -> {
                         val delta = kotlin.math.abs(downX - event.rawX)
+                        v?.animate()?.setDuration(90)?.alpha(1f)?.scaleX(1f)?.scaleY(1f)?.start()
                         if (delta > 24f * context.resources.displayMetrics.density) {
                             callbacks.onHandleSwipe()
                             return true
                         }
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        v?.animate()?.setDuration(90)?.alpha(1f)?.scaleX(1f)?.scaleY(1f)?.start()
                     }
                 }
                 return false
@@ -123,11 +129,12 @@ class GuidedCaptureDockBinder(
             }
         }
         if (mode == DockMode.Peek) {
-            views.candidateList.layoutParams.height = dp(124)
+            views.candidateList.layoutParams.height = dp(180)
             views.feedContainer.visibility = View.GONE
         } else if (mode == DockMode.Expanded) {
-            views.candidateList.layoutParams.height = dp(220)
+            views.candidateList.layoutParams.height = LinearLayout.LayoutParams.WRAP_CONTENT
         }
+        views.candidateList.requestLayout()
     }
 
     private fun renderStepState(state: GuidedCaptureDockPanelState) {
